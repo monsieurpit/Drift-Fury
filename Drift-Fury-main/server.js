@@ -3,7 +3,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = __dirname;
-const port = Number(process.env.PORT) || 4012;
+const port = Number(process.env.PORT) || 3000;
+const reloadClients = new Set();
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -58,6 +59,22 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  if (pathname === "/__reload") {
+    if (request.method === "HEAD") {
+      response.writeHead(200, { "Content-Type": "text/event-stream" }).end();
+      return;
+    }
+    response.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+    response.write(":\n\n");
+    reloadClients.add(response);
+    response.on("close", () => reloadClients.delete(response));
+    return;
+  }
+
   if (pathname.includes("\0")) {
     response.writeHead(400).end("Bad request");
     return;
@@ -89,6 +106,27 @@ const server = http.createServer((request, response) => {
     response.writeHead(404).end("Not found");
   });
 });
+
+let reloadTimer;
+fs.watch(root, (eventType, filename) => {
+  if (filename && ![".html", ".css", ".js", ".json"].includes(path.extname(filename.toString()))) {
+    return;
+  }
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(() => {
+    for (const client of reloadClients) {
+      client.write("event: reload\ndata: update\n\n");
+    }
+  }, 100);
+}).on("error", (error) => {
+  console.error("Unable to watch site files for changes:", error);
+});
+const reloadHeartbeat = setInterval(() => {
+  for (const client of reloadClients) {
+    client.write(": keep-alive\n\n");
+  }
+}, 15000);
+reloadHeartbeat.unref();
 
 server.listen(port, "0.0.0.0", () => {
   console.log(`Drift Fury is listening on port ${port}`);

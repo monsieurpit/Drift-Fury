@@ -14,4 +14,6 @@ Requires Node.js 20 or newer.
 npm start
 ```
 
+The server uses port 3000 by default. Set `PORT` to override it. The page automatically reloads when its HTML, CSS, JavaScript, or manifest files change.
+
 Railway detects the `start` script and supplies the port through `PORT`.
