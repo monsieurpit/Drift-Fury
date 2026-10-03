@@ -49322,6 +49322,64 @@ function LT(e, t, n, r) {
             ),
             s.frequency.setTargetAtTime(1e3 + i.cutoff * (.25 + n * .75) + t * .22, a, .045)
         },
+        startEngine() {
+            const profiles = {
+                V8: { starter: 48, catch: 58, cutoff: 780, level: .09, shape: `sawtooth` },
+                V6: { starter: 55, catch: 43, cutoff: 1500, level: .075, shape: `triangle` },
+                V12: { starter: 62, catch: 86, cutoff: 2600, level: .065, shape: `sine` },
+                W16: { starter: 58, catch: 72, cutoff: 2100, level: .08, shape: `sawtooth` }
+            };
+            const profile = profiles[r] || profiles.V6;
+            const now = e.currentTime;
+            const crank = e.createOscillator();
+            const crankFilter = e.createBiquadFilter();
+            const crankGain = e.createGain();
+            crank.type = profile.shape;
+            crank.frequency.setValueAtTime(profile.starter, now);
+            crank.frequency.linearRampToValueAtTime(profile.starter * 1.22, now + .52);
+            crankFilter.type = `lowpass`;
+            crankFilter.frequency.value = profile.cutoff;
+            crankGain.gain.setValueAtTime(.001, now);
+            crankGain.gain.linearRampToValueAtTime(profile.level * .72, now + .04);
+            crankGain.gain.setValueAtTime(profile.level * .64, now + .48);
+            crankGain.gain.exponentialRampToValueAtTime(.001, now + .7);
+            crank.connect(crankFilter);
+            crankFilter.connect(crankGain);
+            crankGain.connect(t);
+            crank.onended = () => {
+                crank.disconnect();
+                crankFilter.disconnect();
+                crankGain.disconnect()
+            };
+            crank.start(now);
+            crank.stop(now + .72);
+
+            const catchEngine = e.createOscillator();
+            const catchFilter = e.createBiquadFilter();
+            const catchGain = e.createGain();
+            catchEngine.type = profile.shape;
+            catchEngine.frequency.setValueAtTime(profile.catch * .72, now + .48);
+            catchEngine.frequency.linearRampToValueAtTime(profile.catch * 1.55, now + .72);
+            catchEngine.frequency.exponentialRampToValueAtTime(profile.catch, now + 1.08);
+            catchFilter.type = `lowpass`;
+            catchFilter.frequency.setValueAtTime(profile.cutoff * .72, now + .48);
+            catchFilter.frequency.linearRampToValueAtTime(profile.cutoff * 1.8, now + .78);
+            catchFilter.frequency.exponentialRampToValueAtTime(profile.cutoff, now + 1.08);
+            catchGain.gain.setValueAtTime(.001, now + .48);
+            catchGain.gain.linearRampToValueAtTime(profile.level * 1.25, now + .66);
+            catchGain.gain.setValueAtTime(profile.level * .8, now + .82);
+            catchGain.gain.exponentialRampToValueAtTime(.001, now + 1.16);
+            catchEngine.connect(catchFilter);
+            catchFilter.connect(catchGain);
+            catchGain.connect(t);
+            catchEngine.onended = () => {
+                catchEngine.disconnect();
+                catchFilter.disconnect();
+                catchGain.disconnect()
+            };
+            catchEngine.start(now + .48);
+            catchEngine.stop(now + 1.18)
+        },
         close() {
             c.forEach( ({source: e}) => e.stop()),
             a.disconnect(),
@@ -49729,7 +49787,7 @@ function VT(e, t, n) {
       , f = 0
       , p = 0
       , m = !1;
-    function h(n, i, a, o=`lowpass`) {
+    function h(n, i, a, o=`lowpass`, delay=0) {
         let s = e.createBufferSource();
         s.buffer = r;
         let c = e.createBiquadFilter();
@@ -49737,7 +49795,7 @@ function VT(e, t, n) {
         c.frequency.value = a,
         c.Q.value = .8;
         let l = e.createGain()
-          , u = e.currentTime;
+          , u = e.currentTime + delay;
         l.gain.setValueAtTime(i, u),
         l.gain.exponentialRampToValueAtTime(.001, u + n),
         s.connect(c),
@@ -49768,39 +49826,86 @@ function VT(e, t, n) {
         },
         startEngine() {
             const profiles = {
-               V8: { crank: 38, firing: 45, cutoff: 520, level: .09, shape: `sawtooth` },
-               V6: { crank: 43, firing: 40, cutoff: 1800, level: .075, shape: `triangle` },
-               V12: { crank: 54, firing: 100, cutoff: 3200, level: .065, shape: `sine` },
-               W16: { crank: 48, firing: 120, cutoff: 2400, level: .08, shape: `sawtooth` }
+               V8: { starter: 48, catch: 58, cutoff: 780, level: .09, shape: `sawtooth` },
+               V6: { starter: 55, catch: 43, cutoff: 1500, level: .075, shape: `triangle` },
+               V12: { starter: 62, catch: 86, cutoff: 2600, level: .065, shape: `sine` },
+               W16: { starter: 58, catch: 72, cutoff: 2100, level: .08, shape: `sawtooth` }
             };
             const profile = profiles[n] || profiles.V6;
             const now = e.currentTime;
-            const oscillator = e.createOscillator();
-            const filter = e.createBiquadFilter();
-            const envelope = e.createGain();
-            oscillator.type = profile.shape;
-            oscillator.frequency.setValueAtTime(profile.crank, now);
-            oscillator.frequency.linearRampToValueAtTime(profile.firing * .72, now + .42);
-            oscillator.frequency.exponentialRampToValueAtTime(profile.firing, now + .68);
-            filter.type = `lowpass`;
-            filter.frequency.setValueAtTime(profile.cutoff * .55, now);
-            filter.frequency.linearRampToValueAtTime(profile.cutoff, now + .68);
-            envelope.gain.setValueAtTime(.001, now);
-            envelope.gain.linearRampToValueAtTime(profile.level, now + .055);
-            envelope.gain.setValueAtTime(profile.level * .72, now + .52);
-            envelope.gain.exponentialRampToValueAtTime(.001, now + .94);
-            oscillator.connect(filter);
-            filter.connect(envelope);
-            envelope.connect(t);
-            oscillator.onended = () => {
-               oscillator.disconnect();
-               filter.disconnect();
-               envelope.disconnect()
+            const starter = e.createOscillator();
+            const starterFilter = e.createBiquadFilter();
+            const starterGain = e.createGain();
+            starter.type = profile.shape;
+            starter.frequency.setValueAtTime(profile.starter, now);
+            starter.frequency.linearRampToValueAtTime(profile.starter * 1.22, now + .52);
+            starterFilter.type = `lowpass`;
+            starterFilter.frequency.value = profile.cutoff;
+            starterGain.gain.setValueAtTime(.001, now);
+            starterGain.gain.linearRampToValueAtTime(profile.level * .72, now + .04);
+            starterGain.gain.setValueAtTime(profile.level * .64, now + .48);
+            starterGain.gain.exponentialRampToValueAtTime(.001, now + .7);
+            starter.connect(starterFilter);
+            starterFilter.connect(starterGain);
+            starterGain.connect(t);
+            starter.onended = () => {
+                starter.disconnect();
+                starterFilter.disconnect();
+                starterGain.disconnect()
             };
-            oscillator.start(now);
-            oscillator.stop(now + .96);
-            for (let turn = 0; turn < 4; turn++)
-               h(.11 + turn * .012, .045 + turn * .008, profile.cutoff * (.7 + turn * .16), `bandpass`)
+            starter.start(now);
+            starter.stop(now + .72);
+
+            const crankingNoise = e.createBufferSource();
+            const crankFilter = e.createBiquadFilter();
+            const crankGain = e.createGain();
+            crankingNoise.buffer = r;
+            crankFilter.type = `bandpass`;
+            crankFilter.frequency.value = profile.cutoff * 1.35;
+            crankFilter.Q.value = 1.2;
+            crankGain.gain.setValueAtTime(.001, now);
+            crankGain.gain.linearRampToValueAtTime(profile.level * .5, now + .035);
+            crankGain.gain.setValueAtTime(profile.level * .42, now + .47);
+            crankGain.gain.exponentialRampToValueAtTime(.001, now + .66);
+            crankingNoise.connect(crankFilter);
+            crankFilter.connect(crankGain);
+            crankGain.connect(t);
+            crankingNoise.onended = () => {
+                crankingNoise.disconnect();
+                crankFilter.disconnect();
+                crankGain.disconnect()
+            };
+            crankingNoise.start(now, Math.random() * .1);
+            crankingNoise.stop(now + .68);
+
+            for (let turn = 0; turn < 3; turn++)
+                h(.15, profile.level * (.48 - turn * .07), profile.cutoff * (.42 + turn * .12), `lowpass`, turn * .16)
+
+            const ignition = e.createOscillator();
+            const ignitionFilter = e.createBiquadFilter();
+            const ignitionGain = e.createGain();
+            ignition.type = profile.shape;
+            ignition.frequency.setValueAtTime(profile.catch * .72, now + .48);
+            ignition.frequency.linearRampToValueAtTime(profile.catch * 1.55, now + .72);
+            ignition.frequency.exponentialRampToValueAtTime(profile.catch, now + 1.08);
+            ignitionFilter.type = `lowpass`;
+            ignitionFilter.frequency.setValueAtTime(profile.cutoff * .72, now + .48);
+            ignitionFilter.frequency.linearRampToValueAtTime(profile.cutoff * 1.8, now + .78);
+            ignitionFilter.frequency.exponentialRampToValueAtTime(profile.cutoff, now + 1.08);
+            ignitionGain.gain.setValueAtTime(.001, now + .48);
+            ignitionGain.gain.linearRampToValueAtTime(profile.level * 1.25, now + .66);
+            ignitionGain.gain.setValueAtTime(profile.level * .8, now + .82);
+            ignitionGain.gain.exponentialRampToValueAtTime(.001, now + 1.16);
+            ignition.connect(ignitionFilter);
+            ignitionFilter.connect(ignitionGain);
+            ignitionGain.connect(t);
+            ignition.onended = () => {
+                ignition.disconnect();
+                ignitionFilter.disconnect();
+                ignitionGain.disconnect()
+            };
+            ignition.start(now + .48);
+            ignition.stop(now + 1.18)
         },
         setSynthEngine() {
             m = !0
@@ -50996,6 +51101,8 @@ var nE = {
 };
 function aE(e, t, n, r, i, a) {
     let o = new QT(e);
+    e.capabilities.isWebGL2 && (o.renderTarget1.samples = Math.min(4, e.capabilities.maxSamples),
+    o.renderTarget2.samples = Math.min(4, e.capabilities.maxSamples)),
     o.setPixelRatio(e.getPixelRatio()),
     o.setSize(r, i),
     o.addPass(new $T(t,n)),
@@ -51369,7 +51476,13 @@ function lE(e, t, n, r, i, a=!1) {
     }
     let _ = new Float32Array(m.length || 1)
       , v = [];
+    let lastLampX = 1 / 0
+      , lastLampZ = 1 / 0;
     function y(e, t) {
+        if ((e - lastLampX) ** 2 + (t - lastLampZ) ** 2 < 25)
+            return;
+        lastLampX = e;
+        lastLampZ = t;
         let n = m
           , r = n.length;
         for (let i = 0; i < r; i++) {
@@ -51525,12 +51638,14 @@ function lE(e, t, n, r, i, a=!1) {
     canvas.addEventListener(`pointercancel`, stopCameraDrag);
     canvas.addEventListener(`contextmenu`, preventCameraMenu);
     canvas.addEventListener(`wheel`, zoomCamera, { passive: !1 });
-    d && (c.shadowMap.autoUpdate = !1);
+    c.shadowMap.autoUpdate = !1;
+    c.shadowMap.needsUpdate = !0;
     let P = 0
       , F = c.getPixelRatio()
       , I = 1
       , L = 0
-      , R = 0;
+      , R = 0
+      , shadowFrameInterval = d ? 2 : 1;
     O.ready.catch( () => {}
     );
     let z = e => {
@@ -51570,6 +51685,7 @@ function lE(e, t, n, r, i, a=!1) {
         L > 1) {
             let t = L / R
               , n = I;
+            shadowFrameInterval = d ? 2 : t > 1 / 32 ? 3 : t > 1 / 48 ? 2 : 1;
             t > 1 / 45 ? n = Math.max(.6, I - .1) : t < 1 / 57 && (n = Math.min(1, I + .05)),
             n !== I && (I = n,
             c.setPixelRatio(F * I),
@@ -51611,7 +51727,8 @@ function lE(e, t, n, r, i, a=!1) {
             u.position.set(o.x + 40, 85, o.z - 25),
             u.target.position.set(o.x, 0, o.z),
             u.target.updateMatrixWorld(),
-            d && (P++ & 1 || (c.shadowMap.needsUpdate = !0)),
+            P++,
+            P >= shadowFrameInterval && (c.shadowMap.needsUpdate = !0, P = 0),
             y(o.x, o.z),
             o._crash &&= (k.crash(o._crash.x, o._crash.y, o._crash.z, o._crash.intensity),
             O.crash(o._crash.intensity),
