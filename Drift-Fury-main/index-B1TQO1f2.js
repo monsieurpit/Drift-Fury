@@ -46427,6 +46427,7 @@ function Qw(e, t) {
     s
 }
 function $w(e) {
+    __barriers = [];
     let t = []
       , n = []
       , r = Jw(6)
@@ -46928,6 +46929,7 @@ function $w(e) {
                     // ground floor shop podium, cornice, tower shaft
                     m(sW + 1, POD_H, cD + 1, bxC, POD_H / 2, bzC, [shopX, shopX, a, f, shopZ, shopZ], !0);
                     m(sW + 1.2, .3, cD + 1.2, bxC, POD_H + .15, bzC, a);
+                    __bldgDetail(m, bxC, bzC, sW, cD, POD_H, hs, side, SIGNS[signIdx], glass, j);
                     m(sW, hs, cD, bxC, POD_H + hs / 2, bzC, [fx, fx, roofMat, roofMat, fz, fz], !0);
                     // corner pilasters / frame fins
                     for (const sx of [-1, 1])
@@ -47195,7 +47197,7 @@ function $w(e) {
           , o = m(15, .15, 5.4, (i + a) / 2, Uw(i, t), (t + n) / 2, r);
         o.rotation.y = -Math.atan2(a - i, 3.4)
     }
-    let V = (e, t, n, r) => m(n, 1.1, r, e, .55, t, u, !0);
+    let V = (e, t, n, r) => { let b = m(n, 1.1, r, e, .55, t, u, !0); b.visible = !1; __barriers.push([e, t, n, r]); return b; };
     for (let e = C[0] - 9 - 4; e <= C[C.length - 1] + 9 + 4; e += 6)
         V(e, w[w.length - 1] + 9 + 4, 5, 1.2),
         Math.abs(e) >= 12 && V(e, w[0] - 9 - 4, 5, 1.2);
@@ -47263,8 +47265,8 @@ function $w(e) {
     for (let t of oe)
         t.instanceMatrix.needsUpdate = !0,
         e.add(t);
-    let H = new rv
-      , se = [];
+    __dressCity(e, C, w, t, n, nm);
+    let H = new rv, se = [];
     for (let e = 0; e < 500; e++)
         se.push((Math.random() - .5) * 1e3, 220 + Math.random() * 250, (Math.random() - .5) * 1e3);
     return H.setAttribute(`position`, new Y_(se,3)),
@@ -47653,8 +47655,7 @@ function ET(e, t, n, r=!1) {
                 color: i.playerVeh.color,
                 shape: i.playerVeh.shape
             }),
-            i.onFoot = !0,
-            i.x += -Math.cos(i.heading) * 2.2,
+            i.onFoot = !0, i.footYaw = i.heading, i.x += -Math.cos(i.heading) * 2.2,
             i.z += Math.sin(i.heading) * 2.2,
             i.vx = 0,
             i.vz = 0,
@@ -47717,8 +47718,7 @@ function ET(e, t, n, r=!1) {
                 let t = (n.ArrowRight || n.KeyD ? 1 : 0) - (n.ArrowLeft || n.KeyA || n.KeyQ ? 1 : 0)
                   , r = (n.ArrowDown || n.KeyS ? 1 : 0) - (n.ArrowUp || n.KeyW || n.KeyZ ? 1 : 0)
                   , o = Math.hypot(t, r) || 1;
-                i.x += t / o * wT * e,
-                i.z += r / o * wT * e,
+                ((sh, ch, sp) => { let dx = (ch * t + sh * r) / o, dz = (ch * r - sh * t) / o; i.x += dx * sp * e; i.z += dz * sp * e; i.footSpeed = (t || r) ? sp : 0; if (i.footYaw === void 0) i.footYaw = i.heading; if (t || r) { let ty = Math.atan2(-dx, -dz), df = ((ty - i.footYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI; i.footYaw = Math.atan2(Math.sin(i.footYaw + df * (1 - Math.exp(-14 * e))), Math.cos(i.footYaw + df * (1 - Math.exp(-14 * e)))); } })(Math.sin(i.heading), Math.cos(i.heading), wT * ((n.ShiftLeft || n.ShiftRight) ? 1.8 : 1)),
                 i.x = _T(i.x, -200, 250),
                 i.z = _T(i.z, -700, 150);
                 for (let e of a.near(i.x, i.z, 30, s))
@@ -48644,8 +48644,8 @@ function UT(e) {
     let t = Array.from({
         length: 30
     }, () => {
-        let t = new Q(new kb(.45,6,5),new U_({
-            color: `#c8d4d8`,
+        let t = new Q(new Db(1.5,1.5),new U_({
+            map: __puffTex(), color: `#dfe5e8`,
             transparent: !0,
             opacity: 0,
             depthWrite: !1
@@ -48661,8 +48661,8 @@ function UT(e) {
       , n = Array.from({
         length: 20
     }, () => {
-        let t = new Q(new kb(.8,6,5),new U_({
-            color: `#3a3d42`,
+        let t = new Q(new Db(3.2,3.2),new U_({
+            map: __puffTex(), color: `#4a4d52`,
             transparent: !0,
             opacity: 0,
             depthWrite: !1
@@ -48695,9 +48695,9 @@ function UT(e) {
     }
     )
       , i = Array.from({
-        length: 200
+        length: 360
     }, () => {
-        let t = new Q(new Db(.18,.7),new U_({
+        let t = new Q(new Db(.22,1.1),new U_({
             color: `#0a0c0e`,
             transparent: !0,
             opacity: 0,
@@ -48713,8 +48713,8 @@ function UT(e) {
       , a = Array.from({
         length: 10
     }, () => {
-        let t = new Q(new kb(.3,6,5),new U_({
-            color: `#2b2e32`,
+        let t = new Q(new Db(1.1,1.1),new U_({
+            map: __puffTex(), color: `#34373b`,
             transparent: !0,
             opacity: 0,
             depthWrite: !1
@@ -48740,15 +48740,15 @@ function UT(e) {
             t.forEach(e => {
                 e.mesh.visible = e.life > 0,
                 e.life > 0 && (e.life -= l,
-                e.mesh.position.y += l * .7,
+                __cam && e.mesh.quaternion.copy(__cam.quaternion), e.mesh.position.y += l * .7,
                 e.mesh.scale.addScalar(l * .8),
-                e.mesh.material.opacity = Math.max(0, e.life) * .22)
+                e.mesh.material.opacity = Math.max(0, e.life) * .42)
             }
             ),
             n.forEach(e => {
                 e.mesh.visible = e.life > 0,
                 e.life > 0 && (e.life -= l,
-                e.mesh.position.y += e.vy * l,
+                __cam && e.mesh.quaternion.copy(__cam.quaternion), e.mesh.position.y += e.vy * l,
                 e.mesh.scale.addScalar(l * 1.5),
                 e.mesh.material.opacity = Math.max(0, e.life) * .35)
             }
@@ -48782,7 +48782,7 @@ function UT(e) {
             if (a.forEach(e => {
                 e.mesh.visible = e.life > 0,
                 e.life > 0 && (e.life -= l,
-                e.mesh.position.y += l * .9,
+                __cam && e.mesh.quaternion.copy(__cam.quaternion), e.mesh.position.y += l * .9,
                 e.mesh.scale.addScalar(l * .7),
                 e.mesh.material.opacity = Math.max(0, e.life) * .3)
             }
@@ -48801,8 +48801,8 @@ function UT(e) {
                     d.mesh.scale.setScalar(.7);
                     let f = i[c++ % i.length];
                     f.position.set(o, u + .14, l),
-                    f.rotation.set(-Math.PI / 2, 0, e.heading),
-                    f.material.opacity = .5,
+                    f.rotation.set(-Math.PI / 2, 0, Math.hypot(e.vx, e.vz) > 2 ? Math.atan2(-e.vx, -e.vz) : e.heading),
+                    f.material.opacity = .62,
                     f.visible = !0
                 }
             }
@@ -49769,23 +49769,163 @@ function oE(e, t=!1) {
         }
     }
 }
-function sE(e) {
-    let t = new cy
-      , n = new Q(new By(.28,.34,1.15,8),new Mb({
-        color: e,
-        roughness: .8
-    }));
-    n.position.y = .75,
-    n.castShadow = !0,
-    t.add(n);
-    let r = new Q(new kb(.19,10,8),new Mb({
-        color: `#d9b48f`,
-        roughness: .7
-    }));
-    return r.position.y = 1.5,
-    t.add(r),
-    t
+/* ===== DRIFT FURY realism pack: people, props, city dressing, drift FX ===== */
+var __barriers = [], __cam = null, __puff = null;
+function __cv(w, h, fn) { const c = document.createElement(`canvas`); c.width = w; c.height = h; fn(c.getContext(`2d`), w, h); const t = new ly(c); t.anisotropy = 8; return t; }
+function __puffTex() {
+    return __puff || (__puff = __cv(64, 64, (x) => { const g = x.createRadialGradient(32, 32, 2, 32, 32, 31); g.addColorStop(0, `rgba(255,255,255,.95)`); g.addColorStop(.45, `rgba(255,255,255,.45)`); g.addColorStop(1, `rgba(255,255,255,0)`); x.fillStyle = g; x.fillRect(0, 0, 64, 64); }));
 }
+/* ---------- people: articulated humanoids (face -Z at rotation 0, like the cars) ---------- */
+function __makePerson(col) {
+    const cop = col === `#1f2f4d`, g = new cy, L = {};
+    const mt = (c, r = .8, m = 0) => new Mb({ color: c, roughness: r, metalness: m });
+    const skin = mt(cop ? `#c99a78` : `#d9b48f`, .62), shirt = mt(col, .88), vest = mt(`#131b2a`, .9);
+    const pants = mt(cop ? `#0f1724` : `#262d3a`, .92), shoe = mt(cop ? `#0a0a0b` : `#ececec`, cop ? .35 : .7), dark = mt(`#0c0d10`, .5, .2);
+    const add = (geo, m, x, y, z, p = g, sh = !0) => { const q = new Q(geo, m); q.position.set(x, y, z); q.castShadow = sh; p.add(q); return q; };
+    const body = new cy; g.add(body); L.body = body;
+    add(new _v(.36, .2, .22), pants, 0, .95, 0, body);
+    add(new By(.2, .17, .56, 14), cop ? vest : shirt, 0, 1.28, 0, body).scale.z = .66;
+    for (const s of [-1, 1]) add(new kb(.085, 10, 8), shirt, s * .235, 1.49, 0, body);
+    add(new By(.05, .055, .1, 8), skin, 0, 1.58, 0, body);
+    const head = new cy; head.position.set(0, 1.69, 0); body.add(head); L.head = head;
+    add(new kb(.115, 18, 14), skin, 0, 0, 0, head).scale.set(.92, 1.08, 1);
+    add(new _v(.024, .04, .03), skin, 0, -.008, -.116, head, !1);
+    for (const s of [-1, 1]) { add(new kb(.013, 6, 5), dark, s * .04, .022, -.106, head, !1); add(new _v(.045, .008, .01), dark, s * .04, .05, -.108, head, !1); }
+    if (cop) {
+        add(new _v(.2, .036, .03), dark, 0, .024, -.108, head, !1);
+        add(new By(.118, .124, .075, 18), mt(`#0d1524`, .7), 0, .108, -.005, head);
+        add(new By(.1, .12, .02, 18), mt(`#0d1524`, .7), 0, .152, -.005, head);
+        add(new _v(.2, .012, .1), dark, 0, .09, -.13, head);
+        add(new _v(.03, .035, .01), mt(`#e0b84a`, .3, .9), 0, .115, -.128, head, !1);
+        add(new _v(.34, .06, .24), dark, 0, 1.02, 0, body);
+        add(new _v(.065, .2, .11), dark, .21, .93, 0, body);
+        add(new _v(.07, .045, .1), mt(`#222`, .4, .6), -.13, 1.03, -.1, body);
+        add(new _v(.05, .09, .04), dark, -.14, 1.44, -.13, body);
+        add(new _v(.012, .1, .012), dark, -.15, 1.53, -.13, body, !1);
+        add(new _v(.03, .04, .01), mt(`#e0b84a`, .3, .9), .1, 1.38, -.137, body, !1);
+        const tx = __cv(128, 48, (x, w, h) => { x.fillStyle = `#0a0f1a`; x.fillRect(0, 0, w, h); x.fillStyle = `#f2d24a`; x.font = `bold 30px sans-serif`; x.textAlign = `center`; x.fillText(`POLICE`, 64, 35); });
+        for (const f of [1, -1]) { const p = new Q(new Db(.3, .11), new Mb({ map: tx, roughness: .6 })); p.position.set(0, 1.33, f * .146); p.rotation.y = f > 0 ? 0 : Math.PI; body.add(p); }
+    } else {
+        add(new kb(.13, 12, 10), shirt, 0, 1.57, .07, body).scale.set(1, .8, .8);
+        add(new kb(.121, 14, 10), mt(`#1c1410`, .9), 0, .028, .02, head).scale.set(.97, .9, 1);
+        add(new _v(.2, .012, .1), mt(`#15171c`, .6), 0, .07, -.13, head);
+    }
+    const arm = s => { const sh = new cy; sh.position.set(s * .25, 1.48, 0); body.add(sh); add(new By(.055, .046, .3, 10), shirt, 0, -.15, 0, sh); const el = new cy; el.position.y = -.3; sh.add(el); add(new By(.046, .037, .28, 10), shirt, 0, -.14, 0, el); add(new kb(.043, 8, 6), skin, 0, -.3, 0, el); return [sh, el]; };
+    [L.la, L.le] = arm(-1); [L.ra, L.re] = arm(1);
+    const leg = s => { const hp = new cy; hp.position.set(s * .1, .93, 0); g.add(hp); add(new By(.085, .064, .46, 10), pants, 0, -.23, 0, hp); const kn = new cy; kn.position.y = -.46; hp.add(kn); add(new By(.062, .05, .44, 10), pants, 0, -.22, 0, kn); add(new _v(.1, .07, .27), shoe, 0, -.45, -.05, kn); return [hp, kn]; };
+    [L.lh, L.lk] = leg(-1); [L.rh, L.rk] = leg(1);
+    g.userData.L = L;
+    return g;
+}
+function __animPerson(g, dt, x, z) {
+    const u = g.userData, L = u.L; if (!L || dt <= 0) return;
+    if (u.lx === void 0) { u.lx = x; u.lz = z; u.ph = 0; u.sp = 0; }
+    const v = Math.min(Math.hypot(x - u.lx, z - u.lz) / dt, 10); u.lx = x; u.lz = z;
+    u.sp += (v - u.sp) * (1 - Math.exp(-10 * dt));
+    const run = Math.min(u.sp / 4.6, 1.9), a = Math.min(run, 1.6) * .62;
+    u.ph += dt * u.sp * 1.9;
+    const s = Math.sin(u.ph), c = Math.sin(u.ph + 1.9);
+    L.lh.rotation.x = s * a; L.rh.rotation.x = -s * a;
+    L.lk.rotation.x = -Math.max(0, c) * a * 1.5; L.rk.rotation.x = -Math.max(0, -c) * a * 1.5;
+    L.la.rotation.x = -s * a * .9; L.ra.rotation.x = s * a * .9;
+    const bend = .12 + Math.min(run, 1) * .5; L.le.rotation.x = bend; L.re.rotation.x = bend;
+    L.body.position.y = Math.abs(s) * .035 * Math.min(run, 1.4);
+    L.body.rotation.x = -Math.min(run, 1.6) * .08;
+    L.head.rotation.x = Math.min(run, 1.6) * .06;
+}
+/* ---------- building facade extras: awnings, lit signs, doors, AC units, drain pipes ---------- */
+var __bMat = new Map, __NAMES = [`FURY MART`, `NOODLE BAR`, `PHARMACY`, `CAFE 24`, `BOOKS`, `PIZZA`, `BARBER`, `DINER`, `ELECTRO`, `SUSHI`, `LAUNDRY`, `GARAGE`];
+function __bldgDetail(m, bx, bz, sW, cD, POD_H, hs, side, sc, glass, rnd) {
+    const get = (k, f) => { let h = __bMat.get(k); h || __bMat.set(k, h = f()); return h; };
+    const awn = get(`a` + sc, () => { const t = __cv(64, 64, (x) => { for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? `#ece9df` : sc; x.fillRect(i * 8, 0, 8, 64); } }); t.wrapS = t.wrapT = sm; return new Mb({ map: t, roughness: .85, side: 2 }); });
+    const dark = get(`dk`, () => new Mb({ color: `#0b0d10`, roughness: .5, metalness: .4 }));
+    const glassM = get(`gl`, () => new Mb({ color: `#1a1208`, emissive: `#ffd9a0`, emissiveIntensity: 1.1, roughness: .2, metalness: .3 }));
+    const ac = get(`ac`, () => new Mb({ color: `#9aa0a5`, roughness: .7, metalness: .3 }));
+    const pipe = get(`pp`, () => new Mb({ color: `#4a4e52`, roughness: .6, metalness: .5 }));
+    for (const [fx, fz] of [[0, 1], [0, -1], [side, 0]]) {
+        const zf = fz !== 0, wd = zf ? sW + 1 : cD + 1, off = zf ? (cD + 1) / 2 : (sW + 1) / 2;
+        const cx = bx + fx * off, cz = bz + fz * off, name = __NAMES[Math.floor(rnd() * __NAMES.length)];
+        const sg = get(`s` + name + sc, () => { const t = __cv(256, 48, (x, w, h) => { x.fillStyle = `#0b0d10`; x.fillRect(0, 0, w, h); x.fillStyle = sc; x.font = `bold 30px sans-serif`; x.textAlign = `center`; x.fillText(name, 128, 35); }); return new Mb({ color: `#000`, map: t, emissive: `#ffffff`, emissiveMap: t, emissiveIntensity: 1.6, roughness: .4 }); });
+        const aw = zf ? m(wd * .62, .1, 1.5, cx, 3.3, cz + fz * .75, awn) : m(1.5, .1, wd * .62, cx + fx * .75, 3.3, cz, awn);
+        zf ? aw.rotation.x = fz * .28 : aw.rotation.z = -fx * .28;
+        zf ? m(Math.min(wd * .7, 8), .8, .14, cx, 3.95, cz + fz * .1, sg) : m(.14, .8, Math.min(wd * .7, 8), cx + fx * .1, 3.95, cz, sg);
+        zf ? (m(1.6, 2.6, .12, cx + wd * .28, 1.3, cz + fz * .06, dark), m(1.35, 2.35, .06, cx + wd * .28, 1.25, cz + fz * .12, glassM))
+            : (m(.12, 2.6, 1.6, cx + fx * .06, 1.3, cz + wd * .28, dark), m(.06, 2.35, 1.35, cx + fx * .12, 1.25, cz + wd * .28, glassM));
+    }
+    if (glass) return;
+    for (const fz of [-1, 1]) {
+        m(.14, hs, .14, bx + sW / 2 - .4, POD_H + hs / 2, bz + fz * (cD / 2 + .08), pipe);
+        const n = 2 + Math.floor(rnd() * 3);
+        for (let i = 0; i < n; i++) m(.8, .55, .45, bx + (rnd() - .5) * (sW - 3), POD_H + 2 + Math.floor(rnd() * Math.max(1, hs / 3.6 - 1)) * 3.6, bz + fz * (cD / 2 + .22), ac);
+    }
+}
+/* ---------- city dressing: lamp pools, barriers, curbs, grates, signals, gas stations ---------- */
+function __dressCity(sc, C, w, solids, lamps, stations) {
+    const M = (c, r = .85, mtl = 0, o = {}) => new Mb({ color: c, roughness: r, metalness: mtl, ...o });
+    const box = (m, x, y, z, sx, sy, sz, ry = 0) => { const q = new Q(new _v(sx, sy, sz), m); q.position.set(x, y, z); q.rotation.y = ry; q.castShadow = !0; q.receiveShadow = !0; sc.add(q); return q; };
+    const cyl = (m, x, y, z, rt, rb, h) => { const q = new Q(new By(rt, rb, h, 14), m); q.position.set(x, y, z); q.castShadow = !0; sc.add(q); return q; };
+    const m4 = new qg, p3 = new Z, q4 = new _g, s3 = new Z, AX = new Z(1, 0, 0), AY = new Z(0, 1, 0);
+    /* warm light pools under every street lamp */
+    const pt = __cv(128, 128, (x) => { const g = x.createRadialGradient(64, 64, 2, 64, 64, 62); g.addColorStop(0, `rgba(255,220,160,.7)`); g.addColorStop(.5, `rgba(255,200,130,.22)`); g.addColorStop(1, `rgba(255,190,120,0)`); x.fillStyle = g; x.fillRect(0, 0, 128, 128); });
+    const pools = new qv(new Db(1, 1), new U_({ map: pt, transparent: !0, blending: 2, depthWrite: !1 }), lamps.length || 1);
+    const housing = M(`#1b1f23`, .5, .6), plinth = M(`#53585c`, .7, .4);
+    lamps.forEach((l, i) => {
+        p3.set(l.x, .26, l.z); q4.setFromAxisAngle(AX, -Math.PI / 2); s3.set(16, 16, 1); m4.compose(p3, q4, s3); pools.setMatrixAt(i, m4);
+        box(housing, l.x, l.y + .13, l.z, .66, .07, .4); cyl(plinth, l.x, .55, l.z + 2.1, .2, .27, .6); cyl(plinth, l.x, 1.5, l.z + 2.1, .14, .14, .12);
+    });
+    pools.count = lamps.length; pools.instanceMatrix.needsUpdate = !0; sc.add(pools);
+    /* jersey barriers replace the orange blocks (colliders unchanged) */
+    if (__barriers.length) {
+        const conc = M(`#a9adaf`, .95), cap = M(`#ffffff`, .8), refl = M(`#1a0f00`, .4, 0, { emissive: `#ff9a1a`, emissiveIntensity: 1.6 });
+        const gS = new By(.283, .566, .5, 4); gS.rotateY(Math.PI / 4);
+        const N = __barriers.length, iB = new qv(new _v(1, .3, .8), conc, N), iS = new qv(gS, conc, N), iC = new qv(new _v(1, .15, .4), cap, N), iR = new qv(new _v(.28, .1, .02), refl, N * 4);
+        [iB, iS, iC, iR].forEach(q => { q.castShadow = !0; q.receiveShadow = !0; });
+        let ri = 0; const c1 = new z_(`#e9e6df`), c2 = new z_(`#d9531e`);
+        __barriers.forEach(([x, z, n, r], i) => {
+            const L = Math.max(n, r) * .96, ry = r > n ? Math.PI / 2 : 0, co = Math.cos(ry), si = Math.sin(ry);
+            q4.setFromAxisAngle(AY, ry);
+            for (const [q, y, sx] of [[iB, .15, L / 1], [iS, .55, L / .8], [iC, .875, L]]) { p3.set(x, y, z); s3.set(sx, 1, 1); m4.compose(p3, q4, s3); q.setMatrixAt(i, m4); }
+            iC.setColorAt(i, i % 2 ? c1 : c2);
+            for (const ox of L > 3 ? [-L * .27, L * .27] : [0]) for (const oz of [-.285, .285]) { p3.set(x + ox * co + oz * si, .62, z - ox * si + oz * co); s3.set(1, 1, 1); m4.compose(p3, q4, s3); iR.setMatrixAt(ri++, m4); }
+        });
+        iR.count = ri; [iB, iS, iC, iR].forEach(q => { q.instanceMatrix.needsUpdate = !0; sc.add(q); });
+    }
+    /* curb lips, drain grates, manholes */
+    const lip = M(`#c3c6c8`, .8), zs = w[w.length - 1] - w[0] + 22, xs = C[C.length - 1] - C[0] + 22;
+    for (const e of C) for (const s of [-1, 1]) box(lip, e + s * 9.08, .235, (w[0] + w[w.length - 1]) / 2, .18, .03, zs);
+    for (const e of w) for (const s of [-1, 1]) box(lip, (C[0] + C[C.length - 1]) / 2, .235, e + s * 9.08, xs, .03, .18);
+    const gr = new Mb({ map: __cv(64, 32, (x) => { x.fillStyle = `#16181b`; x.fillRect(0, 0, 64, 32); x.fillStyle = `#050607`; for (let i = 3; i < 64; i += 6) x.fillRect(i, 3, 3, 26); }), roughness: .5, metalness: .7 });
+    const mh = M(`#2a2d31`, .45, .75);
+    const zm = [], xm = []; for (let i = 0; i < w.length - 1; i++) zm.push((w[i] + w[i + 1]) / 2); for (let i = 0; i < C.length - 1; i++) xm.push((C[i] + C[i + 1]) / 2);
+    for (const e of C) for (const z of zm) { for (const s of [-1, 1]) box(gr, e + s * 8.3, .09, z, .5, .025, .9); cyl(mh, e + 3.2, .085, z, .5, .5, .03); }
+    for (const e of w) for (const x of xm) { for (const s of [-1, 1]) box(gr, x, .09, e + s * 8.3, .9, .025, .5); cyl(mh, x, .085, e - 3.2, .5, .5, .03); }
+    /* traffic signals: backplates, visors, pedestrian heads */
+    const bp = M(`#07090b`, .7), hand = new Mb({ color: `#000`, emissive: `#ff7a1a`, emissiveIntensity: 2.2, roughness: .4 });
+    for (const e of C) for (const t of w) {
+        const px = e + 10.6, pz = t + 10.6;
+        box(bp, px, 5.2, pz + 2.54, .62, 1.1, .03);
+        for (let i = 0; i < 3; i++) box(bp, px, 5.6 - i * .25, pz + 2.64, .22, .035, .17);
+        box(bp, px, 2.6, pz + .2, .28, .36, .14); box(hand, px, 2.62, pz + .28, .16, .2, .02);
+    }
+    /* gas stations: pump islands, displays, canopy lights, price totem, hazard bollards */
+    const conc2 = M(`#9ea3a6`, .9), white = M(`#f1f3f4`, .5, .1), yel = M(`#e0b020`, .6, .2), scr = M(`#02140a`, .3, 0, { emissive: `#33ff88`, emissiveIntensity: 1.8 });
+    const lamp = M(`#fff`, .3, 0, { emissive: `#fff1d0`, emissiveIntensity: 3.2 }), nz = M(`#111`, .4, .5), brand = M(`#d83030`, .4, 0, { emissive: `#ff2a2a`, emissiveIntensity: 1.2 });
+    const tot = __cv(256, 112, (x, w2, h) => { x.fillStyle = `#0c0e11`; x.fillRect(0, 0, w2, h); x.fillStyle = `#d83030`; x.fillRect(0, 0, w2, 38); x.fillStyle = `#fff`; x.font = `bold 28px sans-serif`; x.textAlign = `center`; x.fillText(`FURY OIL`, 128, 29); x.fillStyle = `#4dff9a`; x.font = `bold 26px monospace`; x.textAlign = `left`; x.fillText(`UNL  3.49`, 18, 70); x.fillText(`DSL  3.79`, 18, 100); });
+    const totM = new Mb({ color: `#000`, map: tot, emissive: `#fff`, emissiveMap: tot, emissiveIntensity: 1.4, roughness: .4 });
+    for (const s of stations) {
+        const y0 = Uw(s.x, s.z);
+        for (const px of [-4, 4]) {
+            box(conc2, s.x + px, y0 + .16, s.z, 2.4, .18, 5.4); box(white, s.x + px, y0 + 2.6, s.z, 1.1, .36, 3.3); box(brand, s.x + px, y0 + 2.6, s.z, 1.12, .08, 3.32);
+            for (const k of [-1, 1]) { box(scr, s.x + px + k * .52, y0 + 1.7, s.z, .03, .3, .55); box(nz, s.x + px + k * .54, y0 + 1.05, s.z + .9, .08, .4, .14); cyl(nz, s.x + px + k * .56, y0 + .8, s.z + .9, .02, .02, .7); }
+        }
+        for (const ix of [-4, 4]) for (const iz of [-2.8, 2.8]) cyl(yel, s.x + ix, y0 + .68, s.z + iz, .12, .12, 1);
+        for (const ix of [-7, 0, 7]) for (const iz of [-4, 4]) box(lamp, s.x + ix, y0 + 4.93, s.z + iz, 2.4, .05, .9);
+        for (const ex of [-10, 10]) for (const rz of [-7, 7]) box(yel, s.x + ex, y0 + .45, s.z + rz, .62, .9, .62);
+        for (const f of [1, -1]) { const p = new Q(new Db(2.8, 1.2), totM); p.position.set(s.x + 12, y0 + 7, s.z + 9 + f * .17); p.rotation.y = f > 0 ? 0 : Math.PI; sc.add(p); }
+    }
+}
+
+function sE(e) { return __makePerson(e) }
 function cE(e, t) {
     if (navigator.webdriver || navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4) {
         return () => {}
@@ -49964,7 +50104,7 @@ function lE(e, t, n, r, i, a=!1) {
     window.addEventListener(`blur`, B),
     window.addEventListener(`pointerdown`, V),
     document.addEventListener(`visibilitychange`, te),
-    l.position.set(0, 9, 85);
+    l.position.set(0, 9, 85); __cam = l;
     let ne = new Z
       , re = new Z
       , ie = new Z;
@@ -50013,7 +50153,7 @@ function lE(e, t, n, r, i, a=!1) {
                 b.userData.brakeLights.forEach(t => t.material.emissiveIntensity = e ? 1.5 : .15)
             }
             C.visible = !!o.onFoot,
-            o.onFoot && C.position.set(o.x, o.y || 0, o.z),
+            o.onFoot && (C.position.set(o.x, o.y || 0, o.z), C.rotation.y = o.footYaw || 0, __animPerson(C, a, o.x, o.z)),
             S.forEach( (e, n) => {
                 let r = o.police[n];
                 e.visible = !r.onFoot,
@@ -50028,20 +50168,19 @@ function lE(e, t, n, r, i, a=!1) {
             w.forEach( (e, t) => {
                 let n = o.police[t];
                 e.visible = !!n.onFoot,
-                n.onFoot && e.position.set(n.x, Uw(n.x, n.z), n.z)
+                n.onFoot && (e.position.set(n.x, Uw(n.x, n.z), n.z), e.rotation.y = n.heading, __animPerson(e, a, n.x, n.z))
             }
             ),
             D();
             let e = Math.min(o.speed / 200, 1);
             l.fov = 45 + e * 12,
             l.updateProjectionMatrix();
-            let n = 12 + e * 3
-              , s = 7.5 + e * 1.5;
+            let n = o.onFoot ? 6.4 : 12 + e * 3, s = o.onFoot ? 3.3 : 7.5 + e * 1.5;
             re.set(o.x + Math.sin(o.heading) * n, (o.y || 0) + s, o.z + Math.cos(o.heading) * n),
             l.position.lerp(re, 1 - Math.exp(-a * 4.5)),
             o.shake > .01 && (ie.set((Math.random() - .5) * o.shake * .8, (Math.random() - .5) * o.shake * .5, (Math.random() - .5) * o.shake * .8),
             l.position.add(ie)),
-            ne.set(o.x, (o.y || 0) + 1, o.z),
+            ne.set(o.x, (o.y || 0) + (o.onFoot ? 1.35 : 1), o.z),
             l.lookAt(ne),
             k.update(o, a),
             O.update(o.rpm, o.pedal, r.current.muted, o.drifting, o),
