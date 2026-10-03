@@ -21897,7 +21897,7 @@ function Rp(e) {
             serverUrl: t,
             appId: n,
             userAuthModule: T,
-            enabled: r?.enabled ?? !0
+            enabled: !1
         }),
         actors: E.module,
         cleanup: () => {
@@ -22002,22 +22002,11 @@ var zp = {
 });
 function Gp({}) {
     let e = go().pathname.substring(1)
-      , {data: t, isFetched: n} = xa({
-        queryKey: [`user`],
-        queryFn: async () => {
-            try {
-                return {
-                    user: await Wp.auth.me(),
-                    isAuthenticated: !0
-                }
-            } catch {
-                return {
-                    user: null,
-                    isAuthenticated: !1
-                }
-            }
-        }
-    });
+      , t = {
+        user: null,
+        isAuthenticated: !1
+    }
+      , n = !0;
     return (0,
     L.jsx)(`div`, {
         className: `min-h-screen flex items-center justify-center p-6 bg-slate-50`,
@@ -22127,7 +22116,10 @@ _.createContext)()
     _.useState)(null);
     (0,
     _.useEffect)( () => {
-        h()
+        c(!1),
+        o(!1),
+        i(!1),
+        f(!0)
     }
     , []);
     let h = async () => {
@@ -48574,7 +48566,7 @@ function VT(e, t, n) {
         }
     }
 }
-function GT(e, t, n) {
+function createEngineSynth(e, t, n) {
     let r = e.createOscillator()
       , i = e.createOscillator()
       , a = e.createGain()
@@ -48698,7 +48690,7 @@ function HT(e) {
         }
         ).catch(e => {
             console.warn(`AudioWorklet indisponible, moteur audio de secours activé.`, e),
-            c || (s = GT(n, r, e.id),
+            c || (s = createEngineSynth(n, r, e.id),
             o.setSynthEngine())
         }
         ),
@@ -50535,7 +50527,11 @@ function dE({car: e, engine: t, onGarage: n, onStart: r, noPolice: i, onToggleNo
             })]
         }), (0,
         L.jsx)(`p`, {
-            className: `mt-3 text-center text-[9px] tracking-[.08em] text-[#738080]`,
+            className: `mobile-controls-note mt-2 text-center text-[9px] tracking-[.08em] text-[#c6dc77]`,
+            children: `COMMANDES TACTILES DISPONIBLES EN COURSE`
+        }), (0,
+        L.jsx)(`p`, {
+            className: `mt-1 text-center text-[9px] tracking-[.08em] text-[#738080]`,
             children: `MONDE OUVERT • CONDUITE LIBRE`
         })]
     })
@@ -51218,7 +51214,7 @@ function yE({hud: e, engine: t, muted: n, onMute: r, onPause: i, onStation: a}) 
             })
         }), (0,
         L.jsxs)(`div`, {
-            className: `hud-glass absolute bottom-6 right-6 w-48 p-4 sm:w-56`,
+            className: `mobile-speed-panel hud-glass absolute bottom-6 right-6 w-48 p-4 sm:w-56`,
             children: [(0,
             L.jsxs)(`div`, {
                 className: `flex items-end justify-between`,
@@ -51318,18 +51314,17 @@ function bE({controls: e}) {
         e.current.keys[n] = !0) : (i[n] = Math.max(0, (i[n] || 0) - 1),
         i[n] <= 0 && delete e.current.keys[n])
     }
-      , r = e => ({
-        onTouchStart: t => {
-            t.preventDefault(),
-            n(e, !0)
+      , r = key => ({
+        onTouchStart: () => {
+            e.current.audio?.resume()?.catch(error => console.warn(`Audio resume failed:`, error)),
+            n(key, !0)
         }
         ,
-        onTouchEnd: t => {
-            t.preventDefault(),
-            n(e, !1)
+        onTouchEnd: () => {
+            n(key, !1)
         }
         ,
-        onTouchCancel: () => n(e, !1),
+        onTouchCancel: () => n(key, !1),
         onContextMenu: e => e.preventDefault()
     });
     return (0,
@@ -51337,7 +51332,7 @@ function bE({controls: e}) {
         className: `touch-controls pointer-events-none absolute bottom-52 left-3 right-3 z-20 flex items-end justify-between gap-1.5 sm:bottom-6 sm:left-52 sm:right-72 xl:hidden`,
         children: [(0,
         L.jsxs)(`div`, {
-            className: `touch-group pointer-events-auto flex gap-1.5`,
+            className: `touch-group touch-steering pointer-events-auto flex gap-1.5`,
             children: [(0,
             L.jsx)(`div`, {
                 className: `touch-button`,
@@ -51357,7 +51352,7 @@ function bE({controls: e}) {
             })]
         }), (0,
         L.jsxs)(`div`, {
-            className: `touch-group pointer-events-auto flex gap-1.5`,
+            className: `touch-group touch-driving pointer-events-auto flex gap-1.5`,
             children: [(0,
             L.jsx)(`div`, {
                 className: `touch-button !w-12 text-[9px] font-bold`,

@@ -4349,3 +4349,101 @@ body {
 }
 
 .\[\&_\.recharts-cartesian-grid_line\[stroke\=\'\#ccc\'\]\]\:stroke-border\/50 .recharts-cartesian-grid line[stroke=\#ccc]{stroke:hsl(var(--border) / .5)}.\[\&_\.recharts-curve\.recharts-tooltip-cursor\]\:stroke-border .recharts-curve.recharts-tooltip-cursor{stroke:hsl(var(--border))}.\[\&_\.recharts-dot\[stroke\=\'\#fff\'\]\]\:stroke-transparent .recharts-dot[stroke=\#fff]{stroke:#0000}.\[\&_\.recharts-layer\]\:outline-none .recharts-layer{outline-offset:2px;outline:2px solid #0000}.\[\&_\.recharts-polar-grid_\[stroke\=\'\#ccc\'\]\]\:stroke-border .recharts-polar-grid [stroke=\#ccc]{stroke:hsl(var(--border))}.\[\&_\.recharts-radial-bar-background-sector\]\:fill-muted .recharts-radial-bar-background-sector,.\[\&_\.recharts-rectangle\.recharts-tooltip-cursor\]\:fill-muted .recharts-rectangle.recharts-tooltip-cursor{fill:hsl(var(--muted))}.\[\&_\.recharts-reference-line_\[stroke\=\'\#ccc\'\]\]\:stroke-border .recharts-reference-line [stroke=\#ccc]{stroke:hsl(var(--border))}.\[\&_\.recharts-sector\[stroke\=\'\#fff\'\]\]\:stroke-transparent .recharts-sector[stroke=\#fff]{stroke:#0000}.\[\&_\.recharts-sector\]\:outline-none .recharts-sector,.\[\&_\.recharts-surface\]\:outline-none .recharts-surface{outline-offset:2px;outline:2px solid #0000}.\[\&_\[cmdk-group-heading\]\]\:px-2 [cmdk-group-heading]{padding-left:.5rem;padding-right:.5rem}.\[\&_\[cmdk-group-heading\]\]\:py-1\.5 [cmdk-group-heading]{padding-top:.375rem;padding-bottom:.375rem}.\[\&_\[cmdk-group-heading\]\]\:text-xs [cmdk-group-heading]{font-size:.75rem;line-height:1rem}.\[\&_\[cmdk-group-heading\]\]\:font-medium [cmdk-group-heading]{font-weight:500}.\[\&_\[cmdk-group-heading\]\]\:text-muted-foreground [cmdk-group-heading]{color:hsl(var(--muted-foreground))}.\[\&_\[cmdk-group\]\:not\(\[hidden\]\)_\~\[cmdk-group\]\]\:pt-0 [cmdk-group]:not([hidden])~[cmdk-group]{padding-top:0}.\[\&_\[cmdk-group\]\]\:px-2 [cmdk-group]{padding-left:.5rem;padding-right:.5rem}.\[\&_\[cmdk-input-wrapper\]_svg\]\:h-5 [cmdk-input-wrapper] svg{height:1.25rem}.\[\&_\[cmdk-input-wrapper\]_svg\]\:w-5 [cmdk-input-wrapper] svg{width:1.25rem}.\[\&_\[cmdk-input\]\]\:h-12 [cmdk-input]{height:3rem}.\[\&_\[cmdk-item\]\]\:px-2 [cmdk-item]{padding-left:.5rem;padding-right:.5rem}.\[\&_\[cmdk-item\]\]\:py-3 [cmdk-item]{padding-top:.75rem;padding-bottom:.75rem}.\[\&_\[cmdk-item\]_svg\]\:h-5 [cmdk-item] svg{height:1.25rem}.\[\&_\[cmdk-item\]_svg\]\:w-5 [cmdk-item] svg{width:1.25rem}.\[\&_p\]\:leading-relaxed p{line-height:1.625}.\[\&_svg\]\:pointer-events-none svg{pointer-events:none}.\[\&_svg\]\:size-4 svg{width:1rem;height:1rem}.\[\&_svg\]\:shrink-0 svg{flex-shrink:0}.\[\&_tr\:last-child\]\:border-0 tr:last-child{border-width:0}.\[\&_tr\]\:border-b tr{border-bottom-width:1px}[data-side=left][data-collapsible=offcanvas] .\[\[data-side\=left\]\[data-collapsible\=offcanvas\]_\&\]\:-right-2{right:-.5rem}[data-side=left][data-state=collapsed] .\[\[data-side\=left\]\[data-state\=collapsed\]_\&\]\:cursor-e-resize{cursor:e-resize}[data-side=left] .\[\[data-side\=left\]_\&\]\:cursor-w-resize{cursor:w-resize}[data-side=right][data-collapsible=offcanvas] .\[\[data-side\=right\]\[data-collapsible\=offcanvas\]_\&\]\:-left-2{left:-.5rem}[data-side=right][data-state=collapsed] .\[\[data-side\=right\]\[data-state\=collapsed\]_\&\]\:cursor-w-resize{cursor:w-resize}[data-side=right] .\[\[data-side\=right\]_\&\]\:cursor-e-resize{cursor:e-resize}
+
+.mobile-controls-note {
+    display: none;
+}
+
+@media (max-width: 639px) {
+    .mobile-controls-note {
+        display: block;
+    }
+
+    .touch-controls {
+        bottom: 12px !important;
+        left: 12px !important;
+        right: 12px !important;
+        gap: 8px !important;
+    }
+
+    .touch-steering {
+        flex-shrink: 0;
+    }
+
+    .touch-driving {
+        display: grid !important;
+        grid-template-columns: repeat(2, 56px);
+        gap: 6px !important;
+    }
+
+    .touch-button {
+        width: 56px;
+        height: 54px;
+    }
+
+    .mobile-speed-panel {
+        top: 112px !important;
+        right: 12px !important;
+        bottom: auto !important;
+        left: auto !important;
+        width: 132px !important;
+        padding: 8px !important;
+    }
+
+    .mobile-speed-panel > :nth-child(n+3) {
+        display: none;
+    }
+}
+
+@media (max-width: 380px) {
+    .touch-driving {
+        grid-template-columns: repeat(2, 50px);
+        gap: 4px !important;
+    }
+
+    .touch-button {
+        width: 50px;
+        height: 50px;
+    }
+}
+
+@media (max-height: 560px) and (orientation: landscape) {
+    .mobile-controls-note {
+        display: block;
+    }
+
+    .touch-controls {
+        bottom: 8px !important;
+        left: 12px !important;
+        right: 12px !important;
+        gap: 8px !important;
+    }
+
+    .touch-steering {
+        flex-shrink: 0;
+    }
+
+    .touch-driving {
+        display: grid !important;
+        grid-template-columns: repeat(2, 50px);
+        gap: 4px !important;
+    }
+
+    .touch-button {
+        width: 50px;
+        height: 48px;
+    }
+
+    .mobile-speed-panel {
+        top: 64px !important;
+        right: 12px !important;
+        bottom: auto !important;
+        left: auto !important;
+        width: 128px !important;
+        padding: 6px !important;
+    }
+
+    .mobile-speed-panel > :nth-child(n+3) {
+        display: none;
+    }
+}
