@@ -46172,31 +46172,146 @@ function qw(e, t=2.4) {
         normalMap
 }
 function Jw(e=6) {
-    let t = document.createElement(`canvas`);
-    t.width = t.height = 256;
-    let n = t.getContext(`2d`)
-      , {grid: r, max: i} = Gw(n, 256, 5, .55, 1337)
-      , a = n.createImageData(256, 256);
-    for (let e = 0; e < 65536; e++) {
-        let t = 126 + r[e] / i * 96;
-        a.data[e * 4] = a.data[e * 4 + 1] = a.data[e * 4 + 2] = t,
-        a.data[e * 4 + 3] = 255
+    const S = 512;
+    const mk = () => {
+        const cv = document.createElement(`canvas`);
+        cv.width = cv.height = S;
+        return cv;
+    };
+    const rnd = Ww(4242 + e);
+    const A = mk(), H = mk(), R = mk();
+    const a = A.getContext(`2d`), h = H.getContext(`2d`), r = R.getContext(`2d`);
+    const wrap = fn => {
+        for (const ox of [-S, 0, S])
+            for (const oy of [-S, 0, S]) {
+                for (const c of [a, h, r]) {
+                    c.save();
+                    c.translate(ox, oy);
+                }
+                fn();
+                for (const c of [a, h, r])
+                    c.restore();
+            }
+    };
+    a.fillStyle = `#4a4d51`;
+    a.fillRect(0, 0, S, S);
+    h.fillStyle = `#808080`;
+    h.fillRect(0, 0, S, S);
+    r.fillStyle = `#c4c4c4`;
+    r.fillRect(0, 0, S, S);
+    // broad tonal variation
+    for (let q = 0; q < 70; q++) {
+        const x = rnd() * S, y = rnd() * S, rad = 30 + rnd() * 90, dark = rnd() > .5;
+        wrap(() => {
+            const gr = a.createRadialGradient(x, y, 0, x, y, rad);
+            gr.addColorStop(0, dark ? `rgba(10,10,12,0.10)` : `rgba(200,205,210,0.07)`);
+            gr.addColorStop(1, `rgba(0,0,0,0)`);
+            a.fillStyle = gr;
+            a.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+        });
     }
-    n.putImageData(a, 0, 0);
-    let o = Kw(e)
-      , s = qw(t, 2.3);
-    return s.repeat.set(e, e),
-    new Nb({
-        map: o,
-        normalMap: s,
-        normalScale: new X(.9,.9),
-        roughness: .34,
-        metalness: .12,
-        clearcoat: 1,
-        clearcoatRoughness: .08,
-        envMapIntensity: 1.6,
-        color: `#cfd7dd`
-    })
+    // aggregate: fine stones, they carry the bump and the sparkle
+    for (let q = 0; q < 16000; q++) {
+        const x = rnd() * S, y = rnd() * S, sz = .8 + rnd() * 2.1, t = rnd();
+        a.fillStyle = t > .6 ? `rgba(165,170,175,${.15 + rnd() * .25})` : t > .25 ? `rgba(20,21,24,${.2 + rnd() * .3})` : `rgba(95,92,88,${.15 + rnd() * .2})`;
+        a.fillRect(x, y, sz, sz);
+        h.fillStyle = t > .5 ? `rgba(255,255,255,${.25 + rnd() * .35})` : `rgba(0,0,0,${.2 + rnd() * .3})`;
+        h.fillRect(x, y, sz, sz);
+    }
+    // old repair patches
+    for (let q = 0; q < 2; q++) {
+        const x = rnd() * S * .8, y = rnd() * S * .8, pw = 60 + rnd() * 120, ph = 40 + rnd() * 90;
+        wrap(() => {
+            a.fillStyle = `rgba(14,15,18,0.13)`;
+            a.fillRect(x, y, pw, ph);
+            a.strokeStyle = `rgba(5,5,6,0.22)`;
+            a.lineWidth = 1.2;
+            a.strokeRect(x, y, pw, ph);
+            h.strokeStyle = `rgba(0,0,0,0.45)`;
+            h.lineWidth = 1.5;
+            h.strokeRect(x, y, pw, ph);
+            r.fillStyle = `rgba(170,170,170,0.35)`;
+            r.fillRect(x, y, pw, ph);
+        });
+    }
+    // thin cracks
+    for (let q = 0; q < 7; q++) {
+        let x = rnd() * S, y = rnd() * S;
+        const pts = [[x, y]];
+        for (let k = 0; k < 24; k++) {
+            x += (rnd() - .5) * 18;
+            y += (rnd() - .35) * 18;
+            pts.push([x, y]);
+        }
+        wrap(() => {
+            for (const [c, col, lw] of [[a, `rgba(4,4,5,0.75)`, 1.1], [h, `rgba(0,0,0,0.9)`, 2.4]]) {
+                c.strokeStyle = col;
+                c.lineWidth = lw;
+                c.beginPath();
+                pts.forEach(([px, py], k) => k ? c.lineTo(px, py) : c.moveTo(px, py));
+                c.stroke();
+            }
+        });
+    }
+    // oil drips: darker and glossier
+    for (let q = 0; q < 8; q++) {
+        const x = rnd() * S, y = rnd() * S, rad = 12 + rnd() * 30;
+        wrap(() => {
+            let gr = a.createRadialGradient(x, y, 0, x, y, rad);
+            gr.addColorStop(0, `rgba(6,6,8,0.55)`);
+            gr.addColorStop(1, `rgba(6,6,8,0)`);
+            a.fillStyle = gr;
+            a.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+            gr = r.createRadialGradient(x, y, 0, x, y, rad);
+            gr.addColorStop(0, `rgba(70,70,70,0.9)`);
+            gr.addColorStop(1, `rgba(70,70,70,0)`);
+            r.fillStyle = gr;
+            r.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+        });
+    }
+    // shallow puddles: mirror-smooth and a bit darker
+    for (let q = 0; q < 2; q++) {
+        const x = rnd() * S, y = rnd() * S, rad = 34 + rnd() * 34;
+        wrap(() => {
+            let gr = r.createRadialGradient(x, y, rad * .2, x, y, rad);
+            gr.addColorStop(0, `rgba(14,14,14,1)`);
+            gr.addColorStop(.7, `rgba(40,40,40,0.8)`);
+            gr.addColorStop(1, `rgba(40,40,40,0)`);
+            r.fillStyle = gr;
+            r.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+            gr = a.createRadialGradient(x, y, rad * .2, x, y, rad);
+            gr.addColorStop(0, `rgba(0,0,0,0.28)`);
+            gr.addColorStop(1, `rgba(0,0,0,0)`);
+            a.fillStyle = gr;
+            a.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+            gr = h.createRadialGradient(x, y, rad * .2, x, y, rad);
+            gr.addColorStop(0, `rgba(128,128,128,1)`);
+            gr.addColorStop(1, `rgba(128,128,128,0)`);
+            h.fillStyle = gr;
+            h.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+        });
+    }
+    const tex = (cv, srgb) => {
+        const t = new ly(cv);
+        t.wrapS = t.wrapT = sm;
+        t.anisotropy = 8;
+        srgb && (t.colorSpace = `srgb`);
+        return t;
+    };
+    const mat = new Nb({
+        map: tex(A, !0),
+        normalMap: qw(H, 2.8),
+        normalScale: new X(1.15,1.15),
+        roughnessMap: tex(R, !1),
+        roughness: 1,
+        metalness: 0,
+        clearcoat: .3,
+        clearcoatRoughness: .4,
+        envMapIntensity: .85,
+        color: `#ffffff`
+    });
+    mat.userData.tile = 10;
+    return mat;
 }
 function Yw(e=4) {
     let t = document.createElement(`canvas`);
@@ -46363,8 +46478,23 @@ function $w(e) {
         emissive: `#fff4d0`,
         emissiveIntensity: 1.6
     });
+    for (const [mt, tl] of [[a, 4], [o, 4]]) {
+        mt.map.repeat.set(1, 1);
+        mt.userData.tile = tl;
+    }
     function m(n, r, i, a, o, s, c, l=!1) {
-        let u = new Q(new _v(n,r,i),c);
+        let bg0 = new _v(n,r,i);
+        if (c && c.userData && c.userData.tile) {
+            const tl = c.userData.tile, uvA = bg0.attributes.uv;
+            const dims = [[i, r], [i, r], [n, i], [n, i], [n, r], [n, r]];
+            for (let face = 0; face < 6; face++)
+                for (let vi = 0; vi < 4; vi++) {
+                    const ix = face * 4 + vi;
+                    uvA.setXY(ix, uvA.getX(ix) * dims[face][0] / tl, uvA.getY(ix) * dims[face][1] / tl);
+                }
+            uvA.needsUpdate = !0;
+        }
+        let u = new Q(bg0,c);
         return u.position.set(a, o, s),
         u.receiveShadow = !0,
         u.castShadow = l,
@@ -46522,11 +46652,12 @@ function $w(e) {
             metalness: .05
         });
         const lotMat = new Mb({
-            map: Yw(5),
+            map: Yw(1),
             roughness: .88,
             metalness: .04,
             color: `#8f969c`
         });
+        lotMat.userData.tile = 4;
         const tankMat = new Mb({
             color: `#5a4a3a`,
             roughness: .85
@@ -46864,6 +46995,84 @@ function $w(e) {
                     m(.1, .1, cD + 1.02, bxC + (sW + 1) / 2 + .02, POD_H - .12, bzC, trimMats[signIdx]);
                 }
             }
+    }
+    {
+        /* ===== DRIFT FURY: street trees v1 (sidewalk only, with trunk colliders) ===== */
+        const fc = document.createElement(`canvas`);
+        fc.width = fc.height = 256;
+        const fg = fc.getContext(`2d`);
+        const frnd = Ww(5150);
+        fg.fillStyle = `#2c5a2a`;
+        fg.fillRect(0, 0, 256, 256);
+        const greens = [`#3f7a35`, `#2a5a28`, `#4f8a3c`, `#1f4a22`, `#5f9645`, `#35692f`];
+        for (let q = 0; q < 2600; q++) {
+            fg.fillStyle = greens[Math.floor(frnd() * greens.length)];
+            fg.save();
+            fg.translate(frnd() * 256, frnd() * 256);
+            fg.rotate(frnd() * 6.283);
+            fg.beginPath();
+            fg.ellipse(0, 0, 2.2 + frnd() * 3.2, 1.1 + frnd() * 1.5, 0, 0, 6.283);
+            fg.fill();
+            fg.restore();
+        }
+        for (let q = 0; q < 700; q++) {
+            fg.fillStyle = `rgba(8,22,10,${.25 + frnd() * .3})`;
+            fg.fillRect(frnd() * 256, frnd() * 256, 3, 3);
+        }
+        const leafTex = new ly(fc);
+        leafTex.wrapS = leafTex.wrapT = sm;
+        leafTex.colorSpace = `srgb`;
+        leafTex.anisotropy = 8;
+        leafTex.repeat.set(2, 2);
+        const leafMat = new Mb({
+            map: leafTex,
+            bumpMap: leafTex,
+            bumpScale: 1.2,
+            roughness: .92,
+            metalness: 0
+        });
+        const barkMat = new Mb({
+            color: `#4a3b2e`,
+            roughness: 1
+        });
+        const spots = [];
+        for (const ax of C)
+            for (const side of [-1, 1])
+                for (let tz = w[0] - 4; tz <= w[w.length - 1] + 4; tz += 12) {
+                    if (w.some(sz => Math.abs(tz - sz) < 14.5))
+                        continue;
+                    if ([-66, -30, 6, 42].some(pz => Math.abs(tz - pz) < 4.5))
+                        continue;
+                    spots.push([ax + side * 10.2, tz]);
+                }
+        const CLUMPS = 5;
+        const trunks = new qv(new By(.16,.24,4.4,10),barkMat,spots.length);
+        trunks.castShadow = !0;
+        const crowns = new qv(new kb(1,10,8),leafMat,spots.length * CLUMPS);
+        crowns.castShadow = !0;
+        crowns.receiveShadow = !0;
+        let ci = 0;
+        spots.forEach(([tx, tz], ti) => {
+            _.set(tx, 2.25, tz);
+            v.identity();
+            y.set(1, 1, 1);
+            g.compose(_, v, y);
+            trunks.setMatrixAt(ti, g);
+            const sc = .8 + j() * .45;
+            const clumps = [[0, 5.4, 0, 1.55], [.9, 5.0, .4, 1.15], [-.8, 5.1, -.5, 1.2], [.2, 6.5, -.2, 1.05], [-.3, 4.5, .9, 1]];
+            for (const [ox, oy, oz, rr] of clumps) {
+                _.set(tx + ox * sc, 1.9 + oy * sc * .82, tz + oz * sc);
+                y.set(rr * sc * 1.1, rr * sc * .86, rr * sc * 1.1);
+                g.compose(_, v, y);
+                crowns.setMatrixAt(ci++, g);
+            }
+            h(tx, tz, .3, .3);
+        });
+        trunks.instanceMatrix.needsUpdate = !0;
+        crowns.count = ci;
+        crowns.instanceMatrix.needsUpdate = !0;
+        e.add(trunks);
+        e.add(crowns);
     }
     for (let t of nm) {
         let n = Uw(t.x, t.z);
@@ -49402,7 +49611,7 @@ function aE(e, t, n, r, i, a) {
     o.setPixelRatio(e.getPixelRatio()),
     o.setSize(r, i),
     o.addPass(new $T(t,n)),
-    o.addPass(new tE(new X(r,i),a,.55,.8));
+    o.addPass(new tE(new X(r,i),a,.4,.92));
     let s = new YT(iE);
     return s.uniforms.offset.value = .95,
     s.uniforms.darkness.value = 1.08,
