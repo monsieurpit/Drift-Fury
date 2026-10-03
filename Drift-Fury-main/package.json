@@ -1,0 +1,14 @@
+{
+  "name": "drift-fury",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

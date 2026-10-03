@@ -1,0 +1,10 @@
+{
+  "name": "Drift Fury: Pursuit",
+  "short_name": "Drift Fury",
+  "description": "Un jeu pour moi et mon pote!",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff",
+  "scope": "/"
+}
