@@ -48574,6 +48574,91 @@ function VT(e, t, n) {
         }
     }
 }
+function GT(e, t, n) {
+    let r = e.createOscillator()
+      , i = e.createOscillator()
+      , a = e.createGain()
+      , o = e.createBiquadFilter()
+      , s = e.createGain()
+      , c = new Set
+      , l = ({
+        V6: 6,
+        V8: 8,
+        V12: 12,
+        W16: 16
+    })[n] || 6;
+    r.type = `sawtooth`,
+    i.type = `sine`,
+    r.connect(a),
+    i.connect(a),
+    a.gain.value = .55,
+    o.type = `lowpass`,
+    o.frequency.value = 900,
+    o.Q.value = .7,
+    a.connect(o),
+    o.connect(s),
+    s.gain.value = 0,
+    s.connect(t),
+    r.start(),
+    i.start();
+    let u = (duration, volume, cutoff) => {
+        let now = Math.max(.001, e.currentTime)
+          , length = Math.ceil(e.sampleRate * duration)
+          , buffer = e.createBuffer(1, length, e.sampleRate)
+          , samples = buffer.getChannelData(0);
+        for (let e = 0; e < length; e++)
+            samples[e] = Math.random() * 2 - 1;
+        let source = e.createBufferSource()
+          , filter = e.createBiquadFilter()
+          , gain = e.createGain();
+        return source.buffer = buffer,
+        filter.type = `lowpass`,
+        filter.frequency.value = cutoff,
+        gain.gain.setValueAtTime(volume, now),
+        gain.gain.exponentialRampToValueAtTime(.001, now + duration),
+        source.connect(filter),
+        filter.connect(gain),
+        gain.connect(t),
+        source.onended = () => {
+            source.disconnect(),
+            filter.disconnect(),
+            gain.disconnect(),
+            c.delete(source)
+        }
+        ,
+        c.add(source),
+        source.start(now),
+        source.stop(now + duration),
+        source
+    }
+    ;
+    return {
+        update(n, t, d={}) {
+            let a = e.currentTime
+              , c = Math.max(30, n * l / 120)
+              , u = Math.max(0, Math.min(1, t));
+            r.frequency.setTargetAtTime(c, a, .035),
+            i.frequency.setTargetAtTime(Math.max(20, c * .5), a, .04),
+            s.gain.setTargetAtTime(d.fuel === 0 ? 0 : .12 + u * .12, a, .04),
+            o.frequency.setTargetAtTime(550 + n * .25 + u * 1200, a, .05)
+        },
+        bang(e=1) {
+            u(.11, .12 * Math.min(1.6, e), 1300)
+        },
+        shift(e=!1) {
+            u(.07, e ? .1 : .065, e ? 450 : 1000)
+        },
+        crash(e=1) {
+            u(.32, .32 * Math.min(1.5, e), 380)
+        },
+        close() {
+            r.stop(),
+            i.stop(),
+            c.forEach(e => e.stop()),
+            [r, i, a, o, s].forEach(e => e.disconnect())
+        }
+    }
+}
 function HT(e) {
     let t = window.AudioContext || window.webkitAudioContext;
     if (!t)
@@ -48611,7 +48696,12 @@ function HT(e) {
             c ? e.close() : (s = e,
             o.setSynthEngine())
         }
-        ).catch(async () => LT(n, r, await PT(n, e.id), e.id)),
+        ).catch(e => {
+            console.warn(`AudioWorklet indisponible, moteur audio de secours activé.`, e),
+            c || (s = GT(n, r, e.id),
+            o.setSynthEngine())
+        }
+        ),
         resume() {
             if (!c && n.state === `suspended`)
                 return n.resume()
