@@ -13,14 +13,7 @@ import { buildWorld } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
 export function startGameSession(e, t, n, r, i, a = false) {
   const o = createRenderer(e, true);
-  const {
-    scene: s,
-    renderer: c,
-    camera: l,
-    sun: u,
-    touchDevice: d,
-    composer: f,
-  } = o;
+  const { scene: s, renderer: c, camera: l, sun: u, touchDevice: d, composer: f } = o;
   const { solids: p, lampPositions: m, signals } = buildWorld(s);
   const staticBatch = batchStaticMeshes(
     s,
@@ -53,8 +46,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
     signalClock = (signalClock + dt) % 24;
     const phase = signalClock % 24;
     const state0 = phase < 9 ? 0 : phase < 11 ? 1 : 2;
-    const state1 =
-      phase >= 12 && phase < 21 ? 0 : phase >= 21 && phase < 23 ? 1 : 2;
+    const state1 = phase >= 12 && phase < 21 ? 0 : phase >= 21 && phase < 23 ? 1 : 2;
     for (let axis = 0; axis < signalStates.length; axis++) {
       const state = axis === 0 ? state0 : state1;
       if (signalStates[axis] === state) {
@@ -106,8 +98,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
       if (r == null) {
         t.light.visible = false;
       } else {
-        (t.light.position.set(n[r].x, n[r].y, n[r].z),
-          (t.light.visible = true));
+        (t.light.position.set(n[r].x, n[r].y, n[r].z), (t.light.visible = true));
       }
     }
   }
@@ -206,10 +197,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
       canvas.setPointerCapture(e.pointerId);
       if (touchPoints.size >= 2) {
         const points = [...touchPoints.values()];
-        pinchDistance = Math.hypot(
-          points[0].x - points[1].x,
-          points[0].y - points[1].y,
-        );
+        pinchDistance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
         dragPointer = null;
         return;
       }
@@ -233,15 +221,9 @@ export function startGameSession(e, t, n, r, i, a = false) {
       });
       if (touchPoints.size >= 2) {
         const points = [...touchPoints.values()];
-        const distance = Math.hypot(
-          points[0].x - points[1].x,
-          points[0].y - points[1].y,
-        );
+        const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
         if (pinchDistance > 0 && distance > 0) {
-          cameraZoom = Math.max(
-            0.45,
-            Math.min(2.8, (cameraZoom * pinchDistance) / distance),
-          );
+          cameraZoom = Math.max(0.45, Math.min(2.8, (cameraZoom * pinchDistance) / distance));
         }
         pinchDistance = distance;
         return;
@@ -255,10 +237,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
     if (h.state.onFoot) {
       footCameraYaw += yawDelta;
     }
-    cameraPitch = Math.max(
-      -0.45,
-      Math.min(0.55, cameraPitch + (e.clientY - lastPointerY) * 0.004),
-    );
+    cameraPitch = Math.max(-0.45, Math.min(0.55, cameraPitch + (e.clientY - lastPointerY) * 0.004));
     lastPointerX = e.clientX;
     lastPointerY = e.clientY;
   }
@@ -282,10 +261,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
   }
   function zoomCamera(e) {
     e.preventDefault();
-    cameraZoom = Math.max(
-      0.45,
-      Math.min(2.8, cameraZoom * Math.exp(e.deltaY * 0.001)),
-    );
+    cameraZoom = Math.max(0.45, Math.min(2.8, cameraZoom * Math.exp(e.deltaY * 0.001)));
   }
   function addInteractionDoor() {
     interaction.door = b.userData.accessDoor;
@@ -324,20 +300,11 @@ export function startGameSession(e, t, n, r, i, a = false) {
   O.ready.catch(() => {});
   const z = (e) => {
     O.resume();
-    if (
-      ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(
-        e.code,
-      )
-    ) {
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
       e.preventDefault();
     }
     A[e.code] = true;
-    if (
-      e.code === "KeyE" &&
-      !e.repeat &&
-      !h.state.onFoot &&
-      h.state.station >= 0
-    ) {
+    if (e.code === "KeyE" && !e.repeat && !h.state.onFoot && h.state.station >= 0) {
       i.current.onStation();
     }
     if (e.code === "Escape" && !e.repeat) {
@@ -472,9 +439,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
       }
       y(o.x, o.z);
       o._crash &&=
-        (k.crash(o._crash.x, o._crash.y, o._crash.z, o._crash.intensity),
-        O.crash(o._crash.intensity),
-        null);
+        (k.crash(o._crash.x, o._crash.y, o._crash.z, o._crash.intensity), O.crash(o._crash.intensity), null);
       if (o.playerVeh.spec !== x) {
         E(o.playerVeh);
       }
@@ -496,16 +461,13 @@ export function startGameSession(e, t, n, r, i, a = false) {
       }
       C.visible = !!o.onFoot;
       if (o.onFoot) {
-        (C.position.set(o.x, o.y || 0, o.z),
-          (C.rotation.y = o.footYaw || 0),
-          animatePerson(C, a, o.x, o.z));
+        (C.position.set(o.x, o.y || 0, o.z), (C.rotation.y = o.footYaw || 0), animatePerson(C, a, o.x, o.z));
       }
       S.forEach((e, n) => {
         const r = o.police[n];
         e.visible = !r.onFoot;
         if (!r.onFoot) {
-          (e.position.set(r.x, terrainHeight(r.x, r.z) + 0.1, r.z),
-            (e.rotation.y = r.heading));
+          (e.position.set(r.x, terrainHeight(r.x, r.z) + 0.1, r.z), (e.rotation.y = r.heading));
         }
         const i =
           e.userData.blueLight === undefined
@@ -538,9 +500,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
         const ease = (e) => {
           return e * e * (3 - 2 * e);
         };
-        const open =
-          ease(Math.min(time / 0.2, 1)) *
-          (1 - ease(Math.max(0, (time - 0.78) / 0.22)));
+        const open = ease(Math.min(time / 0.2, 1)) * (1 - ease(Math.max(0, (time - 0.78) / 0.22)));
         if (interaction.door) {
           interaction.door.rotation.y = -open * 1.12;
         }
@@ -567,13 +527,9 @@ export function startGameSession(e, t, n, r, i, a = false) {
           const enter = ease(Math.max(0, Math.min((time - 0.42) / 0.34, 1)));
           C.visible = time < 0.84;
           C.position.set(
-            interaction.startX +
-              (sideX - interaction.startX) * approach +
-              (interaction.carX - sideX) * enter,
+            interaction.startX + (sideX - interaction.startX) * approach + (interaction.carX - sideX) * enter,
             0.12 * Math.sin(Math.PI * enter),
-            interaction.startZ +
-              (sideZ - interaction.startZ) * approach +
-              (interaction.carZ - sideZ) * enter,
+            interaction.startZ + (sideZ - interaction.startZ) * approach + (interaction.carZ - sideZ) * enter,
           );
           C.rotation.y = interaction.heading;
           C.scale.setScalar(1 - 0.72 * enter);

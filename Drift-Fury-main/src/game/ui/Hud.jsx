@@ -1,21 +1,7 @@
-import {
-  VolumeXIcon,
-  Volume2Icon,
-  PauseIcon,
-  StarIcon,
-  FuelIcon,
-  ShieldIcon,
-} from "lucide-react";
+import { VolumeXIcon, Volume2Icon, PauseIcon, StarIcon, FuelIcon, ShieldIcon } from "lucide-react";
 import { GearIndicator } from "./GearIndicator.jsx";
 import { Minimap } from "./Minimap.jsx";
-export function Hud({
-  hud: e,
-  engine: t,
-  muted: n,
-  onMute: r,
-  onPause: i,
-  onStation: a,
-}) {
+export function Hud({ hud: e, engine: t, muted: n, onMute: r, onPause: i, onStation: a }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-10 p-4 sm:p-6">
       <div className="flex items-start justify-between">
@@ -25,19 +11,13 @@ export function Hud({
             {e.zone}
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="race-title text-4xl">
-              {Math.floor(e.score).toLocaleString("fr-FR")}
-            </span>
+            <span className="race-title text-4xl">{Math.floor(e.score).toLocaleString("fr-FR")}</span>
             <span className="text-[9px] text-[#879b9c]">PTS DRIFT</span>
           </div>
         </div>
         <div className="flex flex-col items-end gap-3">
           <div className="pointer-events-auto flex gap-2">
-            <button
-              onClick={r}
-              className="hud-glass p-3"
-              aria-label="Activer ou couper le son"
-            >
+            <button onClick={r} className="hud-glass p-3" aria-label="Activer ou couper le son">
               {n ? <VolumeXIcon size={17} /> : <Volume2Icon size={17} />}
             </button>
             <button onClick={i} className="hud-glass p-3" aria-label="Pause">
@@ -51,11 +31,7 @@ export function Hud({
                   <StarIcon
                     size={18}
                     fill={Math.ceil(e.wanted) >= t ? "#f2ad73" : "transparent"}
-                    className={
-                      Math.ceil(e.wanted) >= t
-                        ? "text-[#f2ad73]"
-                        : "text-[#637177]"
-                    }
+                    className={Math.ceil(e.wanted) >= t ? "text-[#f2ad73]" : "text-[#637177]"}
                     key={t}
                   />
                 );
@@ -82,12 +58,8 @@ export function Hud({
       )}
       {e.drifting && (
         <div className="absolute left-1/2 top-[28%] -translate-x-1/2 text-center">
-          <span className="race-title text-6xl italic text-[#c6dc77] drop-shadow-lg">
-            DRIFT ×{e.combo}
-          </span>
-          <p className="mt-2 text-[10px] font-bold tracking-[.3em] text-white">
-            GARDEZ L'ANGLE.
-          </p>
+          <span className="race-title text-6xl italic text-[#c6dc77] drop-shadow-lg">DRIFT ×{e.combo}</span>
+          <p className="mt-2 text-[10px] font-bold tracking-[.3em] text-white">GARDEZ L'ANGLE.</p>
         </div>
       )}
       {e.arrest > 0 && (
@@ -149,9 +121,7 @@ export function Hud({
           <span className="race-title text-6xl tabular-nums">{e.speed}</span>
           <div className="pb-1 text-right">
             <div className="text-[10px] text-[#a2b5b7]">KM/H</div>
-            <div className="mt-1 text-xs font-semibold text-[#c6dc77]">
-              {t.id}
-            </div>
+            <div className="mt-1 text-xs font-semibold text-[#c6dc77]">{t.id}</div>
           </div>
         </div>
         <GearIndicator hud={e} />
@@ -178,10 +148,7 @@ export function Hud({
           <span>PROPULSION</span>
         </div>
         <div className="mt-4 flex items-center gap-2">
-          <FuelIcon
-            size={13}
-            className={e.fuel < 20 ? "text-[#ed8974]" : "text-[#a5b6ac]"}
-          />
+          <FuelIcon size={13} className={e.fuel < 20 ? "text-[#ed8974]" : "text-[#a5b6ac]"} />
           <div className="game-meter flex-1">
             <div
               className={e.fuel < 20 ? "bg-[#ed8974]" : "bg-[#c6dc77]"}
@@ -190,9 +157,7 @@ export function Hud({
               }}
             />
           </div>
-          <span className="w-8 text-right text-[9px]">
-            {Math.round(e.fuel)}%
-          </span>
+          <span className="w-8 text-right text-[9px]">{Math.round(e.fuel)}%</span>
         </div>
         <div className="mt-3 flex items-center gap-2">
           <ShieldIcon size={13} className="text-[#a5b6ac]" />
@@ -204,9 +169,7 @@ export function Hud({
               }}
             />
           </div>
-          <span className="w-8 text-right text-[9px]">
-            {Math.round(e.health)}%
-          </span>
+          <span className="w-8 text-right text-[9px]">{Math.round(e.health)}%</span>
         </div>
       </div>
     </div>

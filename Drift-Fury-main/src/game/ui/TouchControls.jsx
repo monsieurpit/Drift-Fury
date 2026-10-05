@@ -1,10 +1,5 @@
 import React from "react";
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ArrowDownIcon,
-  ArrowUpIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 export function TouchControls({ controls: e }) {
   const t = React.useRef({});
   const n = (n, r) => {
@@ -12,8 +7,7 @@ export function TouchControls({ controls: e }) {
     if (r) {
       ((i[n] = (i[n] || 0) + 1), (e.current.keys[n] = true));
     } else {
-      ((i[n] = Math.max(0, (i[n] || 0) - 1)),
-        i[n] <= 0 && delete e.current.keys[n]);
+      ((i[n] = Math.max(0, (i[n] || 0) - 1)), i[n] <= 0 && delete e.current.keys[n]);
     }
   };
   const r = (e) => {
@@ -37,29 +31,15 @@ export function TouchControls({ controls: e }) {
   return (
     <div className="touch-controls pointer-events-none absolute bottom-52 left-3 right-3 z-20 flex items-end justify-between gap-1.5 sm:bottom-6 sm:left-52 sm:right-72 xl:hidden">
       <div className="touch-group pointer-events-auto flex gap-1.5">
-        <div
-          className="touch-button"
-          role="button"
-          aria-label="Tourner à gauche"
-          {...r("ArrowLeft")}
-        >
+        <div className="touch-button" role="button" aria-label="Tourner à gauche" {...r("ArrowLeft")}>
           <ArrowLeftIcon />
         </div>
-        <div
-          className="touch-button"
-          role="button"
-          aria-label="Tourner à droite"
-          {...r("ArrowRight")}
-        >
+        <div className="touch-button" role="button" aria-label="Tourner à droite" {...r("ArrowRight")}>
           <ArrowRightIcon />
         </div>
       </div>
       <div className="touch-group pointer-events-auto flex gap-1.5">
-        <div
-          className="touch-button !w-12 text-[9px] font-bold"
-          role="button"
-          {...r("Space")}
-        >
+        <div className="touch-button !w-12 text-[9px] font-bold" role="button" {...r("Space")}>
           DRIFT
         </div>
         <div
@@ -70,12 +50,7 @@ export function TouchControls({ controls: e }) {
         >
           PIED
         </div>
-        <div
-          className="touch-button"
-          role="button"
-          aria-label="Freiner"
-          {...r("ArrowDown")}
-        >
+        <div className="touch-button" role="button" aria-label="Freiner" {...r("ArrowDown")}>
           <ArrowDownIcon />
         </div>
         <div

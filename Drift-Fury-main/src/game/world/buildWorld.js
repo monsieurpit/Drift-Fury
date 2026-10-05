@@ -25,12 +25,7 @@ import {
 import { FUEL_STATIONS } from "../data/stations.js";
 import { createRandom } from "../util/random.js";
 import { mountainRoadX, terrainHeight } from "./terrain.js";
-import {
-  concreteTexture,
-  createAsphaltMaterial,
-  grassTexture,
-  normalMapFromHeight,
-} from "./textures.js";
+import { concreteTexture, createAsphaltMaterial, grassTexture, normalMapFromHeight } from "./textures.js";
 export function buildWorld(e) {
   const t = [];
   const n = [];
@@ -99,11 +94,7 @@ export function buildWorld(e) {
       for (let face = 0; face < 6; face++) {
         for (let vi = 0; vi < 4; vi++) {
           const ix = face * 4 + vi;
-          uvA.setXY(
-            ix,
-            (uvA.getX(ix) * dims[face][0]) / tl,
-            (uvA.getY(ix) * dims[face][1]) / tl,
-          );
+          uvA.setXY(ix, (uvA.getX(ix) * dims[face][0]) / tl, (uvA.getY(ix) * dims[face][1]) / tl);
         }
       }
       uvA.needsUpdate = true;
@@ -144,9 +135,7 @@ export function buildWorld(e) {
     const t = x.getX(e) - 30;
     const n = x.getZ(e) - 370;
     const r = terrainHeight(t, n);
-    const i =
-      Math.sin(t * 0.08) * Math.cos(n * 0.06) * 1.6 +
-      Math.sin(t * 0.2 + n * 0.15) * 0.7;
+    const i = Math.sin(t * 0.08) * Math.cos(n * 0.06) * 1.6 + Math.sin(t * 0.2 + n * 0.15) * 0.7;
     x.setXYZ(e, t, r + i, n);
   }
   b.computeVertexNormals();
@@ -157,9 +146,7 @@ export function buildWorld(e) {
   const w = [-80, -30, 20, 70];
   const stationRoadAccesses = FUEL_STATIONS.map((station) => {
     const roadX = C.reduce((nearest, x) => {
-      return Math.abs(x - station.x) < Math.abs(nearest - station.x)
-        ? x
-        : nearest;
+      return Math.abs(x - station.x) < Math.abs(nearest - station.x) ? x : nearest;
     }, C[0]);
     return {
       station,
@@ -239,26 +226,10 @@ export function buildWorld(e) {
     }
   }
   for (let e of C) {
-    m(
-      18,
-      0.12,
-      w[w.length - 1] - w[0] + 18,
-      e,
-      0.01,
-      (w[0] + w[w.length - 1]) / 2,
-      r,
-    );
+    m(18, 0.12, w[w.length - 1] - w[0] + 18, e, 0.01, (w[0] + w[w.length - 1]) / 2, r);
   }
   for (let e of w) {
-    m(
-      C[C.length - 1] - C[0] + 18,
-      0.12,
-      18,
-      (C[0] + C[C.length - 1]) / 2,
-      0.01,
-      e,
-      r,
-    );
+    m(C[C.length - 1] - C[0] + 18, 0.12, 18, (C[0] + C[C.length - 1]) / 2, 0.01, e, r);
   }
   const roadY = 0.085;
   for (const x of C) {
@@ -319,15 +290,7 @@ export function buildWorld(e) {
         });
       const addSidewalkSegment = (start, end) => {
         if (end > start) {
-          m(
-            2.4,
-            0.22,
-            end - start,
-            x + side * 10.2,
-            0.11,
-            (start + end) / 2,
-            a,
-          );
+          m(2.4, 0.22, end - start, x + side * 10.2, 0.11, (start + end) / 2, a);
         }
       };
       let start = w[0] - 11;
@@ -364,15 +327,7 @@ export function buildWorld(e) {
       for (const crossing of C) {
         const end = crossing - 9;
         if (end > start) {
-          m(
-            end - start,
-            0.22,
-            2.4,
-            (start + end) / 2,
-            0.11,
-            z + side * 10.2,
-            a,
-          );
+          m(end - start, 0.22, 2.4, (start + end) / 2, 0.11, z + side * 10.2, a);
         }
         start = crossing + 9;
       }
@@ -429,10 +384,7 @@ export function buildWorld(e) {
         roughness: 0.22,
         metalness: 0.04,
       });
-      const lens = new Mesh(
-        new CylinderGeometry(0.125, 0.125, 0.048, 20),
-        material,
-      );
+      const lens = new Mesh(new CylinderGeometry(0.125, 0.125, 0.048, 20), material);
       lens.rotation.x = Math.PI / 2;
       lens.position.set(0, y, 0.51);
       pole.add(lens);
@@ -480,10 +432,7 @@ export function buildWorld(e) {
       color: "#f2f0e8",
       roughness: 0.72,
     });
-    const border = new Mesh(
-      new CylinderGeometry(0.49, 0.49, 0.075, 8),
-      borderMaterial,
-    );
+    const border = new Mesh(new CylinderGeometry(0.49, 0.49, 0.075, 8), borderMaterial);
     border.rotation.x = Math.PI / 2;
     border.position.set(0, 2.22, 0.08);
     sign.add(border);
@@ -546,15 +495,8 @@ export function buildWorld(e) {
     pole.castShadow = true;
     e.add(pole);
     const alongX = axis === 1;
-    const arm = new Mesh(
-      new BoxGeometry(alongX ? 0.09 : 2.2, 0.09, alongX ? 2.2 : 0.09),
-      d,
-    );
-    arm.position.set(
-      x + (alongX ? 0 : inward * 1.05),
-      6.88,
-      z + (alongX ? inward * 1.05 : 0),
-    );
+    const arm = new Mesh(new BoxGeometry(alongX ? 0.09 : 2.2, 0.09, alongX ? 2.2 : 0.09), d);
+    arm.position.set(x + (alongX ? 0 : inward * 1.05), 6.88, z + (alongX ? inward * 1.05 : 0));
     e.add(arm);
     const fixtureX = x + (alongX ? 0 : inward * 2.05);
     const fixtureZ = z + (alongX ? inward * 2.05 : 0);
@@ -663,10 +605,7 @@ export function buildWorld(e) {
       }
       const glass = kind === "glass";
       const rnd = createRandom(
-        key.length * 7919 +
-          wall.charCodeAt(2) * 31 +
-          glow.charCodeAt(3) * 17 +
-          (glass ? 5 : 11),
+        key.length * 7919 + wall.charCodeAt(2) * 31 + glow.charCodeAt(3) * 17 + (glass ? 5 : 11),
       );
       const mapCv = mkCanvas(256, 256);
       const glowCv = mkCanvas(256, 256);
@@ -675,8 +614,7 @@ export function buildWorld(e) {
       g2.fillStyle = wall;
       g2.fillRect(0, 0, 256, 256);
       for (let q = 0; q < 1400; q++) {
-        g2.fillStyle =
-          rnd() > 0.5 ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.1)";
+        g2.fillStyle = rnd() > 0.5 ? "rgba(255,255,255,0.035)" : "rgba(0,0,0,0.1)";
         g2.fillRect(rnd() * 256, rnd() * 256, 1.5, 1.5);
       }
       ge.fillStyle = "#000";
@@ -768,7 +706,7 @@ export function buildWorld(e) {
         }
       }
       hit = {
-        glass: glass,
+        glass,
         map: textureOf(mapCv),
         glow: textureOf(glowCv),
         normal: normalMapFromHeight(mapCv, glass ? 1.1 : 1.9),
@@ -792,10 +730,7 @@ export function buildWorld(e) {
       hit = new MeshPhysicalMaterial({
         map: cp(fv.map),
         normalMap: cp(fv.normal),
-        normalScale: new Vector2(
-          fv.glass ? 0.14 : 0.32,
-          fv.glass ? 0.14 : 0.32,
-        ),
+        normalScale: new Vector2(fv.glass ? 0.14 : 0.32, fv.glass ? 0.14 : 0.32),
         emissiveMap: cp(fv.glow),
         emissive: "#ffffff",
         emissiveIntensity: 1.15,
@@ -817,9 +752,7 @@ export function buildWorld(e) {
       if (hit) {
         return hit;
       }
-      const rnd = createRandom(
-        sign.charCodeAt(2) * 131 + sign.charCodeAt(4) * 7,
-      );
+      const rnd = createRandom(sign.charCodeAt(2) * 131 + sign.charCodeAt(4) * 7);
       const cv = mkCanvas(256, 128);
       const cvE = mkCanvas(256, 128);
       const g2 = cv.getContext("2d");
@@ -913,58 +846,21 @@ export function buildWorld(e) {
           const signIdx = Math.floor(j() * SIGNS.length);
           const glass = kind === "glass";
           const bxC = bx + side * (0.9 + sW / 2);
-          const bzC =
-            bz + (j() - 0.5) * 2 * Math.max(0, (2 * LOT_HALF_Z - (cD + 1)) / 2);
+          const bzC = bz + (j() - 0.5) * 2 * Math.max(0, (2 * LOT_HALF_Z - (cD + 1)) / 2);
           const tall = hTarget > 32;
-          const l1 = tall
-            ? Math.round((hTarget * 0.62) / FLOOR_H) * FLOOR_H
-            : Math.max(POD_H + 6, hTarget);
+          const l1 = tall ? Math.round((hTarget * 0.62) / FLOOR_H) * FLOOR_H : Math.max(POD_H + 6, hTarget);
           const hs = l1 - POD_H;
           const rY = Math.max(1, Math.round(hs / 14.4));
           const fv = facadeVariant(kind, wall, glow);
           const vKey = kind + wall + glow;
-          const fz = facadeMaterial(
-            vKey,
-            fv,
-            Math.max(1, Math.round(sW / 12)),
-            rY,
-          );
-          const fx = facadeMaterial(
-            vKey,
-            fv,
-            Math.max(1, Math.round(cD / 12)),
-            rY,
-          );
-          const shopZ = shopMaterial(
-            SIGNS[signIdx],
-            Math.max(1, Math.round((sW + 1) / 8)),
-          );
-          const shopX = shopMaterial(
-            SIGNS[signIdx],
-            Math.max(1, Math.round((cD + 1) / 8)),
-          );
+          const fz = facadeMaterial(vKey, fv, Math.max(1, Math.round(sW / 12)), rY);
+          const fx = facadeMaterial(vKey, fv, Math.max(1, Math.round(cD / 12)), rY);
+          const shopZ = shopMaterial(SIGNS[signIdx], Math.max(1, Math.round((sW + 1) / 8)));
+          const shopX = shopMaterial(SIGNS[signIdx], Math.max(1, Math.round((cD + 1) / 8)));
           // ground floor shop podium, cornice, tower shaft
-          m(
-            sW + 1,
-            POD_H,
-            cD + 1,
-            bxC,
-            POD_H / 2,
-            bzC,
-            [shopX, shopX, a, f, shopZ, shopZ],
-            true,
-          );
+          m(sW + 1, POD_H, cD + 1, bxC, POD_H / 2, bzC, [shopX, shopX, a, f, shopZ, shopZ], true);
           m(sW + 1.2, 0.3, cD + 1.2, bxC, POD_H + 0.15, bzC, a);
-          m(
-            sW,
-            hs,
-            cD,
-            bxC,
-            POD_H + hs / 2,
-            bzC,
-            [fx, fx, roofMat, roofMat, fz, fz],
-            true,
-          );
+          m(sW, hs, cD, bxC, POD_H + hs / 2, bzC, [fx, fx, roofMat, roofMat, fz, fz], true);
           // corner pilasters / frame fins
           for (const sx of [-1, 1]) {
             for (const sz of [-1, 1]) {
@@ -993,29 +889,10 @@ export function buildWorld(e) {
             const cU = cD * 0.74;
             const hU = Math.max(6, hTarget - l1);
             const rYU = Math.max(1, Math.round(hU / 14.4));
-            const fzU = facadeMaterial(
-              vKey,
-              fv,
-              Math.max(1, Math.round(sU / 12)),
-              rYU,
-            );
-            const fxU = facadeMaterial(
-              vKey,
-              fv,
-              Math.max(1, Math.round(cU / 12)),
-              rYU,
-            );
+            const fzU = facadeMaterial(vKey, fv, Math.max(1, Math.round(sU / 12)), rYU);
+            const fxU = facadeMaterial(vKey, fv, Math.max(1, Math.round(cU / 12)), rYU);
             m(sW + 0.5, 0.3, cD + 0.5, bxC, l1 + 0.15, bzC, a);
-            m(
-              sU,
-              hU,
-              cU,
-              bxC,
-              l1 + 0.3 + hU / 2,
-              bzC,
-              [fxU, fxU, roofMat, roofMat, fzU, fzU],
-              true,
-            );
+            m(sU, hU, cU, bxC, l1 + 0.3 + hU / 2, bzC, [fxU, fxU, roofMat, roofMat, fzU, fzU], true);
             topY = l1 + 0.3 + hU;
             topW = sU;
             topD = cU;
@@ -1048,10 +925,7 @@ export function buildWorld(e) {
                 m(0.14, 1.5, 0.14, tx + lx, topY + 1.03, tz + lz, d);
               }
             }
-            const tank = new Mesh(
-              new CylinderGeometry(1.3, 1.3, 2.2, 16),
-              tankMat,
-            );
+            const tank = new Mesh(new CylinderGeometry(1.3, 1.3, 2.2, 16), tankMat);
             tank.position.set(tx, topY + 2.6, tz);
             tank.castShadow = true;
             e.add(tank);
@@ -1069,42 +943,10 @@ export function buildWorld(e) {
             e.add(beacon);
           }
           // glowing LED trim on the street-facing edges
-          m(
-            topW,
-            0.14,
-            0.14,
-            bxC,
-            topY - 0.5,
-            bzC + topD / 2 + 0.05,
-            trimMats[signIdx],
-          );
-          m(
-            0.14,
-            0.14,
-            topD,
-            bxC + topW / 2 + 0.05,
-            topY - 0.5,
-            bzC,
-            trimMats[signIdx],
-          );
-          m(
-            sW + 1.02,
-            0.1,
-            0.1,
-            bxC,
-            POD_H - 0.12,
-            bzC + (cD + 1) / 2 + 0.02,
-            trimMats[signIdx],
-          );
-          m(
-            0.1,
-            0.1,
-            cD + 1.02,
-            bxC + (sW + 1) / 2 + 0.02,
-            POD_H - 0.12,
-            bzC,
-            trimMats[signIdx],
-          );
+          m(topW, 0.14, 0.14, bxC, topY - 0.5, bzC + topD / 2 + 0.05, trimMats[signIdx]);
+          m(0.14, 0.14, topD, bxC + topW / 2 + 0.05, topY - 0.5, bzC, trimMats[signIdx]);
+          m(sW + 1.02, 0.1, 0.1, bxC, POD_H - 0.12, bzC + (cD + 1) / 2 + 0.02, trimMats[signIdx]);
+          m(0.1, 0.1, cD + 1.02, bxC + (sW + 1) / 2 + 0.02, POD_H - 0.12, bzC, trimMats[signIdx]);
         }
       }
     }
@@ -1118,14 +960,7 @@ export function buildWorld(e) {
     const frnd = createRandom(5150);
     fg.fillStyle = "#2c5a2a";
     fg.fillRect(0, 0, 256, 256);
-    const greens = [
-      "#3f7a35",
-      "#2a5a28",
-      "#4f8a3c",
-      "#1f4a22",
-      "#5f9645",
-      "#35692f",
-    ];
+    const greens = ["#3f7a35", "#2a5a28", "#4f8a3c", "#1f4a22", "#5f9645", "#35692f"];
     for (let q = 0; q < 2600; q++) {
       fg.fillStyle = greens[Math.floor(frnd() * greens.length)];
       fg.save();
@@ -1237,23 +1072,11 @@ export function buildWorld(e) {
     const trunkHeight = (scale) => {
       return 4.85 * scale;
     };
-    const trunks = new InstancedMesh(
-      new CylinderGeometry(0.13, 0.24, 1, 12),
-      barkMat,
-      spots.length,
-    );
-    const branches = new InstancedMesh(
-      new CylinderGeometry(0.055, 0.095, 1, 8),
-      barkMat,
-      spots.length * 4,
-    );
+    const trunks = new InstancedMesh(new CylinderGeometry(0.13, 0.24, 1, 12), barkMat, spots.length);
+    const branches = new InstancedMesh(new CylinderGeometry(0.055, 0.095, 1, 8), barkMat, spots.length * 4);
     trunks.castShadow = true;
     branches.castShadow = true;
-    const crowns = new InstancedMesh(
-      new SphereGeometry(1, 14, 12),
-      leafMat,
-      spots.length * CLUMPS.length,
-    );
+    const crowns = new InstancedMesh(new SphereGeometry(1, 14, 12), leafMat, spots.length * CLUMPS.length);
     crowns.castShadow = true;
     crowns.receiveShadow = true;
     let ci = 0;
@@ -1263,21 +1086,13 @@ export function buildWorld(e) {
       const height = trunkHeight(treeScale);
       _.set(tx, ground + height / 2, tz);
       v.identity();
-      y.set(
-        treeScale * (0.9 + j() * 0.18),
-        height,
-        treeScale * (0.9 + j() * 0.18),
-      );
+      y.set(treeScale * (0.9 + j() * 0.18), height, treeScale * (0.9 + j() * 0.18));
       g.compose(_, v, y);
       trunks.setMatrixAt(ti, g);
       for (let branch = 0; branch < 4; branch++) {
         const angle = (branch * Math.PI) / 2 + (j() - 0.5) * 0.42;
         const length = treeScale * (1.45 + j() * 0.35);
-        const direction = new Vector3(
-          Math.cos(angle) * 0.82,
-          0.52 + j() * 0.16,
-          Math.sin(angle) * 0.82,
-        );
+        const direction = new Vector3(Math.cos(angle) * 0.82, 0.52 + j() * 0.16, Math.sin(angle) * 0.82);
         direction.normalize();
         v.setFromUnitVectors(new Vector3(0, 1, 0), direction);
         _.set(
@@ -1291,17 +1106,9 @@ export function buildWorld(e) {
       }
       for (const [ox, oy, oz, rx, ry, rz] of CLUMPS) {
         const clumpScale = treeScale * (0.88 + j() * 0.24);
-        _.set(
-          tx + ox * treeScale,
-          ground + height + oy * treeScale,
-          tz + oz * treeScale,
-        );
+        _.set(tx + ox * treeScale, ground + height + oy * treeScale, tz + oz * treeScale);
         v.setFromAxisAngle(new Vector3(0, 1, 0), (j() - 0.5) * 0.7);
-        y.set(
-          rx * clumpScale,
-          ry * clumpScale * (0.88 + j() * 0.24),
-          rz * clumpScale,
-        );
+        y.set(rx * clumpScale, ry * clumpScale * (0.88 + j() * 0.24), rz * clumpScale);
         g.compose(_, v, y);
         crowns.setMatrixAt(ci++, g);
       }
@@ -1364,12 +1171,7 @@ export function buildWorld(e) {
       for (let column = 0; column < 8; column++) {
         const shade = 89 + ((row * 17 + column * 11) % 13);
         context.fillStyle = `rgb(${shade},${shade + 2},${shade - 2})`;
-        context.fillRect(
-          column * tileSize + 2,
-          row * tileSize + 2,
-          tileSize - 4,
-          tileSize - 4,
-        );
+        context.fillRect(column * tileSize + 2, row * tileSize + 2, tileSize - 4, tileSize - 4);
       }
     }
     context.strokeStyle = "rgba(15,19,20,.75)";
@@ -1447,11 +1249,7 @@ export function buildWorld(e) {
     context.font = "bold 76px sans-serif";
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillText(
-      "NORTHLINE  •  DÉPANNEUR",
-      canvas.width / 2,
-      canvas.height / 2,
-    );
+    context.fillText("NORTHLINE  •  DÉPANNEUR", canvas.width / 2, canvas.height / 2);
     const texture = new CanvasTexture(canvas);
     texture.colorSpace = "srgb";
     return texture;
@@ -1490,21 +1288,9 @@ export function buildWorld(e) {
       roughness: 0.65,
     }),
   ];
-  const stationShelfFrames = new InstancedMesh(
-    new BoxGeometry(0.72, 2.05, 0.55),
-    stationShelfMat,
-    18,
-  );
-  const stationShelfBoards = new InstancedMesh(
-    new BoxGeometry(0.82, 0.055, 0.68),
-    stationSteel,
-    72,
-  );
-  const stationCoolerShelves = new InstancedMesh(
-    new BoxGeometry(1.12, 0.035, 0.42),
-    stationSteel,
-    36,
-  );
+  const stationShelfFrames = new InstancedMesh(new BoxGeometry(0.72, 2.05, 0.55), stationShelfMat, 18);
+  const stationShelfBoards = new InstancedMesh(new BoxGeometry(0.82, 0.055, 0.68), stationSteel, 72);
+  const stationCoolerShelves = new InstancedMesh(new BoxGeometry(1.12, 0.035, 0.42), stationSteel, 36);
   const stationHoseSegments = new InstancedMesh(
     new CylinderGeometry(0.035, 0.035, 1, 8),
     stationDarkSteel,
@@ -1535,16 +1321,7 @@ export function buildWorld(e) {
     g.compose(_, v, y);
     mesh.setMatrixAt(instance, g);
   };
-  const placeStationInstance = (
-    mesh,
-    instance,
-    x,
-    yPos,
-    z,
-    scaleX = 1,
-    scaleY = 1,
-    scaleZ = 1,
-  ) => {
+  const placeStationInstance = (mesh, instance, x, yPos, z, scaleX = 1, scaleY = 1, scaleZ = 1) => {
     _.set(x, yPos, z);
     v.identity();
     y.set(scaleX, scaleY, scaleZ);
@@ -1568,11 +1345,7 @@ export function buildWorld(e) {
           new CylinderGeometry(0.025, 0.025, 0.022, 10),
           column === 0 ? stationRed : stationSteel,
         );
-        button.position.set(
-          x - 0.13 + column * 0.13,
-          y - 0.48 - row * 0.095,
-          z + side * 0.326,
-        );
+        button.position.set(x - 0.13 + column * 0.13, y - 0.48 - row * 0.095, z + side * 0.326);
         e.add(button);
       }
     }
@@ -1610,46 +1383,14 @@ export function buildWorld(e) {
         g.compose(_, v, y);
         stationHoseSegments.setMatrixAt(stationHoseCount++, g);
       }
-      m(
-        0.075,
-        0.28,
-        0.075,
-        x + side * 0.4,
-        groundY + 1.56,
-        z - 0.17,
-        stationSteel,
-      );
-      m(
-        0.075,
-        0.34,
-        0.075,
-        x + side * 0.4,
-        groundY + 1.4,
-        z + 0.22,
-        stationDarkSteel,
-      );
+      m(0.075, 0.28, 0.075, x + side * 0.4, groundY + 1.56, z - 0.17, stationSteel);
+      m(0.075, 0.34, 0.075, x + side * 0.4, groundY + 1.4, z + 0.22, stationDarkSteel);
       m(0.12, 0.08, 0.1, x + side * 0.4, groundY + 1.56, z + 0.3, stationRed);
     }
     const bollardMat = stationRed;
     for (const side of [-1, 1]) {
-      m(
-        0.12,
-        0.62,
-        0.12,
-        x + side * 0.91,
-        groundY + 0.43,
-        z + 1.44,
-        bollardMat,
-      );
-      m(
-        0.14,
-        0.08,
-        0.14,
-        x + side * 0.91,
-        groundY + 0.76,
-        z + 1.44,
-        stationWhite,
-      );
+      m(0.12, 0.62, 0.12, x + side * 0.91, groundY + 0.43, z + 1.44, bollardMat);
+      m(0.14, 0.08, 0.14, x + side * 0.91, groundY + 0.76, z + 1.44, stationWhite);
       h(x + side * 0.91, z + 1.44, 0.1, 0.1);
     }
   };
@@ -1692,50 +1433,15 @@ export function buildWorld(e) {
     const halfWidth = 5.8;
     m(11.8, 0.2, 9, shopX, groundY + 0.1, shopZ, stationFloor);
     m(12.15, 0.22, 0.22, shopX, groundY + 0.14, shopZ, stationDarkSteel);
-    m(
-      0.24,
-      wallHeight,
-      9,
-      shopX - halfWidth,
-      groundY + wallHeight / 2,
-      shopZ,
-      storeShell,
-      true,
-    );
-    m(
-      0.24,
-      wallHeight,
-      9,
-      shopX + halfWidth,
-      groundY + wallHeight / 2,
-      shopZ,
-      storeShell,
-      true,
-    );
-    m(
-      11.8,
-      wallHeight,
-      0.24,
-      shopX,
-      groundY + wallHeight / 2,
-      backZ,
-      storeShell,
-      true,
-    );
+    m(0.24, wallHeight, 9, shopX - halfWidth, groundY + wallHeight / 2, shopZ, storeShell, true);
+    m(0.24, wallHeight, 9, shopX + halfWidth, groundY + wallHeight / 2, shopZ, storeShell, true);
+    m(11.8, wallHeight, 0.24, shopX, groundY + wallHeight / 2, backZ, storeShell, true);
     const storefrontCenter = 3;
     const storefrontWidth = 4.25;
     for (const side of [-1, 1]) {
       const windowX = shopX + side * storefrontCenter;
       m(storefrontWidth, 0.8, 0.24, windowX, groundY + 0.4, frontZ, storeShell);
-      m(
-        storefrontWidth,
-        0.47,
-        0.24,
-        windowX,
-        groundY + 3.31,
-        frontZ,
-        storeShell,
-      );
+      m(storefrontWidth, 0.47, 0.24, windowX, groundY + 3.31, frontZ, storeShell);
       h(windowX, frontZ, storefrontWidth / 2, 0.14);
     }
     m(1.7, 0.3, 0.24, shopX, groundY + 3.4, frontZ, storeShell);
@@ -1759,9 +1465,7 @@ export function buildWorld(e) {
           0.055,
           2.35,
           0.07,
-          shopX +
-            side * storefrontCenter +
-            frameX * (storefrontWidth / 2 - 0.06),
+          shopX + side * storefrontCenter + frameX * (storefrontWidth / 2 - 0.06),
           groundY + 1.95,
           frontZ - 0.19,
           stationWindowFrame,
@@ -1795,114 +1499,37 @@ export function buildWorld(e) {
         stationWindowFrame,
       );
     }
-    m(
-      0.09,
-      2.28,
-      0.09,
-      shopX - 0.9,
-      groundY + 1.92,
-      frontZ - 0.19,
-      stationWindowFrame,
-    );
-    m(
-      0.09,
-      2.28,
-      0.09,
-      shopX + 0.9,
-      groundY + 1.92,
-      frontZ - 0.19,
-      stationWindowFrame,
-    );
+    m(0.09, 2.28, 0.09, shopX - 0.9, groundY + 1.92, frontZ - 0.19, stationWindowFrame);
+    m(0.09, 2.28, 0.09, shopX + 0.9, groundY + 1.92, frontZ - 0.19, stationWindowFrame);
     m(1.16, 0.045, 0.5, shopX, groundY + 0.17, frontZ - 0.3, stationDarkSteel);
     const openDoor = new Mesh(new BoxGeometry(0.78, 2.18, 0.075), stationGlass);
     openDoor.position.set(shopX + 0.24, groundY + 1.24, frontZ + 0.04);
     openDoor.rotation.y = -0.72;
     e.add(openDoor);
-    m(
-      0.12,
-      0.12,
-      0.12,
-      shopX + 0.24,
-      groundY + 2.38,
-      frontZ + 0.04,
-      stationSteel,
-    );
-    m(
-      0.045,
-      0.24,
-      0.035,
-      shopX - 0.05,
-      groundY + 1.22,
-      frontZ - 0.12,
-      stationSteel,
-    );
+    m(0.12, 0.12, 0.12, shopX + 0.24, groundY + 2.38, frontZ + 0.04, stationSteel);
+    m(0.045, 0.24, 0.035, shopX - 0.05, groundY + 1.22, frontZ - 0.12, stationSteel);
     const sign = new Mesh(new PlaneGeometry(5.2, 0.72), stationSignMat);
     sign.position.set(shopX, groundY + 3.05, frontZ - 0.205);
     sign.rotation.y = Math.PI;
     e.add(sign);
     for (const side of [-1, 1]) {
-      m(
-        0.13,
-        3.6,
-        0.13,
-        shopX + side * 6.22,
-        groundY + 1.8,
-        shopZ,
-        stationSteel,
-      );
+      m(0.13, 3.6, 0.13, shopX + side * 6.22, groundY + 1.8, shopZ, stationSteel);
     }
     m(4.5, 0.12, 0.72, shopX, groundY + 1.04, shopZ + 3.65, counterMat);
     m(4.5, 0.7, 0.16, shopX, groundY + 0.64, shopZ + 3.95, counterMat);
-    m(
-      0.56,
-      0.12,
-      0.4,
-      shopX - 0.95,
-      groundY + 1.17,
-      shopZ + 3.35,
-      stationDarkSteel,
-    );
-    m(
-      0.48,
-      0.48,
-      0.04,
-      shopX - 0.95,
-      groundY + 1.47,
-      shopZ + 3.32,
-      stationScreenMat,
-    );
-    m(
-      0.12,
-      0.25,
-      0.16,
-      shopX + 1.75,
-      groundY + 1.18,
-      shopZ + 3.54,
-      stationSteel,
-    );
+    m(0.56, 0.12, 0.4, shopX - 0.95, groundY + 1.17, shopZ + 3.35, stationDarkSteel);
+    m(0.48, 0.48, 0.04, shopX - 0.95, groundY + 1.47, shopZ + 3.32, stationScreenMat);
+    m(0.12, 0.25, 0.16, shopX + 1.75, groundY + 1.18, shopZ + 3.54, stationSteel);
     for (let shelf = 0; shelf < 3; shelf++) {
       const shelfZ = shopZ - 1.5 + shelf * 1.15;
       for (const side of [-1, 1]) {
         const shelfX = shopX + side * 4.45;
-        placeStationInstance(
-          stationShelfFrames,
-          stationShelfFrameCount++,
-          shelfX,
-          groundY + 1.08,
-          shelfZ,
-        );
+        placeStationInstance(stationShelfFrames, stationShelfFrameCount++, shelfX, groundY + 1.08, shelfZ);
         for (let level = 0; level < 4; level++) {
           const shelfY = groundY + 0.42 + level * 0.49;
-          placeStationInstance(
-            stationShelfBoards,
-            stationShelfBoardCount++,
-            shelfX,
-            shelfY,
-            shelfZ,
-          );
+          placeStationInstance(stationShelfBoards, stationShelfBoardCount++, shelfX, shelfY, shelfZ);
           for (let product = 0; product < 3; product++) {
-            const materialIndex =
-              (product + level + shelf + index) % stationProductMats.length;
+            const materialIndex = (product + level + shelf + index) % stationProductMats.length;
             placeStationProduct(
               stationShelfProducts,
               stationShelfProductCounts,
@@ -1920,15 +1547,7 @@ export function buildWorld(e) {
       const coolerX = shopX - 2.5 + cooler * 1.65;
       const coolerZ = shopZ + 0.3;
       m(1.48, 2.3, 0.65, coolerX, groundY + 1.18, coolerZ, coolerMat);
-      m(
-        1.35,
-        1.95,
-        0.035,
-        coolerX,
-        groundY + 1.26,
-        coolerZ - 0.35,
-        coolerGlass,
-      );
+      m(1.35, 1.95, 0.035, coolerX, groundY + 1.26, coolerZ - 0.35, coolerGlass);
       m(0.045, 2, 0.07, coolerX, groundY + 1.26, coolerZ - 0.385, stationSteel);
       for (let level = 0; level < 4; level++) {
         placeStationInstance(
@@ -1963,29 +1582,13 @@ export function buildWorld(e) {
           coolerZ - 0.1,
         );
       }
-      m(
-        0.04,
-        0.32,
-        0.04,
-        coolerX + 0.52,
-        groundY + 1.25,
-        coolerZ - 0.4,
-        stationSteel,
-      );
+      m(0.04, 0.32, 0.04, coolerX + 0.52, groundY + 1.25, coolerZ - 0.4, stationSteel);
       h(coolerX, coolerZ, 0.74, 0.36);
     }
     h(shopX, shopZ + 3.76, 2.28, 0.43);
     for (let light = 0; light < 2; light++) {
       const lightX = shopX + (light ? 3.5 : -3.5);
-      m(
-        1.7,
-        0.045,
-        0.34,
-        lightX,
-        groundY + 3.39,
-        shopZ - 0.15,
-        stationAwningLight,
-      );
+      m(1.7, 0.045, 0.34, lightX, groundY + 3.39, shopZ - 0.15, stationAwningLight);
     }
     const insideLight = new PointLight("#fff0d5", 0.55, 17, 2);
     insideLight.position.set(shopX, groundY + 2.8, shopZ);
@@ -1994,11 +1597,7 @@ export function buildWorld(e) {
     outsideLight.position.set(shopX, groundY + 3.3, frontZ - 1);
     e.add(outsideLight);
   };
-  for (
-    let stationIndex = 0;
-    stationIndex < FUEL_STATIONS.length;
-    stationIndex++
-  ) {
+  for (let stationIndex = 0; stationIndex < FUEL_STATIONS.length; stationIndex++) {
     const station = FUEL_STATIONS[stationIndex];
     const groundY = terrainHeight(station.x, station.z);
     m(26, 0.14, 22, station.x, groundY + 0.07, station.z, o);
@@ -2020,98 +1619,25 @@ export function buildWorld(e) {
     });
     m(24.5, 0.45, 16, station.x, groundY + 5.2, station.z, canopy);
     m(24.3, 0.12, 15.8, station.x, groundY + 5.49, station.z, canopyTop);
-    m(
-      24.7,
-      0.12,
-      0.22,
-      station.x,
-      groundY + 4.94,
-      station.z - 8.02,
-      stationRed,
-    );
-    m(
-      24.7,
-      0.12,
-      0.22,
-      station.x,
-      groundY + 4.94,
-      station.z + 8.02,
-      stationRed,
-    );
-    m(
-      0.16,
-      0.08,
-      15.8,
-      station.x - 12.1,
-      groundY + 4.93,
-      station.z,
-      stationSteel,
-    );
-    m(
-      0.16,
-      0.08,
-      15.8,
-      station.x + 12.1,
-      groundY + 4.93,
-      station.z,
-      stationSteel,
-    );
+    m(24.7, 0.12, 0.22, station.x, groundY + 4.94, station.z - 8.02, stationRed);
+    m(24.7, 0.12, 0.22, station.x, groundY + 4.94, station.z + 8.02, stationRed);
+    m(0.16, 0.08, 15.8, station.x - 12.1, groundY + 4.93, station.z, stationSteel);
+    m(0.16, 0.08, 15.8, station.x + 12.1, groundY + 4.93, station.z, stationSteel);
     for (let rib = -4; rib <= 4; rib++) {
-      m(
-        0.045,
-        0.06,
-        15.7,
-        station.x + rib * 2.6,
-        groundY + 5.57,
-        station.z,
-        stationSteel,
-      );
+      m(0.045, 0.06, 15.7, station.x + rib * 2.6, groundY + 5.57, station.z, stationSteel);
     }
     for (let side of [-1, 1]) {
-      m(
-        20,
-        0.38,
-        0.1,
-        station.x,
-        groundY + 5.23,
-        station.z + side * 8.1,
-        stationSignMat,
-      );
+      m(20, 0.38, 0.1, station.x, groundY + 5.23, station.z + side * 8.1, stationSignMat);
     }
     for (let x of [-11.8, 11.8]) {
       for (let z of [-7, 7]) {
-        m(
-          0.48,
-          5.2,
-          0.48,
-          station.x + x,
-          groundY + 2.6,
-          station.z + z,
-          stationSteel,
-          true,
-        );
-        m(
-          0.64,
-          0.12,
-          0.64,
-          station.x + x,
-          groundY + 0.2,
-          station.z + z,
-          stationDarkSteel,
-        );
+        m(0.48, 5.2, 0.48, station.x + x, groundY + 2.6, station.z + z, stationSteel, true);
+        m(0.64, 0.12, 0.64, station.x + x, groundY + 0.2, station.z + z, stationDarkSteel);
       }
     }
     for (let lampX of [-7.5, -2.5, 2.5, 7.5]) {
       for (let lampZ of [-5, 5]) {
-        m(
-          2.1,
-          0.045,
-          0.7,
-          station.x + lampX,
-          groundY + 4.94,
-          station.z + lampZ,
-          stationAwningLight,
-        );
+        m(2.1, 0.045, 0.7, station.x + lampX, groundY + 4.94, station.z + lampZ, stationAwningLight);
       }
     }
     const canopyLight = new PointLight("#fff0d5", 0.7, 28, 2);
@@ -2127,37 +1653,13 @@ export function buildWorld(e) {
     ]) {
       for (const side of [-1, 1]) {
         if (acrossX) {
-          m(
-            5.6,
-            0.018,
-            0.085,
-            parkingX,
-            groundY + 0.16,
-            parkingZ + side * 1.4,
-            stationParkingPaint,
-          );
+          m(5.6, 0.018, 0.085, parkingX, groundY + 0.16, parkingZ + side * 1.4, stationParkingPaint);
         } else {
-          m(
-            0.085,
-            0.018,
-            5.6,
-            parkingX + side * 1.4,
-            groundY + 0.16,
-            parkingZ,
-            stationParkingPaint,
-          );
+          m(0.085, 0.018, 5.6, parkingX + side * 1.4, groundY + 0.16, parkingZ, stationParkingPaint);
         }
       }
     }
-    m(
-      0.28,
-      7,
-      0.28,
-      station.x + 12,
-      groundY + 3.5,
-      station.z + 9,
-      stationSteel,
-    );
+    m(0.28, 7, 0.28, station.x + 12, groundY + 3.5, station.z + 9, stationSteel);
     m(3, 1.4, 0.3, station.x + 12, groundY + 7, station.z + 9, stationSignMat);
     const priceBoard = new Mesh(new PlaneGeometry(2.3, 0.72), stationScreenMat);
     priceBoard.position.set(station.x + 12, groundY + 7, station.z + 8.83);
@@ -2266,15 +1768,7 @@ export function buildWorld(e) {
     const n = t - 3.4;
     const i = (-25 * e) / 10;
     const a = (-25 * (e + 1)) / 10;
-    const o = m(
-      15,
-      0.15,
-      5.4,
-      (i + a) / 2,
-      terrainHeight(i, t),
-      (t + n) / 2,
-      r,
-    );
+    const o = m(15, 0.15, 5.4, (i + a) / 2, terrainHeight(i, t), (t + n) / 2, r);
     o.rotation.y = -Math.atan2(a - i, 3.4);
   }
   const closureFaceCanvas = document.createElement("canvas");
@@ -2329,43 +1823,25 @@ export function buildWorld(e) {
     const firstX = -actualWidth / 2 + moduleLength / 2;
     for (let index = 0; index < moduleCount; index++) {
       const localX = firstX + index * moduleLength;
-      const base = new Mesh(
-        new BoxGeometry(moduleLength - 0.08, 0.32, depth),
-        closureDark,
-      );
+      const base = new Mesh(new BoxGeometry(moduleLength - 0.08, 0.32, depth), closureDark);
       base.position.set(localX, 0.16, 0);
       barrier.add(base);
-      const lowerBody = new Mesh(
-        new BoxGeometry(moduleLength - 0.14, 0.34, depth - 0.06),
-        closureOrange,
-      );
+      const lowerBody = new Mesh(new BoxGeometry(moduleLength - 0.14, 0.34, depth - 0.06), closureOrange);
       lowerBody.position.set(localX, 0.49, 0);
       barrier.add(lowerBody);
-      const upperBody = new Mesh(
-        new BoxGeometry(moduleLength - 0.38, 0.42, depth - 0.32),
-        closureOrange,
-      );
+      const upperBody = new Mesh(new BoxGeometry(moduleLength - 0.38, 0.42, depth - 0.32), closureOrange);
       upperBody.position.set(localX, 0.87, 0);
       barrier.add(upperBody);
       for (const faceSide of [-1, 1]) {
-        const face = new Mesh(
-          new BoxGeometry(moduleLength - 0.62, 0.3, 0.025),
-          closureFaceMaterial,
-        );
+        const face = new Mesh(new BoxGeometry(moduleLength - 0.62, 0.3, 0.025), closureFaceMaterial);
         face.position.set(localX, 0.88, faceSide * (depth / 2 - 0.15));
         barrier.add(face);
       }
-      const join = new Mesh(
-        new BoxGeometry(0.12, 0.16, depth - 0.12),
-        closureDark,
-      );
+      const join = new Mesh(new BoxGeometry(0.12, 0.16, depth - 0.12), closureDark);
       join.position.set(localX + moduleLength / 2 - 0.02, 0.32, 0);
       barrier.add(join);
       if (index === 0 || index === moduleCount - 1) {
-        const lamp = new Mesh(
-          new CylinderGeometry(0.13, 0.13, 0.12, 12),
-          closureLamp,
-        );
+        const lamp = new Mesh(new CylinderGeometry(0.13, 0.13, 0.12, 12), closureLamp);
         lamp.position.set(localX, 1.14, 0);
         barrier.add(lamp);
       }
@@ -2373,12 +1849,7 @@ export function buildWorld(e) {
     e.add(barrier);
     const cosine = Math.abs(Math.cos(yaw));
     const sine = Math.abs(Math.sin(yaw));
-    h(
-      x,
-      z,
-      (cosine * actualWidth) / 2 + (sine * depth) / 2,
-      (sine * actualWidth) / 2 + (cosine * depth) / 2,
-    );
+    h(x, z, (cosine * actualWidth) / 2 + (sine * depth) / 2, (sine * actualWidth) / 2 + (cosine * depth) / 2);
   }
   addRoadClosure(175, -695, 28, 1.4, Math.PI / 2);
   const te = new MeshStandardMaterial({
@@ -2445,11 +1916,7 @@ export function buildWorld(e) {
   const H = new BufferGeometry();
   const se = [];
   for (let e = 0; e < 500; e++) {
-    se.push(
-      (Math.random() - 0.5) * 1000,
-      220 + Math.random() * 250,
-      (Math.random() - 0.5) * 1000,
-    );
+    se.push((Math.random() - 0.5) * 1000, 220 + Math.random() * 250, (Math.random() - 0.5) * 1000);
   }
   H.setAttribute("position", new Float32BufferAttribute(se, 3));
   e.add(

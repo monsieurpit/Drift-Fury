@@ -5,10 +5,7 @@ export function PauseMenu({ onResume: e, onEnd: t }) {
       <div className="w-full max-w-sm">
         <p className="eyebrow !text-[#c6dc77]">NIGHTSHIFT / SESSION</p>
         <h2 className="race-title mb-8 mt-3 text-6xl">UNE PAUSE.</h2>
-        <button
-          onClick={e}
-          className="lime-button flex w-full items-center justify-between p-4 text-xs"
-        >
+        <button onClick={e} className="lime-button flex w-full items-center justify-between p-4 text-xs">
           REPRENDRE
           <PlayIcon size={17} />
         </button>
@@ -19,9 +16,7 @@ export function PauseMenu({ onResume: e, onEnd: t }) {
           TERMINER LA SESSION
           <LogOutIcon size={17} />
         </button>
-        <p className="mt-4 text-[10px] text-[#849395]">
-          Vos points et vos crédits seront conservés.
-        </p>
+        <p className="mt-4 text-[10px] text-[#849395]">Vos points et vos crédits seront conservés.</p>
       </div>
     </div>
   );

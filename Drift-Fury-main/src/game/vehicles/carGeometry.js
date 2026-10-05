@@ -3,10 +3,7 @@ export function createGeometry(pos, nor, idx) {
   const g = new BufferGeometry();
   g.setAttribute("position", new BufferAttribute(new Float32Array(pos), 3));
   g.setAttribute("normal", new BufferAttribute(new Float32Array(nor), 3));
-  g.setAttribute(
-    "uv",
-    new BufferAttribute(new Float32Array((pos.length / 3) * 2), 2),
-  );
+  g.setAttribute("uv", new BufferAttribute(new Float32Array((pos.length / 3) * 2), 2));
   if (idx) {
     g.setIndex(idx);
   }
@@ -174,12 +171,7 @@ export function buildPrismGeometry(poly, x0, x1, phi, bevel) {
     const nt = -dr / l;
     const wn = [0, nr_ * c - nt * s, nr_ * s + nt * c];
     const q = pos.length / 3;
-    pos.push(
-      ...W(a[0], a[1], x0),
-      ...W(b[0], b[1], x0),
-      ...W(b[0], b[1], x1),
-      ...W(a[0], a[1], x1),
-    );
+    pos.push(...W(a[0], a[1], x0), ...W(b[0], b[1], x0), ...W(b[0], b[1], x1), ...W(a[0], a[1], x1));
     for (let k = 0; k < 4; k++) {
       nor.push(...wn);
     }

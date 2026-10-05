@@ -66,14 +66,9 @@ export function createSynthEngine(e, t, n) {
       }
       f = r;
       c.gain.setTargetAtTime(i ? 0.15 : 0, s, 0.04);
-      l.frequency.setTargetAtTime(
-        (n === "V8" ? 850 : 1800) + t * 0.36,
-        s,
-        0.07,
-      );
+      l.frequency.setTargetAtTime((n === "V8" ? 850 : 1800) + t * 0.36, s, 0.07);
       u.gain.setTargetAtTime(
-        (m ? 0 : n === "V8" ? r * 0.032 : p * 0.065) *
-          (a.fuel === 0 || a.onFoot ? 0 : 1),
+        (m ? 0 : n === "V8" ? r * 0.032 : p * 0.065) * (a.fuel === 0 || a.onFoot ? 0 : 1),
         s,
         0.06,
       );
@@ -116,17 +111,11 @@ export function createSynthEngine(e, t, n) {
       const starterGain = e.createGain();
       starter.type = profile.shape;
       starter.frequency.setValueAtTime(profile.starter, now);
-      starter.frequency.linearRampToValueAtTime(
-        profile.starter * 1.22,
-        now + 0.52,
-      );
+      starter.frequency.linearRampToValueAtTime(profile.starter * 1.22, now + 0.52);
       starterFilter.type = "lowpass";
       starterFilter.frequency.value = profile.cutoff;
       starterGain.gain.setValueAtTime(0.001, now);
-      starterGain.gain.linearRampToValueAtTime(
-        profile.level * 0.72,
-        now + 0.04,
-      );
+      starterGain.gain.linearRampToValueAtTime(profile.level * 0.72, now + 0.04);
       starterGain.gain.setValueAtTime(profile.level * 0.64, now + 0.48);
       starterGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
       starter.connect(starterFilter);
@@ -174,32 +163,14 @@ export function createSynthEngine(e, t, n) {
       const ignitionGain = e.createGain();
       ignition.type = profile.shape;
       ignition.frequency.setValueAtTime(profile.catch * 0.72, now + 0.48);
-      ignition.frequency.linearRampToValueAtTime(
-        profile.catch * 1.55,
-        now + 0.72,
-      );
-      ignition.frequency.exponentialRampToValueAtTime(
-        profile.catch,
-        now + 1.08,
-      );
+      ignition.frequency.linearRampToValueAtTime(profile.catch * 1.55, now + 0.72);
+      ignition.frequency.exponentialRampToValueAtTime(profile.catch, now + 1.08);
       ignitionFilter.type = "lowpass";
-      ignitionFilter.frequency.setValueAtTime(
-        profile.cutoff * 0.72,
-        now + 0.48,
-      );
-      ignitionFilter.frequency.linearRampToValueAtTime(
-        profile.cutoff * 1.8,
-        now + 0.78,
-      );
-      ignitionFilter.frequency.exponentialRampToValueAtTime(
-        profile.cutoff,
-        now + 1.08,
-      );
+      ignitionFilter.frequency.setValueAtTime(profile.cutoff * 0.72, now + 0.48);
+      ignitionFilter.frequency.linearRampToValueAtTime(profile.cutoff * 1.8, now + 0.78);
+      ignitionFilter.frequency.exponentialRampToValueAtTime(profile.cutoff, now + 1.08);
       ignitionGain.gain.setValueAtTime(0.001, now + 0.48);
-      ignitionGain.gain.linearRampToValueAtTime(
-        profile.level * 1.25,
-        now + 0.66,
-      );
+      ignitionGain.gain.linearRampToValueAtTime(profile.level * 1.25, now + 0.66);
       ignitionGain.gain.setValueAtTime(profile.level * 0.8, now + 0.82);
       ignitionGain.gain.exponentialRampToValueAtTime(0.001, now + 1.16);
       ignition.connect(ignitionFilter);

@@ -37,14 +37,7 @@ function createPerson(col) {
   g.add(body);
   L.body = body;
   add(new BoxGeometry(0.36, 0.2, 0.22), pants, 0, 0.95, 0, body);
-  add(
-    new CylinderGeometry(0.2, 0.17, 0.56, 14),
-    cop ? vest : shirt,
-    0,
-    1.28,
-    0,
-    body,
-  ).scale.z = 0.66;
+  add(new CylinderGeometry(0.2, 0.17, 0.56, 14), cop ? vest : shirt, 0, 1.28, 0, body).scale.z = 0.66;
   for (const s of [-1, 1]) {
     add(new SphereGeometry(0.085, 10, 8), shirt, s * 0.235, 1.49, 0, body);
   }
@@ -53,89 +46,24 @@ function createPerson(col) {
   head.position.set(0, 1.69, 0);
   body.add(head);
   L.head = head;
-  add(new SphereGeometry(0.115, 18, 14), skin, 0, 0, 0, head).scale.set(
-    0.92,
-    1.08,
-    1,
-  );
+  add(new SphereGeometry(0.115, 18, 14), skin, 0, 0, 0, head).scale.set(0.92, 1.08, 1);
   add(new BoxGeometry(0.024, 0.04, 0.03), skin, 0, -0.008, -0.116, head, false);
   for (const s of [-1, 1]) {
-    add(
-      new SphereGeometry(0.013, 6, 5),
-      dark,
-      s * 0.04,
-      0.022,
-      -0.106,
-      head,
-      false,
-    );
-    add(
-      new BoxGeometry(0.045, 0.008, 0.01),
-      dark,
-      s * 0.04,
-      0.05,
-      -0.108,
-      head,
-      false,
-    );
+    add(new SphereGeometry(0.013, 6, 5), dark, s * 0.04, 0.022, -0.106, head, false);
+    add(new BoxGeometry(0.045, 0.008, 0.01), dark, s * 0.04, 0.05, -0.108, head, false);
   }
   if (cop) {
     add(new BoxGeometry(0.2, 0.036, 0.03), dark, 0, 0.024, -0.108, head, false);
-    add(
-      new CylinderGeometry(0.118, 0.124, 0.075, 18),
-      mt("#0d1524", 0.7),
-      0,
-      0.108,
-      -0.005,
-      head,
-    );
-    add(
-      new CylinderGeometry(0.1, 0.12, 0.02, 18),
-      mt("#0d1524", 0.7),
-      0,
-      0.152,
-      -0.005,
-      head,
-    );
+    add(new CylinderGeometry(0.118, 0.124, 0.075, 18), mt("#0d1524", 0.7), 0, 0.108, -0.005, head);
+    add(new CylinderGeometry(0.1, 0.12, 0.02, 18), mt("#0d1524", 0.7), 0, 0.152, -0.005, head);
     add(new BoxGeometry(0.2, 0.012, 0.1), dark, 0, 0.09, -0.13, head);
-    add(
-      new BoxGeometry(0.03, 0.035, 0.01),
-      mt("#e0b84a", 0.3, 0.9),
-      0,
-      0.115,
-      -0.128,
-      head,
-      false,
-    );
+    add(new BoxGeometry(0.03, 0.035, 0.01), mt("#e0b84a", 0.3, 0.9), 0, 0.115, -0.128, head, false);
     add(new BoxGeometry(0.34, 0.06, 0.24), dark, 0, 1.02, 0, body);
     add(new BoxGeometry(0.065, 0.2, 0.11), dark, 0.21, 0.93, 0, body);
-    add(
-      new BoxGeometry(0.07, 0.045, 0.1),
-      mt("#222", 0.4, 0.6),
-      -0.13,
-      1.03,
-      -0.1,
-      body,
-    );
+    add(new BoxGeometry(0.07, 0.045, 0.1), mt("#222", 0.4, 0.6), -0.13, 1.03, -0.1, body);
     add(new BoxGeometry(0.05, 0.09, 0.04), dark, -0.14, 1.44, -0.13, body);
-    add(
-      new BoxGeometry(0.012, 0.1, 0.012),
-      dark,
-      -0.15,
-      1.53,
-      -0.13,
-      body,
-      false,
-    );
-    add(
-      new BoxGeometry(0.03, 0.04, 0.01),
-      mt("#e0b84a", 0.3, 0.9),
-      0.1,
-      1.38,
-      -0.137,
-      body,
-      false,
-    );
+    add(new BoxGeometry(0.012, 0.1, 0.012), dark, -0.15, 1.53, -0.13, body, false);
+    add(new BoxGeometry(0.03, 0.04, 0.01), mt("#e0b84a", 0.3, 0.9), 0.1, 1.38, -0.137, body, false);
     const tx = canvasTexture(128, 48, (x, w, h) => {
       x.fillStyle = "#0a0f1a";
       x.fillRect(0, 0, w, h);
@@ -157,27 +85,9 @@ function createPerson(col) {
       body.add(p);
     }
   } else {
-    add(new SphereGeometry(0.13, 12, 10), shirt, 0, 1.57, 0.07, body).scale.set(
-      1,
-      0.8,
-      0.8,
-    );
-    add(
-      new SphereGeometry(0.121, 14, 10),
-      mt("#1c1410", 0.9),
-      0,
-      0.028,
-      0.02,
-      head,
-    ).scale.set(0.97, 0.9, 1);
-    add(
-      new BoxGeometry(0.2, 0.012, 0.1),
-      mt("#15171c", 0.6),
-      0,
-      0.07,
-      -0.13,
-      head,
-    );
+    add(new SphereGeometry(0.13, 12, 10), shirt, 0, 1.57, 0.07, body).scale.set(1, 0.8, 0.8);
+    add(new SphereGeometry(0.121, 14, 10), mt("#1c1410", 0.9), 0, 0.028, 0.02, head).scale.set(0.97, 0.9, 1);
+    add(new BoxGeometry(0.2, 0.012, 0.1), mt("#15171c", 0.6), 0, 0.07, -0.13, head);
   }
   const arm = (s) => {
     const sh = new Group();

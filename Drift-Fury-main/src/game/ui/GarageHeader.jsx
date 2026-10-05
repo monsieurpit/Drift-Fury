@@ -1,9 +1,4 @@
-import {
-  ArrowUpRightIcon,
-  CoinsIcon,
-  VolumeXIcon,
-  Volume2Icon,
-} from "lucide-react";
+import { ArrowUpRightIcon, CoinsIcon, VolumeXIcon, Volume2Icon } from "lucide-react";
 export function GarageHeader({ progress: e, muted: t, onMute: n }) {
   return (
     <header className="flex h-20 items-center justify-between border-b border-white/10 px-5 md:px-10">
@@ -24,11 +19,7 @@ export function GarageHeader({ progress: e, muted: t, onMute: n }) {
           <b>{e.credits.toLocaleString("fr-FR")}</b>
           <span className="hidden text-[#798184] sm:inline">CR</span>
         </div>
-        <button
-          onClick={n}
-          aria-label={t ? "Activer le son" : "Couper le son"}
-          className="text-[#9aa2a4]"
-        >
+        <button onClick={n} aria-label={t ? "Activer le son" : "Couper le son"} className="text-[#9aa2a4]">
           {t ? <VolumeXIcon size={19} /> : <Volume2Icon size={19} />}
         </button>
         <div className="hidden h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-[#23282b] text-[10px] font-bold sm:flex">

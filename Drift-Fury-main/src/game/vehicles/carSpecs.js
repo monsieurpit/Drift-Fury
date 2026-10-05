@@ -404,14 +404,8 @@ export function buildCarSpec(name) {
     [c.rf, hiRoof - 0.045],
     [midRoof, hiRoof],
     [c.rr, hiRoof - 0.035],
-    [
-      c.rr + (c.rg - c.rr) * 0.35,
-      hiRoof - 0.035 - (hiRoof - 0.035 - brg) * 0.3,
-    ],
-    [
-      c.rr + (c.rg - c.rr) * 0.7,
-      hiRoof - 0.035 - (hiRoof - 0.035 - brg) * 0.72,
-    ],
+    [c.rr + (c.rg - c.rr) * 0.35, hiRoof - 0.035 - (hiRoof - 0.035 - brg) * 0.3],
+    [c.rr + (c.rg - c.rr) * 0.7, hiRoof - 0.035 - (hiRoof - 0.035 - brg) * 0.72],
     [c.rg, brg],
   ]);
   return sp;

@@ -23,9 +23,7 @@ export function gearTopSpeeds(e) {
 }
 export function reverseTopSpeed(e) {
   return (
-    ((ENGINE_REDLINE[e] || 7200) /
-      60 /
-      (Math.abs(GEARBOX.reverse) * GEARBOX.finalDrive)) *
+    ((ENGINE_REDLINE[e] || 7200) / 60 / (Math.abs(GEARBOX.reverse) * GEARBOX.finalDrive)) *
     TAU *
     GEARBOX.wheel
   );
@@ -55,21 +53,12 @@ export function createCarPhysics(e, t) {
     } else if (!r.handbrake && (Math.abs(v) < 0.07 || g < 4)) {
       e.driftOn = false;
     }
-    const y = (e.driftAmt = damp(
-      e.driftAmt || 0,
-      +!!e.driftOn,
-      e.driftOn ? 10 : 4,
-      t,
-    ));
+    const y = (e.driftAmt = damp(e.driftAmt || 0, +!!e.driftOn, e.driftOn ? 10 : 4, t));
     const b = Math.abs(g);
-    const x =
-      m *
-      Math.min((b * Math.tan(MAX_STEER_ANGLE)) / n, f / Math.max(b, 1)) *
-      Math.sign(g);
+    const x = m * Math.min((b * Math.tan(MAX_STEER_ANGLE)) / n, f / Math.max(b, 1)) * Math.sign(g);
     const S = clamp(43 / Math.max(b, 13), 0.6, 1);
     const C = (r.handbrake ? 0.95 : r.throttle ? 0.7 : 0.1) * S;
-    const w =
-      Math.abs(m) > 0.15 ? m * C : r.handbrake ? v : v * (r.throttle ? 0.6 : 0);
+    const w = Math.abs(m) > 0.15 ? m * C : r.handbrake ? v : v * (r.throttle ? 0.6 : 0);
     const T = (3 * p) / Math.max(b, 6);
     const E = clamp((w - v) * 3.5, -T, T);
     e.yaw = damp(e.yaw || 0, lerp(x, E, y), lerp(12, 5, y), t);

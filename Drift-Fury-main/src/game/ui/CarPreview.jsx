@@ -5,11 +5,5 @@ export function CarPreview({ car: e }) {
   React.useEffect(() => {
     return startCarPreview(t.current, e);
   }, [e.id]);
-  return (
-    <div
-      ref={t}
-      className="absolute inset-0"
-      aria-label={`Aperçu 3D de ${e.name}`}
-    />
-  );
+  return <div ref={t} className="absolute inset-0" aria-label={`Aperçu 3D de ${e.name}`} />;
 }

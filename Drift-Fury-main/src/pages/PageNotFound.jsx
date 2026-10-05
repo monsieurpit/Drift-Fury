@@ -2,8 +2,8 @@ import { useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { base44 } from "../api/base44Client.js";
 export function PageNotFound({}) {
-  const e = useLocation().pathname.substring(1);
-  const { data: t, isFetched: n } = useQuery({
+  const pageName = useLocation().pathname.substring(1);
+  const { data: authData, isFetched } = useQuery({
     queryKey: ["user"],
     queryFn: async () => {
       try {
@@ -28,28 +28,24 @@ export function PageNotFound({}) {
             <div className="h-0.5 w-16 bg-slate-200 mx-auto" />
           </div>
           <div className="space-y-3">
-            <h2 className="text-2xl font-medium text-slate-800">
-              Page Not Found
-            </h2>
+            <h2 className="text-2xl font-medium text-slate-800">Page Not Found</h2>
             <p className="text-slate-600 leading-relaxed">
               {"The page "}
-              <span className="font-medium text-slate-700">"{e}"</span>
+              <span className="font-medium text-slate-700">"{pageName}"</span>
               {" could not be found in this application."}
             </p>
           </div>
-          {n && t.isAuthenticated && t.user?.role === "admin" && (
+          {isFetched && authData.isAuthenticated && authData.user?.role === "admin" && (
             <div className="mt-8 p-4 bg-slate-100 rounded-lg border border-slate-200">
               <div className="flex items-start space-x-3">
                 <div className="flex-shrink-0 w-5 h-5 rounded-full bg-orange-100 flex items-center justify-center mt-0.5">
                   <div className="w-2 h-2 rounded-full bg-orange-400" />
                 </div>
                 <div className="text-left space-y-1">
-                  <p className="text-sm font-medium text-slate-700">
-                    Admin Note
-                  </p>
+                  <p className="text-sm font-medium text-slate-700">Admin Note</p>
                   <p className="text-sm text-slate-600 leading-relaxed">
-                    This could mean that the AI hasn't implemented this page
-                    yet. Ask it to implement it in the chat.
+                    This could mean that the AI hasn't implemented this page yet. Ask it to implement it in
+                    the chat.
                   </p>
                 </div>
               </div>
@@ -62,12 +58,7 @@ export function PageNotFound({}) {
               }}
               className="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
             >
-              <svg
-                className="w-4 h-4 mr-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"

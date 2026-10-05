@@ -67,16 +67,8 @@ export function chaikin(P, iters, sMax) {
       const a = pts[i];
       const b = pts[(i + 1) % pts.length];
       const sb = i === pts.length - 1 ? b[2] + sMax : b[2];
-      out.push([
-        a[0] * 0.75 + b[0] * 0.25,
-        a[1] * 0.75 + b[1] * 0.25,
-        a[2] * 0.75 + sb * 0.25,
-      ]);
-      out.push([
-        a[0] * 0.25 + b[0] * 0.75,
-        a[1] * 0.25 + b[1] * 0.75,
-        a[2] * 0.25 + sb * 0.75,
-      ]);
+      out.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25, a[2] * 0.75 + sb * 0.25]);
+      out.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75, a[2] * 0.25 + sb * 0.75]);
     }
     pts = out;
   }

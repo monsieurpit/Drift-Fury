@@ -1,19 +1,7 @@
-import {
-  XIcon,
-  CheckIcon,
-  LockKeyholeIcon,
-  ArrowUpRightIcon,
-  CoinsIcon,
-} from "lucide-react";
+import { XIcon, CheckIcon, LockKeyholeIcon, ArrowUpRightIcon, CoinsIcon } from "lucide-react";
 import { CARS } from "../data/cars.js";
 import { ENGINES } from "../data/engines.js";
-export function PickerModal({
-  type: e,
-  progress: t,
-  onSelect: n,
-  onClose: r,
-  station: i = false,
-}) {
+export function PickerModal({ type: e, progress: t, onSelect: n, onClose: r, station: i = false }) {
   const a = e === "cars";
   const o = a ? t.cars : t.engines;
   const s = a ? t.car : t.engine;
@@ -37,11 +25,7 @@ export function PickerModal({
               {a ? "CHOISISSEZ VOTRE VOITURE." : "CHOISISSEZ VOTRE MOTEUR."}
             </h2>
           </div>
-          <button
-            onClick={r}
-            aria-label="Fermer"
-            className="rounded-lg p-2 text-[#929b9d] hover:bg-white/5"
-          >
+          <button onClick={r} aria-label="Fermer" className="rounded-lg p-2 text-[#929b9d] hover:bg-white/5">
             <XIcon size={22} />
           </button>
         </div>
@@ -56,9 +40,7 @@ export function PickerModal({
                   key={e.id}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="eyebrow !text-[8px]">
-                      {a ? e.tag : `${e.hp} CH • ${e.torque} NM`}
-                    </span>
+                    <span className="eyebrow !text-[8px]">{a ? e.tag : `${e.hp} CH • ${e.torque} NM`}</span>
                     {i ? (
                       <CheckIcon size={17} className="text-[#c6dc77]" />
                     ) : r ? null : (
@@ -74,17 +56,11 @@ export function PickerModal({
                         }}
                       />
                     ) : (
-                      <span className="font-heading text-3xl font-bold text-[#c6dc77]">
-                        {e.id}
-                      </span>
+                      <span className="font-heading text-3xl font-bold text-[#c6dc77]">{e.id}</span>
                     )}
-                    <h3 className="font-heading text-2xl font-semibold">
-                      {e.name}
-                    </h3>
+                    <h3 className="font-heading text-2xl font-semibold">{e.name}</h3>
                   </div>
-                  <p className="mt-3 min-h-9 text-[11px] leading-relaxed text-[#929d9f]">
-                    {e.description}
-                  </p>
+                  <p className="mt-3 min-h-9 text-[11px] leading-relaxed text-[#929d9f]">{e.description}</p>
                   <button
                     disabled={i || (!r && t.credits < e.price)}
                     onClick={() => {
@@ -93,17 +69,9 @@ export function PickerModal({
                     className={`mt-4 flex w-full items-center justify-between rounded-lg px-4 py-3 text-xs font-semibold ${i ? "bg-white/5 text-[#c6dc77]" : r ? "bg-[#c6dc77] text-[#172010]" : "border border-white/15 text-[#d2d8d4]"}`}
                   >
                     <span>
-                      {i
-                        ? "Équipé"
-                        : r
-                          ? "Équiper"
-                          : `Débloquer • ${e.price.toLocaleString("fr-FR")} CR`}
+                      {i ? "Équipé" : r ? "Équiper" : `Débloquer • ${e.price.toLocaleString("fr-FR")} CR`}
                     </span>
-                    {i ? (
-                      <CheckIcon size={14} />
-                    ) : (
-                      <ArrowUpRightIcon size={16} />
-                    )}
+                    {i ? <CheckIcon size={14} /> : <ArrowUpRightIcon size={16} />}
                   </button>
                 </div>
               );

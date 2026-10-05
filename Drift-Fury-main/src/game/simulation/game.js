@@ -21,13 +21,7 @@ const PLAYER_HALF_WIDTH = 1;
 const PLAYER_HALF_LENGTH = 2.25;
 const NPC_HALF_WIDTH = 1.05;
 const NPC_HALF_LENGTH = 2.3;
-export const TRAFFIC_COLORS = [
-  "#8a97a8",
-  "#b0563a",
-  "#3f6f8f",
-  "#7a6f9a",
-  "#5a7a5e",
-];
+export const TRAFFIC_COLORS = ["#8a97a8", "#b0563a", "#3f6f8f", "#7a6f9a", "#5a7a5e"];
 const WALK_SPEED = 4.6;
 const OFFICER_RUN_SPEED = 4.9;
 export function createGame(e, t, n, r = false) {
@@ -274,9 +268,7 @@ export function createGame(e, t, n, r = false) {
       i.shake *= Math.exp(-e * 5);
       const r = n.ArrowUp || n.KeyW || n.KeyZ ? 1 : 0;
       const o = n.ArrowDown || n.KeyS ? 1 : 0;
-      const f =
-        (n.ArrowLeft || n.KeyA || n.KeyQ ? 1 : 0) -
-        (n.ArrowRight || n.KeyD ? 1 : 0);
+      const f = (n.ArrowLeft || n.KeyA || n.KeyQ ? 1 : 0) - (n.ArrowRight || n.KeyD ? 1 : 0);
       const p = !!n.Space;
       const m = !!n.KeyF && !i._fPrev;
       i._fPrev = !!n.KeyF;
@@ -287,12 +279,8 @@ export function createGame(e, t, n, r = false) {
         i.throttle = 0;
         i.brake = 0;
         i.pedal = 0;
-        const t =
-          (n.ArrowRight || n.KeyD ? 1 : 0) -
-          (n.ArrowLeft || n.KeyA || n.KeyQ ? 1 : 0);
-        const r =
-          (n.ArrowDown || n.KeyS ? 1 : 0) -
-          (n.ArrowUp || n.KeyW || n.KeyZ ? 1 : 0);
+        const t = (n.ArrowRight || n.KeyD ? 1 : 0) - (n.ArrowLeft || n.KeyA || n.KeyQ ? 1 : 0);
+        const r = (n.ArrowDown || n.KeyS ? 1 : 0) - (n.ArrowUp || n.KeyW || n.KeyZ ? 1 : 0);
         const o = Math.hypot(t, r) || 1;
         ((sh, ch, sp) => {
           const dx = (ch * t + sh * r) / o;
@@ -305,8 +293,7 @@ export function createGame(e, t, n, r = false) {
           }
           if (t || r) {
             const ty = Math.atan2(-dx, -dz);
-            const df =
-              ((ty - i.footYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+            const df = ((ty - i.footYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
             i.footYaw = Math.atan2(
               Math.sin(i.footYaw + df * (1 - Math.exp(-14 * e))),
               Math.cos(i.footYaw + df * (1 - Math.exp(-14 * e))),
@@ -316,10 +303,7 @@ export function createGame(e, t, n, r = false) {
         i.x = clamp(i.x, -200, 250);
         i.z = clamp(i.z, -700, 150);
         for (let e of a.near(i.x, i.z, 3, s)) {
-          if (
-            Math.abs(i.x - e.x) < e.w + 0.5 &&
-            Math.abs(i.z - e.z) < e.d + 0.5
-          ) {
+          if (Math.abs(i.x - e.x) < e.w + 0.5 && Math.abs(i.z - e.z) < e.d + 0.5) {
             const t = i.x - e.x;
             const n = i.z - e.z;
             if (e.w + 0.5 - Math.abs(t) < e.d + 0.5 - Math.abs(n)) {
@@ -358,12 +342,7 @@ export function createGame(e, t, n, r = false) {
         if (carCollisionProfile.shape !== i.playerVeh.shape) {
           carCollisionProfile = getCollisionProfile(i.playerVeh.shape);
         }
-        const footprint = createCarFootprint(
-          i.x,
-          i.z,
-          i.heading,
-          carCollisionProfile,
-        );
+        const footprint = createCarFootprint(i.x, i.z, i.heading, carCollisionProfile);
         for (let obstacle of a.near(i.x, i.z, 4, s)) {
           const collision = collideFootprintWithBox(footprint, obstacle);
           if (!collision) {
@@ -371,10 +350,7 @@ export function createGame(e, t, n, r = false) {
           }
           i.x -= collision.nx * (collision.depth + 0.02);
           i.z -= collision.nz * (collision.depth + 0.02);
-          const impactSpeed = Math.max(
-            0,
-            i.vx * collision.nx + i.vz * collision.nz,
-          );
+          const impactSpeed = Math.max(0, i.vx * collision.nx + i.vz * collision.nz);
           if (impactSpeed > 0.6) {
             i.vx -= collision.nx * impactSpeed * 1.3;
             i.vz -= collision.nz * impactSpeed * 1.3;
@@ -407,11 +383,7 @@ export function createGame(e, t, n, r = false) {
       i.drifting = _ > 6 && v > 0.13 && i.u > 0;
       if (i.drifting) {
         ((i.driftTime += e),
-          (i.combo = clamp(
-            1 + Math.floor(i.driftTime / 2) + Math.floor(v * 1.8),
-            1,
-            8,
-          )),
+          (i.combo = clamp(1 + Math.floor(i.driftTime / 2) + Math.floor(v * 1.8), 1, 8)),
           (i.score += e * _ * v * i.combo * 15),
           i.police.some((e) => {
             return distance2D(e, i) < 85;
@@ -421,10 +393,7 @@ export function createGame(e, t, n, r = false) {
       }
       if (!i.onFoot) {
         i.fuel = clamp(
-          i.fuel -
-            e *
-              t.consumption *
-              (0.12 + _ / 16 + i.throttle * 1.5 + (i.drifting ? 2 : 0)),
+          i.fuel - e * t.consumption * (0.12 + _ / 16 + i.throttle * 1.5 + (i.drifting ? 2 : 0)),
           0,
           100,
         );
@@ -434,32 +403,18 @@ export function createGame(e, t, n, r = false) {
       });
       i.store = i.onFoot
         ? FUEL_STATIONS.findIndex((station) => {
-            return (
-              Math.abs(i.x - station.x) < 5.25 &&
-              i.z > station.z + 7.05 &&
-              i.z < station.z + 15.3
-            );
+            return Math.abs(i.x - station.x) < 5.25 && i.z > station.z + 7.05 && i.z < station.z + 15.3;
           })
         : -1;
       i.shop = i.onFoot
         ? FUEL_STATIONS.findIndex((station) => {
-            return (
-              Math.abs(i.x - station.x) < 2.35 &&
-              i.z > station.z + 5.15 &&
-              i.z < station.z + 7.25
-            );
+            return Math.abs(i.x - station.x) < 2.35 && i.z > station.z + 5.15 && i.z < station.z + 7.25;
           })
         : -1;
       if (!i.onFoot && i.station >= 0) {
         i.fuel = clamp(i.fuel + e * 14, 0, 100);
       }
-      const y = orientedBox(
-        i.x,
-        i.z,
-        i.heading,
-        PLAYER_HALF_WIDTH,
-        PLAYER_HALF_LENGTH,
-      );
+      const y = orientedBox(i.x, i.z, i.heading, PLAYER_HALF_WIDTH, PLAYER_HALF_LENGTH);
       let b = false;
       let x = false;
       let S = false;
@@ -511,8 +466,7 @@ export function createGame(e, t, n, r = false) {
               }
             }
             if (i.onFoot && distance2D(n, i) < 1.8) {
-              ((i.arrestTimer = Math.min(i.arrestTimer + e * 2.5, 5)),
-                (S = true));
+              ((i.arrestTimer = Math.min(i.arrestTimer + e * 2.5, 5)), (S = true));
             }
           }
           if (i.wanted > 0.15 && c(n)) {
@@ -528,15 +482,7 @@ export function createGame(e, t, n, r = false) {
         let f;
         if (o) {
           const e =
-            n.mode === 3
-              ? u > 30
-                ? 2.5
-                : 1
-              : n.mode === 2 && i.wanted >= 3
-                ? 3
-                : n.mode === 1
-                  ? 1.2
-                  : 0;
+            n.mode === 3 ? (u > 30 ? 2.5 : 1) : n.mode === 2 && i.wanted >= 3 ? 3 : n.mode === 1 ? 1.2 : 0;
           d = i.x + i.vx * e;
           f = i.z + i.vz * e;
           if (n.mode === 3 && u > 30) {
@@ -584,10 +530,7 @@ export function createGame(e, t, n, r = false) {
           const t = e.x - n.x;
           const r = e.z - n.z;
           const i = Math.hypot(t, r);
-          if (
-            i < 8 &&
-            t * -Math.sin(n.heading) + r * -Math.cos(n.heading) > i * 0.7
-          ) {
+          if (i < 8 && t * -Math.sin(n.heading) + r * -Math.cos(n.heading) > i * 0.7) {
             p = Math.min(p, Math.max(0, i - 3) * 0.9);
           }
         }
@@ -613,23 +556,15 @@ export function createGame(e, t, n, r = false) {
         if (o && c(n)) {
           x = true;
         }
-        const O = collideOrientedBoxes(
-          y,
-          orientedBox(n.x, n.z, n.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH),
-        );
+        const O = collideOrientedBoxes(y, orientedBox(n.x, n.z, n.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH));
         if (
           o &&
           !i.onFoot &&
           O.overlap &&
-          ((n.x += O.nx * (O.depth + 0.03)),
-          (n.z += O.nz * (O.depth + 0.03)),
-          n.contactCooldown <= 0)
+          ((n.x += O.nx * (O.depth + 0.03)), (n.z += O.nz * (O.depth + 0.03)), n.contactCooldown <= 0)
         ) {
           b = true;
-          const e = Math.hypot(
-            i.vx + Math.sin(n.heading) * n.speed,
-            i.vz + Math.cos(n.heading) * n.speed,
-          );
+          const e = Math.hypot(i.vx + Math.sin(n.heading) * n.speed, i.vz + Math.cos(n.heading) * n.speed);
           if (l(Math.min(12, 1.5 + e * 0.35))) {
             i._crash = {
               x: i.x,
@@ -687,16 +622,10 @@ export function createGame(e, t, n, r = false) {
       }
       i.arrest = (i.arrestTimer / 5) * 100;
       i.speed = Math.round(_ * 3.6);
-      i.zone =
-        i.z < -160
-          ? "Montagne Kuro"
-          : i.x > 130
-            ? "Autoroute A9"
-            : "Centre-ville";
+      i.zone = i.z < -160 ? "Montagne Kuro" : i.x > 130 ? "Autoroute A9" : "Centre-ville";
       i.y = terrainHeight(i.x, i.z);
       if (i.health <= 0 || i.arrest >= 100) {
-        ((i.ended = true),
-          (i.reason = i.health <= 0 ? "Véhicule détruit" : "Vous êtes arrêté"));
+        ((i.ended = true), (i.reason = i.health <= 0 ? "Véhicule détruit" : "Vous êtes arrêté"));
       }
       return i;
     },

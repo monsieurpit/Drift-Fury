@@ -11,10 +11,7 @@ import {
 import { createRenderer } from "../render/renderer.js";
 import { buildCar } from "../vehicles/carModel.js";
 export function startCarPreview(e, t) {
-  if (
-    navigator.webdriver ||
-    (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)
-  ) {
+  if (navigator.webdriver || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)) {
     return () => {};
   }
   const n = createRenderer(e);

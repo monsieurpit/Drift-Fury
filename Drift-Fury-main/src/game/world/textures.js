@@ -1,9 +1,4 @@
-import {
-  CanvasTexture,
-  RepeatWrapping,
-  MeshPhysicalMaterial,
-  Vector2,
-} from "three";
+import { CanvasTexture, RepeatWrapping, MeshPhysicalMaterial, Vector2 } from "three";
 import { createRandom } from "../util/random.js";
 function fractalNoise(e, t, n, r, i) {
   const a = createRandom(i);
@@ -31,12 +26,7 @@ function fractalNoise(e, t, n, r, i) {
         const g = i[(u + 1) * (n + 1) + l + 1];
         const _ = d * d * (3 - 2 * d);
         const v = f * f * (3 - 2 * f);
-        o[e * t + r] +=
-          (p * (1 - _) * (1 - v) +
-            m * _ * (1 - v) +
-            h * (1 - _) * v +
-            g * _ * v) *
-          s;
+        o[e * t + r] += (p * (1 - _) * (1 - v) + m * _ * (1 - v) + h * (1 - _) * v + g * _ * v) * s;
       }
     }
     c += s;
@@ -51,9 +41,7 @@ export function normalMapFromHeight(e, t = 2.4) {
   const sourceCanvas = e.image || e;
   const width = sourceCanvas.width;
   const height = sourceCanvas.height;
-  const source = sourceCanvas
-    .getContext("2d")
-    .getImageData(0, 0, width, height).data;
+  const source = sourceCanvas.getContext("2d").getImageData(0, 0, width, height).data;
   const normalCanvas = document.createElement("canvas");
   normalCanvas.width = width;
   normalCanvas.height = height;
@@ -61,11 +49,7 @@ export function normalMapFromHeight(e, t = 2.4) {
   const image = context.createImageData(width, height);
   const sample = (x, y) => {
     return (
-      source[
-        (Math.min(height - 1, Math.max(0, y)) * width +
-          Math.min(width - 1, Math.max(0, x))) *
-          4
-      ] / 255
+      source[(Math.min(height - 1, Math.max(0, y)) * width + Math.min(width - 1, Math.max(0, x))) * 4] / 255
     );
   };
   for (let y = 0; y < height; y++) {
@@ -130,10 +114,7 @@ export function createAsphaltMaterial(e = 6) {
     const dark = rnd() > 0.5;
     wrap(() => {
       const gr = a.createRadialGradient(x, y, 0, x, y, rad);
-      gr.addColorStop(
-        0,
-        dark ? "rgba(12,14,17,0.09)" : "rgba(185,192,198,0.055)",
-      );
+      gr.addColorStop(0, dark ? "rgba(12,14,17,0.09)" : "rgba(185,192,198,0.055)");
       gr.addColorStop(1, "rgba(0,0,0,0)");
       a.fillStyle = gr;
       a.fillRect(x - rad, y - rad, rad * 2, rad * 2);
@@ -153,9 +134,7 @@ export function createAsphaltMaterial(e = 6) {
           : `rgba(91,94,97,${0.1 + rnd() * 0.19})`;
     a.fillRect(x, y, sz, sz);
     h.fillStyle =
-      t > 0.68
-        ? `rgba(255,255,255,${0.16 + rnd() * 0.22})`
-        : `rgba(0,0,0,${0.12 + rnd() * 0.22})`;
+      t > 0.68 ? `rgba(255,255,255,${0.16 + rnd() * 0.22})` : `rgba(0,0,0,${0.12 + rnd() * 0.22})`;
     h.fillRect(x, y, sz, sz);
   }
   // old repair patches

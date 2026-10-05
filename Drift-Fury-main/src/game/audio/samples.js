@@ -25,11 +25,7 @@ function prepareEngineSample(e, t, n, r = false) {
       (t, n) => {
         let r = 0;
         let i = 0;
-        for (
-          let t = e + Math.floor((c * n) / 6);
-          t < e + (c * (n + 1)) / 6;
-          t += 8
-        ) {
+        for (let t = e + Math.floor((c * n) / 6); t < e + (c * (n + 1)) / 6; t += 8) {
           r += a[t] ** 2;
           i++;
         }
@@ -66,10 +62,7 @@ function prepareEngineSample(e, t, n, r = false) {
     g += h[e] ** 2;
     _ = Math.max(_, Math.abs(h[e]));
   }
-  const v = Math.min(
-    0.38 / Math.max(0.001, Math.sqrt(g / p)),
-    1.3 / Math.max(0.001, _),
-  );
+  const v = Math.min(0.38 / Math.max(0.001, Math.sqrt(g / p)), 1.3 / Math.max(0.001, _));
   for (let e = 0; e < p; e++) {
     h[e] *= v;
   }
@@ -208,27 +201,16 @@ export function createSampleEngine(e, t, n, r) {
         }, 0) || 1;
       const u = 0.6 + n * 0.4 + (r.shifting && r.shiftDirection < 0 ? 0.2 : 0);
       const d = r.shifting ? 0.4 : 1;
-      const f =
-        t > (r.redline || 8000) * 0.985
-          ? 0.65 + 0.35 * Math.max(0, Math.sin(a * 90))
-          : 1;
+      const f = t > (r.redline || 8000) * 0.985 ? 0.65 + 0.35 * Math.max(0, Math.sin(a * 90)) : 1;
       c.forEach((e, n) => {
         e.source.playbackRate.setTargetAtTime(
           Math.max(0.75, Math.min(1.5, (t / e.baseRpm) * e.pitch)),
           a,
           0.04,
         );
-        e.gain.gain.setTargetAtTime(
-          (o[n] / l) * u * d * f * (r.fuel === 0 ? 0 : 1),
-          a,
-          0.035,
-        );
+        e.gain.gain.setTargetAtTime((o[n] / l) * u * d * f * (r.fuel === 0 ? 0 : 1), a, 0.035);
       });
-      s.frequency.setTargetAtTime(
-        1000 + i.cutoff * (0.25 + n * 0.75) + t * 0.22,
-        a,
-        0.045,
-      );
+      s.frequency.setTargetAtTime(1000 + i.cutoff * (0.25 + n * 0.75) + t * 0.22, a, 0.045);
     },
     startEngine() {
       const profiles = {
@@ -268,10 +250,7 @@ export function createSampleEngine(e, t, n, r) {
       const crankGain = e.createGain();
       crank.type = profile.shape;
       crank.frequency.setValueAtTime(profile.starter, now);
-      crank.frequency.linearRampToValueAtTime(
-        profile.starter * 1.22,
-        now + 0.52,
-      );
+      crank.frequency.linearRampToValueAtTime(profile.starter * 1.22, now + 0.52);
       crankFilter.type = "lowpass";
       crankFilter.frequency.value = profile.cutoff;
       crankGain.gain.setValueAtTime(0.001, now);
@@ -293,24 +272,12 @@ export function createSampleEngine(e, t, n, r) {
       const catchGain = e.createGain();
       catchEngine.type = profile.shape;
       catchEngine.frequency.setValueAtTime(profile.catch * 0.72, now + 0.48);
-      catchEngine.frequency.linearRampToValueAtTime(
-        profile.catch * 1.55,
-        now + 0.72,
-      );
-      catchEngine.frequency.exponentialRampToValueAtTime(
-        profile.catch,
-        now + 1.08,
-      );
+      catchEngine.frequency.linearRampToValueAtTime(profile.catch * 1.55, now + 0.72);
+      catchEngine.frequency.exponentialRampToValueAtTime(profile.catch, now + 1.08);
       catchFilter.type = "lowpass";
       catchFilter.frequency.setValueAtTime(profile.cutoff * 0.72, now + 0.48);
-      catchFilter.frequency.linearRampToValueAtTime(
-        profile.cutoff * 1.8,
-        now + 0.78,
-      );
-      catchFilter.frequency.exponentialRampToValueAtTime(
-        profile.cutoff,
-        now + 1.08,
-      );
+      catchFilter.frequency.linearRampToValueAtTime(profile.cutoff * 1.8, now + 0.78);
+      catchFilter.frequency.exponentialRampToValueAtTime(profile.cutoff, now + 1.08);
       catchGain.gain.setValueAtTime(0.001, now + 0.48);
       catchGain.gain.linearRampToValueAtTime(profile.level * 1.25, now + 0.66);
       catchGain.gain.setValueAtTime(profile.level * 0.8, now + 0.82);

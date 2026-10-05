@@ -34,14 +34,7 @@ export function createEffects(e) {
   smokeCanvas.width = 128;
   smokeCanvas.height = 128;
   const smokeContext = smokeCanvas.getContext("2d");
-  const smokeGradient = smokeContext.createRadialGradient(
-    64,
-    64,
-    7,
-    64,
-    64,
-    62,
-  );
+  const smokeGradient = smokeContext.createRadialGradient(64, 64, 7, 64, 64, 62);
   smokeGradient.addColorStop(0, "rgba(235,239,242,0.24)");
   smokeGradient.addColorStop(0.34, "rgba(220,226,231,0.17)");
   smokeGradient.addColorStop(0.72, "rgba(202,210,217,0.07)");
@@ -151,23 +144,10 @@ export function createEffects(e) {
           const indices = [];
           for (let k = 0; k < capacity; k++) {
             const base = k * 4;
-            indices.push(
-              base,
-              base + 2,
-              base + 1,
-              base + 1,
-              base + 2,
-              base + 3,
-            );
+            indices.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
           }
-          geometry.setAttribute(
-            "position",
-            new Float32BufferAttribute(positions, 3),
-          );
-          geometry.setAttribute(
-            "normal",
-            new Float32BufferAttribute(normals, 3),
-          );
+          geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+          geometry.setAttribute("normal", new Float32BufferAttribute(normals, 3));
           geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
           geometry.setIndex(indices);
           geometry.setDrawRange(0, 0);
@@ -238,8 +218,7 @@ export function createEffects(e) {
             (mesh.position.z += particle.vz * l),
             mesh.scale.addScalar(l * 0.72),
             camera && mesh.lookAt(camera.position),
-            (mesh.material.opacity =
-              Math.max(0, particle.life / particle.maxLife) * 0.46));
+            (mesh.material.opacity = Math.max(0, particle.life / particle.maxLife) * 0.46));
         }
       });
       n.forEach((e) => {
@@ -261,10 +240,7 @@ export function createEffects(e) {
             (e.mesh.rotation.x += l * 8),
             (e.mesh.rotation.z += l * 6),
             e.mesh.position.y < 0.1 &&
-              ((e.mesh.position.y = 0.1),
-              (e.vy *= -0.3),
-              (e.vx *= 0.5),
-              (e.vz *= 0.5)),
+              ((e.mesh.position.y = 0.1), (e.vy *= -0.3), (e.vx *= 0.5), (e.vz *= 0.5)),
             (e.mesh.visible = e.life > 0));
         }
       });
@@ -336,48 +312,19 @@ export function createEffects(e) {
             wheel.positions = positions;
             wheel.normals = normals;
             wheel.uvs = uvs;
-            wheel.geometry.setAttribute(
-              "position",
-              new Float32BufferAttribute(positions, 3),
-            );
-            wheel.geometry.setAttribute(
-              "normal",
-              new Float32BufferAttribute(normals, 3),
-            );
-            wheel.geometry.setAttribute(
-              "uv",
-              new Float32BufferAttribute(uvs, 2),
-            );
+            wheel.geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+            wheel.geometry.setAttribute("normal", new Float32BufferAttribute(normals, 3));
+            wheel.geometry.setAttribute("uv", new Float32BufferAttribute(uvs, 2));
             const indices = [];
             for (let k = 0; k < wheel.capacity; k++) {
               const base = k * 4;
-              indices.push(
-                base,
-                base + 2,
-                base + 1,
-                base + 1,
-                base + 2,
-                base + 3,
-              );
+              indices.push(base, base + 2, base + 1, base + 1, base + 2, base + 3);
             }
             wheel.geometry.setIndex(indices);
           }
           const offset = wheel.segments * 12;
           wheel.positions.set(
-            [
-              x1 + nx,
-              y,
-              z1 + nz,
-              x1 - nx,
-              y,
-              z1 - nz,
-              x2 + nx,
-              y,
-              z2 + nz,
-              x2 - nx,
-              y,
-              z2 - nz,
-            ],
+            [x1 + nx, y, z1 + nz, x1 - nx, y, z1 - nz, x2 + nx, y, z2 + nz, x2 - nx, y, z2 - nz],
             offset,
           );
           wheel.normals.fill(0, offset, offset + 12);
@@ -399,26 +346,12 @@ export function createEffects(e) {
         if (activeTrail) {
           for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
             const side = sideIndex === 0 ? -1 : 1;
-            const x =
-              e.x +
-              Math.sin(e.heading) * 1.45 +
-              Math.cos(e.heading) * side * 0.85;
-            const z =
-              e.z +
-              Math.cos(e.heading) * 1.45 -
-              Math.sin(e.heading) * side * 0.85;
+            const x = e.x + Math.sin(e.heading) * 1.45 + Math.cos(e.heading) * side * 0.85;
+            const z = e.z + Math.cos(e.heading) * 1.45 - Math.sin(e.heading) * side * 0.85;
             const y = (e.y || 0) + 0.09;
             const wheel = activeTrail.wheels[sideIndex];
             if (wheel.last) {
-              appendSkidSegment(
-                wheel,
-                wheel.last.x,
-                wheel.last.z,
-                x,
-                z,
-                y,
-                0.16,
-              );
+              appendSkidSegment(wheel, wheel.last.x, wheel.last.z, x, z, y, 0.16);
             }
             wheel.last = {
               x,
@@ -429,10 +362,8 @@ export function createEffects(e) {
         if (o > 0.045) {
           o = 0;
           for (let n of [-1, 1]) {
-            const r =
-              Math.sin(e.heading) * 1.45 + Math.cos(e.heading) * n * 0.85;
-            const a =
-              Math.cos(e.heading) * 1.45 - Math.sin(e.heading) * n * 0.85;
+            const r = Math.sin(e.heading) * 1.45 + Math.cos(e.heading) * n * 0.85;
+            const a = Math.cos(e.heading) * 1.45 - Math.sin(e.heading) * n * 0.85;
             const x = e.x + r;
             const z = e.z + a;
             const y = e.y || 0;
@@ -440,18 +371,10 @@ export function createEffects(e) {
             particle.maxLife = 0.9 + Math.random() * 0.55;
             particle.life = particle.maxLife;
             particle.mesh.position.set(x, y + 0.16 + Math.random() * 0.12, z);
-            particle.mesh.scale.set(
-              0.65 + Math.random() * 0.4,
-              0.5 + Math.random() * 0.3,
-              1,
-            );
-            particle.vx =
-              Math.sin(e.heading) * (0.25 + e.speed * 0.035) +
-              (Math.random() - 0.5) * 0.45;
+            particle.mesh.scale.set(0.65 + Math.random() * 0.4, 0.5 + Math.random() * 0.3, 1);
+            particle.vx = Math.sin(e.heading) * (0.25 + e.speed * 0.035) + (Math.random() - 0.5) * 0.45;
             particle.vy = 0.38 + Math.random() * 0.48;
-            particle.vz =
-              Math.cos(e.heading) * (0.25 + e.speed * 0.035) +
-              (Math.random() - 0.5) * 0.45;
+            particle.vz = Math.cos(e.heading) * (0.25 + e.speed * 0.035) + (Math.random() - 0.5) * 0.45;
             particle.mesh.material.opacity = 0.25 + Math.random() * 0.12;
           }
         }
@@ -466,11 +389,7 @@ export function createEffects(e) {
         const r = n[l++ % n.length];
         r.life = 1.5 + Math.random() * 0.5;
         r.vy = 0.8 + Math.random() * 0.6;
-        r.mesh.position.set(
-          e + (Math.random() - 0.5) * 2,
-          t + 0.5,
-          i + (Math.random() - 0.5) * 2,
-        );
+        r.mesh.position.set(e + (Math.random() - 0.5) * 2, t + 0.5, i + (Math.random() - 0.5) * 2);
         r.mesh.scale.setScalar(1 + Math.random());
       }
       for (let n = 0; n < 6; n++) {

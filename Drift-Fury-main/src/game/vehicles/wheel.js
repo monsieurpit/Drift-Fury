@@ -77,9 +77,7 @@ export function buildWheel(mats, o) {
         [rimR * 0.93, 0.014 * 1],
         [rimR * 0.93, -0.014],
       ];
-      g.add(
-        new Mesh(buildPrismGeometry(poly, xo * 0.56, xo * 0.78, ph), mats.rim),
-      );
+      g.add(new Mesh(buildPrismGeometry(poly, xo * 0.56, xo * 0.78, ph), mats.rim));
     }
   }
   // centre cap and lugs
@@ -99,16 +97,9 @@ export function buildWheel(mats, o) {
   g.add(cap);
   for (let k = 0; k < 5; k++) {
     const th = (k / 5) * Math.PI * 2;
-    const lug = new Mesh(
-      new CylinderGeometry(0.011, 0.011, 0.02, 6),
-      mats.dark,
-    );
+    const lug = new Mesh(new CylinderGeometry(0.011, 0.011, 0.02, 6), mats.dark);
     lug.rotation.z = Math.PI / 2;
-    lug.position.set(
-      xo * 0.66,
-      Math.sin(th) * rimR * 0.27,
-      Math.cos(th) * rimR * 0.27,
-    );
+    lug.position.set(xo * 0.66, Math.sin(th) * rimR * 0.27, Math.cos(th) * rimR * 0.27);
     g.add(lug);
   }
   // brake disc + caliper behind the spokes
@@ -131,12 +122,7 @@ export function buildWheel(mats, o) {
     [rimR * 0.84, 0.07],
     [rimR * 0.5, 0.075],
   ];
-  g.add(
-    new Mesh(
-      buildPrismGeometry(cal, xo * 0.08, xo * 0.4, o.calAng),
-      mats.caliper,
-    ),
-  );
+  g.add(new Mesh(buildPrismGeometry(cal, xo * 0.08, xo * 0.4, o.calAng), mats.caliper));
   return g;
 }
 

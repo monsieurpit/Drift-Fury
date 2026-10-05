@@ -64,10 +64,7 @@ export function createAudio(e) {
               (!i &&
                 e > 2300 &&
                 (o.shift(d.shiftDirection > 0),
-                s.bang?.(
-                  (d.shiftDirection > 0 ? 1 : 0.8) *
-                    Math.min(1.6, 0.6 + e / (d.redline || 7000)),
-                )),
+                s.bang?.((d.shiftDirection > 0 ? 1 : 0.8) * Math.min(1.6, 0.6 + e / (d.redline || 7000)))),
               (l = d.shiftSerial))));
       }
     },

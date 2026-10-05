@@ -8,9 +8,7 @@ export function Minimap({ hud: e }) {
   };
   return (
     <div className="hud-glass hidden w-[165px] p-3 sm:block">
-      <div className="mb-2 text-[9px] font-semibold uppercase tracking-widest text-[#a0b0b0]">
-        {e.zone}
-      </div>
+      <div className="mb-2 text-[9px] font-semibold uppercase tracking-widest text-[#a0b0b0]">{e.zone}</div>
       <svg viewBox="0 0 160 165" className="h-[160px] w-full">
         <rect width="160" height="165" rx="6" fill="#1d2d2d" />
         <path
@@ -31,31 +29,14 @@ export function Minimap({ hud: e }) {
           );
         })}
         {FUEL_STATIONS.map((e, r) => {
-          return (
-            <rect
-              x={t(e.x) - 2}
-              y={n(e.z) - 2}
-              width="4"
-              height="4"
-              fill="#c6dc77"
-              key={r}
-            />
-          );
+          return <rect x={t(e.x) - 2} y={n(e.z) - 2} width="4" height="4" fill="#c6dc77" key={r} />;
         })}
         {e.police?.map((r, i) => {
           return (
-            <circle
-              cx={t(r.x)}
-              cy={n(r.z)}
-              r="2.5"
-              fill={e.wanted > 0.15 ? "#f77d69" : "#77b5f7"}
-              key={i}
-            />
+            <circle cx={t(r.x)} cy={n(r.z)} r="2.5" fill={e.wanted > 0.15 ? "#f77d69" : "#77b5f7"} key={i} />
           );
         })}
-        <g
-          transform={`translate(${t(e.x)} ${n(e.z)}) rotate(${(-e.heading * 180) / Math.PI})`}
-        >
+        <g transform={`translate(${t(e.x)} ${n(e.z)}) rotate(${(-e.heading * 180) / Math.PI})`}>
           <circle r="7" fill="#c6dc77" opacity=".15" />
           <path d="M0 -5 L3 4 L0 2 L-3 4Z" fill="#e8f7b8" />
         </g>

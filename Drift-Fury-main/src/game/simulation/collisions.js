@@ -24,8 +24,7 @@ export function collideOrientedBoxes(e, t) {
     const p =
       e.hw * Math.abs(u * e.cos - d * e.sin) +
       e.hl * Math.abs(u * e.sin + d * e.cos) +
-      (t.hw * Math.abs(u * t.cos - d * t.sin) +
-        t.hl * Math.abs(u * t.sin + d * t.cos)) -
+      (t.hw * Math.abs(u * t.cos - d * t.sin) + t.hl * Math.abs(u * t.sin + d * t.cos)) -
       Math.abs(f);
     if (p < i) {
       i = p;
@@ -74,10 +73,7 @@ export function createCarFootprint(x, z, heading, profile) {
     for (const [station, halfWidth] of stations) {
       const localX = side * halfWidth;
       const localZ = station - profile.length / 2;
-      vertices.push([
-        x + localX * cos + localZ * sin,
-        z - localX * sin + localZ * cos,
-      ]);
+      vertices.push([x + localX * cos + localZ * sin, z - localX * sin + localZ * cos]);
     }
   };
   addSide(1, false);
@@ -116,15 +112,12 @@ export function collideFootprintWithBox(car, box) {
     }
     const boxCenter = box.x * axisX + box.z * axisZ;
     const boxRadius = box.w * Math.abs(axisX) + box.d * Math.abs(axisZ);
-    const overlap =
-      Math.min(carMax, boxCenter + boxRadius) -
-      Math.max(carMin, boxCenter - boxRadius);
+    const overlap = Math.min(carMax, boxCenter + boxRadius) - Math.max(carMin, boxCenter - boxRadius);
     if (overlap <= 0) {
       return null;
     }
     if (overlap < minOverlap) {
-      const direction =
-        boxCenter - (car.x * axisX + car.z * axisZ) < 0 ? -1 : 1;
+      const direction = boxCenter - (car.x * axisX + car.z * axisZ) < 0 ? -1 : 1;
       minOverlap = overlap;
       nx = axisX * direction;
       nz = axisZ * direction;

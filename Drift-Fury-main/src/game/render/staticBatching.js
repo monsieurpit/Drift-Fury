@@ -1,23 +1,9 @@
-import {
-  Mesh,
-  Sphere,
-  Matrix4,
-  Matrix3,
-  Vector3,
-  BufferGeometry,
-  BufferAttribute,
-} from "three";
+import { Mesh, Sphere, Matrix4, Matrix3, Vector3, BufferGeometry, BufferAttribute } from "three";
 /* ---- static batching: merge never-moving meshes that share an identical material into one draw per area ---- */
 function materialKey(material, ids) {
   const parts = [];
   for (const key of Object.keys(material).sort()) {
-    if (
-      key === "uuid" ||
-      key === "name" ||
-      key === "version" ||
-      key === "userData" ||
-      key === "_listeners"
-    ) {
+    if (key === "uuid" || key === "name" || key === "version" || key === "userData" || key === "_listeners") {
       continue;
     }
     const value = material[key];
@@ -48,12 +34,7 @@ function materialKey(material, ids) {
   }
   return parts.join("|");
 }
-export function batchStaticMeshes(
-  root,
-  keepMaterials = new Set(),
-  cellSize = 48,
-  skip = new Set(),
-) {
+export function batchStaticMeshes(root, keepMaterials = new Set(), cellSize = 48, skip = new Set()) {
   root.updateMatrixWorld(true);
   const canonical = new Map();
   const objectIds = new Map();
@@ -100,15 +81,10 @@ export function batchStaticMeshes(
     ) {
       return false;
     }
-    if (
-      geometry.drawRange.start !== 0 ||
-      geometry.drawRange.count !== Infinity
-    ) {
+    if (geometry.drawRange.start !== 0 || geometry.drawRange.count !== Infinity) {
       return false;
     }
-    const materials = Array.isArray(object.material)
-      ? object.material
-      : [object.material];
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
     if (
       materials.some((material) => {
         return !material || material.transparent;
@@ -160,9 +136,7 @@ export function batchStaticMeshes(
     }
     const geometry = object.geometry;
     const names = Object.keys(geometry.attributes).sort();
-    const matrix = relative
-      .multiplyMatrices(rootInverse, object.matrixWorld)
-      .clone();
+    const matrix = relative.multiplyMatrices(rootInverse, object.matrixWorld).clone();
     if (!geometry.boundingSphere) {
       geometry.computeBoundingSphere();
     }
@@ -172,9 +146,7 @@ export function batchStaticMeshes(
         return name + geometry.attributes[name].itemSize;
       })
       .join(",");
-    const total = geometry.index
-      ? geometry.index.count
-      : geometry.attributes.position.count;
+    const total = geometry.index ? geometry.index.count : geometry.attributes.position.count;
     const pieces = Array.isArray(object.material)
       ? geometry.groups.map((group) => {
           return {
@@ -248,14 +220,10 @@ export function batchStaticMeshes(
     const arrays = {};
     for (const name of group.names) {
       arrays[name] = new Float32Array(
-        group.vertices *
-          group.items[0].object.geometry.attributes[name].itemSize,
+        group.vertices * group.items[0].object.geometry.attributes[name].itemSize,
       );
     }
-    const indices =
-      group.vertices > 65535
-        ? new Uint32Array(group.indices)
-        : new Uint16Array(group.indices);
+    const indices = group.vertices > 65535 ? new Uint32Array(group.indices) : new Uint16Array(group.indices);
     let vertexOffset = 0;
     let indexOffset = 0;
     for (const { object, matrix, start, count: pieceCount } of group.items) {
@@ -279,10 +247,7 @@ export function batchStaticMeshes(
             target[(vertexOffset + index) * 3 + 2] = vector.z;
           }
         } else {
-          target.set(
-            source.array.subarray(0, count * size),
-            vertexOffset * size,
-          );
+          target.set(source.array.subarray(0, count * size), vertexOffset * size);
         }
       }
       const flip = matrix.determinant() < 0;
@@ -292,10 +257,8 @@ export function batchStaticMeshes(
       };
       for (let index = start; index + 2 < start + pieceCount; index += 3) {
         indices[indexOffset++] = at(index) + vertexOffset;
-        indices[indexOffset++] =
-          at(flip ? index + 2 : index + 1) + vertexOffset;
-        indices[indexOffset++] =
-          at(flip ? index + 1 : index + 2) + vertexOffset;
+        indices[indexOffset++] = at(flip ? index + 2 : index + 1) + vertexOffset;
+        indices[indexOffset++] = at(flip ? index + 1 : index + 2) + vertexOffset;
       }
       vertexOffset += count;
     }
@@ -303,19 +266,11 @@ export function batchStaticMeshes(
     for (const name of group.names) {
       geometry.setAttribute(
         name,
-        new BufferAttribute(
-          arrays[name],
-          group.items[0].object.geometry.attributes[name].itemSize,
-        ),
+        new BufferAttribute(arrays[name], group.items[0].object.geometry.attributes[name].itemSize),
       );
     }
     geometry.setIndex(
-      new BufferAttribute(
-        indexOffset === indices.length
-          ? indices
-          : indices.slice(0, indexOffset),
-        1,
-      ),
+      new BufferAttribute(indexOffset === indices.length ? indices : indices.slice(0, indexOffset), 1),
     );
     geometry.computeBoundingSphere();
     geometry.computeBoundingBox();
@@ -359,10 +314,7 @@ export function batchStaticMeshes(
           );
           object.geometry = object.geometry.clone();
           object.geometry.groups = object.geometry.groups.filter((entry) => {
-            return (
-              !merged.has(entry.start) ||
-              object.material[entry.materialIndex] === undefined
-            );
+            return !merged.has(entry.start) || object.material[entry.materialIndex] === undefined;
           });
         }
       }

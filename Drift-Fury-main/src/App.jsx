@@ -1,6 +1,6 @@
 import { Routes, Route, BrowserRouter } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { ScrollToTop } from "./components/ScrollToTop.js";
+import { ScrollToTop } from "./components/ScrollToTop.jsx";
 import { UserNotRegisteredError } from "./components/UserNotRegisteredError.jsx";
 import { Toaster } from "./components/ui/toaster.jsx";
 import { AuthProvider, useAuth } from "./lib/AuthContext.jsx";
@@ -8,25 +8,20 @@ import { queryClientInstance } from "./lib/query-client.js";
 import { GamePage } from "./pages/GamePage.jsx";
 import { PageNotFound } from "./pages/PageNotFound.jsx";
 const AuthenticatedApp = () => {
-  const {
-    isLoadingAuth: e,
-    isLoadingPublicSettings: t,
-    authError: n,
-    navigateToLogin: r,
-  } = useAuth();
-  if (t || e) {
+  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin" />
       </div>
     );
   }
-  if (n) {
-    if (n.type === "user_not_registered") {
+  if (authError) {
+    if (authError.type === "user_not_registered") {
       return <UserNotRegisteredError />;
     }
-    if (n.type === "auth_required") {
-      r();
+    if (authError.type === "auth_required") {
+      navigateToLogin();
       return null;
     }
   }

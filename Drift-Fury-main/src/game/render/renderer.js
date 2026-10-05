@@ -35,9 +35,7 @@ function createComposer(e, t, n, r, i, a) {
   return o;
 }
 export function createRenderer(e, t = false) {
-  const lowPower = !!(
-    navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4
-  );
+  const lowPower = !!(navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
   const n = new Scene();
   n.background = new Color(t ? "#070b14" : "#0d1520");
   n.fog = new Fog(t ? "#223a4d" : "#35506b", t ? 130 : 74, t ? 1050 : 980);
@@ -51,9 +49,7 @@ export function createRenderer(e, t = false) {
   try {
     r.outputColorSpace = "srgb";
   } catch (e) {}
-  const i = !!(
-    window.matchMedia && window.matchMedia("(pointer: coarse)").matches
-  );
+  const i = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
   if (lowPower) {
     r.shadowMap.enabled = false;
     r.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
@@ -70,19 +66,8 @@ export function createRenderer(e, t = false) {
   }
   e.appendChild(r.domElement);
   r.domElement.className = t ? "game-canvas" : "game-canvas-preview";
-  const a = new PerspectiveCamera(
-    45,
-    e.clientWidth / e.clientHeight,
-    0.1,
-    1200,
-  );
-  n.add(
-    new HemisphereLight(
-      t ? "#a1bfdc" : "#dfeaf8",
-      t ? "#1a2418" : "#101a22",
-      t ? 0.78 : 1.15,
-    ),
-  );
+  const a = new PerspectiveCamera(45, e.clientWidth / e.clientHeight, 0.1, 1200);
+  n.add(new HemisphereLight(t ? "#a1bfdc" : "#dfeaf8", t ? "#1a2418" : "#101a22", t ? 0.78 : 1.15));
   const o = new AmbientLight(t ? "#3d536d" : "#78879a", t ? 0.38 : 0.58);
   n.add(o);
   const s = new DirectionalLight(t ? "#a9c5e8" : "#f6d7a8", t ? 2.2 : 3.2);
@@ -139,14 +124,7 @@ export function createRenderer(e, t = false) {
     moonGlow.addColorStop(1, "rgba(80,115,170,0)");
     u.fillStyle = moonGlow;
     u.fillRect(moonX - 150, moonY - 150, 300, 300);
-    const moonDisk = u.createRadialGradient(
-      moonX - 7,
-      moonY - 8,
-      1,
-      moonX,
-      moonY,
-      22,
-    );
+    const moonDisk = u.createRadialGradient(moonX - 7, moonY - 8, 1, moonX, moonY, 22);
     moonDisk.addColorStop(0, "rgba(223,232,245,0.9)");
     moonDisk.addColorStop(0.8, "rgba(185,203,229,0.82)");
     moonDisk.addColorStop(1, "rgba(153,178,211,0)");
@@ -177,22 +155,9 @@ export function createRenderer(e, t = false) {
           const px = cx + (random() - 0.5) * width * 1.8;
           const py = cy + (random() - 0.5) * width * 0.42;
           const radius = 22 + random() * (band === 0 ? 56 : 34);
-          const cloud = u.createRadialGradient(
-            px,
-            py,
-            radius * 0.08,
-            px,
-            py,
-            radius,
-          );
-          cloud.addColorStop(
-            0,
-            band === 1 ? "rgba(111,137,176,0.16)" : "rgba(156,177,207,0.12)",
-          );
-          cloud.addColorStop(
-            0.42,
-            band === 1 ? "rgba(91,119,160,0.09)" : "rgba(117,143,181,0.07)",
-          );
+          const cloud = u.createRadialGradient(px, py, radius * 0.08, px, py, radius);
+          cloud.addColorStop(0, band === 1 ? "rgba(111,137,176,0.16)" : "rgba(156,177,207,0.12)");
+          cloud.addColorStop(0.42, band === 1 ? "rgba(91,119,160,0.09)" : "rgba(117,143,181,0.07)");
           cloud.addColorStop(1, "rgba(70,96,137,0)");
           u.fillStyle = cloud;
           u.fillRect(px - radius, py - radius, radius * 2, radius * 2);
@@ -205,14 +170,7 @@ export function createRenderer(e, t = false) {
       const length = 70 + random() * 250;
       u.beginPath();
       u.moveTo(x, y);
-      u.bezierCurveTo(
-        x + length * 0.3,
-        y - 8,
-        x + length * 0.7,
-        y + 8,
-        x + length,
-        y - 2,
-      );
+      u.bezierCurveTo(x + length * 0.3, y - 8, x + length * 0.7, y + 8, x + length, y - 2);
       u.strokeStyle = `rgba(145,169,203,${0.012 + random() * 0.022})`;
       u.lineWidth = 3 + random() * 9;
       u.stroke();
@@ -239,12 +197,7 @@ export function createRenderer(e, t = false) {
           skylineSeed = (skylineSeed * 48271) % 2147483647;
           if (skylineSeed % 5 === 0) {
             u.fillStyle = "rgba(255,190,130,0.38)";
-            u.fillRect(
-              buildingX + 4 + column * 7,
-              267 - buildingHeight + row * 7,
-              2,
-              3,
-            );
+            u.fillRect(buildingX + 4 + column * 7, 267 - buildingHeight + row * 7, 2, 3);
           }
         }
       }
@@ -272,22 +225,12 @@ export function createRenderer(e, t = false) {
     n.background = p;
   }
   m.dispose();
-  const h = createComposer(
-    r,
-    n,
-    a,
-    e.clientWidth,
-    e.clientHeight,
-    t ? 0.75 : 0.5,
-  );
+  const h = createComposer(r, n, a, e.clientWidth, e.clientHeight, t ? 0.75 : 0.5);
   const g = new ResizeObserver(() => {
     const t = e.clientWidth;
     const n = e.clientHeight;
     if (t && n) {
-      (r.setSize(t, n),
-        (a.aspect = t / n),
-        a.updateProjectionMatrix(),
-        h.setSize(t, n));
+      (r.setSize(t, n), (a.aspect = t / n), a.updateProjectionMatrix(), h.setSize(t, n));
     }
   });
   g.observe(e);
@@ -303,11 +246,9 @@ export function createRenderer(e, t = false) {
       n.traverse((e) => {
         e.geometry?.dispose();
         if (e.material) {
-          (Array.isArray(e.material) ? e.material : [e.material]).forEach(
-            (e) => {
-              return e.dispose();
-            },
-          );
+          (Array.isArray(e.material) ? e.material : [e.material]).forEach((e) => {
+            return e.dispose();
+          });
         }
       });
       h.dispose();

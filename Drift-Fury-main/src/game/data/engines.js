@@ -58,7 +58,6 @@ export const ENGINES = [
     consumption: 0.34,
     pitch: 36,
     price: 0,
-    description:
-      "Rauque et monstrueux. Accélération brute, consommation extrême.",
+    description: "Rauque et monstrueux. Accélération brute, consommation extrême.",
   },
 ];

@@ -22,17 +22,14 @@ export function GarageScreen({
           <div>
             <div className="mb-3 flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-[#c6dc77]" />
-              <span className="eyebrow !text-[#b3c578]">
-                LE GARAGE / SESSION LIBRE
-              </span>
+              <span className="eyebrow !text-[#b3c578]">LE GARAGE / SESSION LIBRE</span>
             </div>
             <h1 className="race-title text-5xl md:text-[64px]">
               {"LA NUIT VOUS "}
               <span className="text-[#c6dc77]">APPARTIENT.</span>
             </h1>
             <p className="mt-3 text-[12px] leading-6 text-[#8f989b]">
-              Trouvez votre trajectoire. Faites monter le score. Semez la
-              police.
+              Trouvez votre trajectoire. Faites monter le score. Semez la police.
             </p>
           </div>
           <div className="hidden items-center gap-3 pb-1 md:flex">
@@ -41,9 +38,7 @@ export function GarageScreen({
               <p className="eyebrow !text-[8px]">Meilleur drift</p>
               <p className="mt-1 text-sm font-semibold">
                 {Math.floor(e.best).toLocaleString("fr-FR")}{" "}
-                <span className="text-[10px] font-normal text-[#748081]">
-                  PTS
-                </span>
+                <span className="text-[10px] font-normal text-[#748081]">PTS</span>
               </p>
             </div>
           </div>
@@ -53,9 +48,7 @@ export function GarageScreen({
             <CarPreview car={t} />
             <div className="absolute left-6 top-6">
               <p className="eyebrow !text-[9px]">SÉLECTION ACTUELLE</p>
-              <h2 className="race-title mt-2 text-[40px]">
-                {t.name.toUpperCase()}
-              </h2>
+              <h2 className="race-title mt-2 text-[40px]">{t.name.toUpperCase()}</h2>
               <span className="mt-3 inline-block rounded border border-white/15 bg-[#101315]/60 px-2 py-1 text-[9px] tracking-[.14em] text-[#aab4b5]">
                 {n.id}
                 {" • PROPULSION"}
@@ -91,14 +84,7 @@ export function GarageScreen({
               </button>
             </div>
           </div>
-          <LoadoutPanel
-            car={t}
-            engine={n}
-            onGarage={r}
-            onStart={i}
-            noPolice={s}
-            onToggleNoPolice={c}
-          />
+          <LoadoutPanel car={t} engine={n} onGarage={r} onStart={i} noPolice={s} onToggleNoPolice={c} />
         </div>
         <ZoneCards />
         <footer className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-5">

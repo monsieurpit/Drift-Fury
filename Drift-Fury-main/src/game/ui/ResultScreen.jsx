@@ -1,10 +1,5 @@
 import React from "react";
-import {
-  ShieldAlertIcon,
-  TrophyIcon,
-  CoinsIcon,
-  ArrowUpRightIcon,
-} from "lucide-react";
+import { ShieldAlertIcon, TrophyIcon, CoinsIcon, ArrowUpRightIcon } from "lucide-react";
 export function ResultScreen({ result: e, onReturn: t }) {
   const [n, r] = React.useState(9);
   React.useEffect(() => {
@@ -38,23 +33,16 @@ export function ResultScreen({ result: e, onReturn: t }) {
         <div className="garage-panel mt-8 grid grid-cols-2 divide-x divide-white/10 py-6">
           <div>
             <TrophyIcon className="mx-auto text-[#c6dc77]" size={20} />
-            <p className="race-title mt-3 text-4xl">
-              {Math.floor(e.score).toLocaleString("fr-FR")}
-            </p>
+            <p className="race-title mt-3 text-4xl">{Math.floor(e.score).toLocaleString("fr-FR")}</p>
             <p className="eyebrow mt-2 !text-[8px]">POINTS DE DRIFT</p>
           </div>
           <div>
             <CoinsIcon className="mx-auto text-[#c6dc77]" size={20} />
-            <p className="race-title mt-3 text-4xl">
-              +{e.credits.toLocaleString("fr-FR")}
-            </p>
+            <p className="race-title mt-3 text-4xl">+{e.credits.toLocaleString("fr-FR")}</p>
             <p className="eyebrow mt-2 !text-[8px]">CRÉDITS GAGNÉS</p>
           </div>
         </div>
-        <button
-          onClick={t}
-          className="lime-button mt-6 flex w-full items-center justify-between p-4 text-xs"
-        >
+        <button onClick={t} className="lime-button mt-6 flex w-full items-center justify-between p-4 text-xs">
           RETOURNER AU GARAGE
           <ArrowUpRightIcon size={20} />
         </button>

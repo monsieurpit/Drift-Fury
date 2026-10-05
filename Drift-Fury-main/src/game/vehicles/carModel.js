@@ -14,16 +14,8 @@ import {
   CanvasTexture,
   Shape,
 } from "three";
-import {
-  createExtrudedMesh,
-  mergeChildrenByMaterial,
-} from "../render/meshUtils.js";
-import {
-  buildCapGeometry,
-  buildGridGeometries,
-  computeGridNormals,
-  createGeometry,
-} from "./carGeometry.js";
+import { createExtrudedMesh, mergeChildrenByMaterial } from "../render/meshUtils.js";
+import { buildCapGeometry, buildGridGeometries, computeGridNormals, createGeometry } from "./carGeometry.js";
 import { getCarShadowTexture } from "./carShadow.js";
 import { buildCarSpec } from "./carSpecs.js";
 import {
@@ -37,13 +29,7 @@ import {
 } from "./carSurface.js";
 import { buildWheel } from "./wheel.js";
 /* ---------------------------------------------------------------- the car */
-export function buildCar(
-  e = "#a9b7bf",
-  t = "coupe",
-  n = false,
-  r = false,
-  hi = false,
-) {
+export function buildCar(e = "#a9b7bf", t = "coupe", n = false, r = false, hi = false) {
   const i = new Group();
   const sp = buildCarSpec(t);
   const L = sp.L;
@@ -226,23 +212,13 @@ export function buildCar(
     return fold14(p[2]);
   });
   const inArch = (z) => {
-    return (
-      Math.abs(z - sp.axF) < sp.arch + 0.03 ||
-      Math.abs(z - sp.axR) < sp.arch + 0.03
-    );
+    return Math.abs(z - sp.axF) < sp.arch + 0.03 || Math.abs(z - sp.axR) < sp.arch + 0.03;
   };
   const bodyGeos = buildGridGeometries(PB, NB, nzB, nr, (ii, j) => {
     const zf = (rb[ii] + rb[ii + 1]) / 2;
     const j1 = (j + 1) % nr;
     const sf = (sfB[j] + sfB[j1]) / 2;
-    if (
-      detail &&
-      zf > doorA &&
-      zf < doorC &&
-      sf >= 2.35 &&
-      sf <= 4.9 &&
-      ring0[j][0] + ring0[j1][0] < -0.05
-    ) {
+    if (detail && zf > doorA && zf < doorC && sf >= 2.35 && sf <= 4.9 && ring0[j][0] + ring0[j1][0] < -0.05) {
       return null;
     }
     if (sf < 1.5) {
@@ -326,14 +302,7 @@ export function buildCar(
     const zf = (rc[ii] + rc[ii + 1]) / 2;
     const j1 = (j + 1) % ncr;
     const sf = (sfC[j] + sfC[j1]) / 2;
-    if (
-      detail &&
-      zf > doorA &&
-      zf < doorC &&
-      sf >= 2 &&
-      sf <= 4.5 &&
-      ringC0[j][0] + ringC0[j1][0] < -0.05
-    ) {
+    if (detail && zf > doorA && zf < doorC && sf >= 2 && sf <= 4.5 && ringC0[j][0] + ringC0[j1][0] < -0.05) {
       return null;
     }
     if (sf < 1.3) {
@@ -420,18 +389,8 @@ export function buildCar(
       parent.add(mesh);
       return mesh;
     };
-    const cabinCylinder = (
-      material,
-      radius,
-      length,
-      pos,
-      rot = null,
-      parent = cabin,
-    ) => {
-      const mesh = new Mesh(
-        new CylinderGeometry(radius, radius, length, 20),
-        material,
-      );
+    const cabinCylinder = (material, radius, length, pos, rot = null, parent = cabin) => {
+      const mesh = new Mesh(new CylinderGeometry(radius, radius, length, 20), material);
       mesh.position.set(...pos);
       if (rot) {
         mesh.rotation.set(...rot);
@@ -451,73 +410,22 @@ export function buildCar(
       cabin.add(seat);
       cabinBox(upholstery, [0.5, 0.13, 0.53], [0, 0.32, 0], null, seat);
       cabinBox(softLeather, [0.4, 0.09, 0.4], [0, 0.39, -0.025], null, seat);
-      cabinBox(
-        upholstery,
-        [0.48, 0.47, 0.13],
-        [0, 0.61, 0.205],
-        [-0.08, 0, 0],
-        seat,
-      );
-      cabinBox(
-        softLeather,
-        [0.34, 0.32, 0.025],
-        [0, 0.62, 0.132],
-        [-0.08, 0, 0],
-        seat,
-      );
+      cabinBox(upholstery, [0.48, 0.47, 0.13], [0, 0.61, 0.205], [-0.08, 0, 0], seat);
+      cabinBox(softLeather, [0.34, 0.32, 0.025], [0, 0.62, 0.132], [-0.08, 0, 0], seat);
       for (const sx of [-1, 1]) {
-        cabinBox(
-          softLeather,
-          [0.07, 0.42, 0.17],
-          [sx * 0.205, 0.61, 0.19],
-          [-0.08, 0, 0],
-          seat,
-        );
-        cabinBox(
-          upholstery,
-          [0.075, 0.17, 0.38],
-          [sx * 0.215, 0.39, 0],
-          null,
-          seat,
-        );
+        cabinBox(softLeather, [0.07, 0.42, 0.17], [sx * 0.205, 0.61, 0.19], [-0.08, 0, 0], seat);
+        cabinBox(upholstery, [0.075, 0.17, 0.38], [sx * 0.215, 0.39, 0], null, seat);
       }
       cabinBox(upholstery, [0.24, 0.15, 0.12], [0, 0.91, 0.24], null, seat);
       for (const sx of [-1, 1]) {
-        cabinCylinder(
-          cabinMetal,
-          0.012,
-          0.13,
-          [sx * 0.075, 0.84, 0.24],
-          null,
-          seat,
-        );
+        cabinCylinder(cabinMetal, 0.012, 0.13, [sx * 0.075, 0.84, 0.24], null, seat);
       }
     }
     const dashZ = cb.ws - hl + 0.02;
-    cabinBox(
-      upholstery,
-      [1.53, 0.19, 0.25],
-      [0, 0.69, dashZ + 0.2],
-      [-0.12, 0, 0],
-    );
-    cabinBox(
-      softLeather,
-      [1.46, 0.035, 0.19],
-      [0, 0.8, dashZ + 0.2],
-      [-0.12, 0, 0],
-    );
-    cabinBox(
-      cabinMetal,
-      [0.39, 0.105, 0.018],
-      [0.35, 0.73, dashZ + 0.065],
-      [-0.1, 0, 0],
-    );
-    cabinBox(
-      display,
-      [0.34, 0.075, 0.014],
-      [0.35, 0.74, dashZ + 0.052],
-      [-0.1, 0, 0],
-    );
+    cabinBox(upholstery, [1.53, 0.19, 0.25], [0, 0.69, dashZ + 0.2], [-0.12, 0, 0]);
+    cabinBox(softLeather, [1.46, 0.035, 0.19], [0, 0.8, dashZ + 0.2], [-0.12, 0, 0]);
+    cabinBox(cabinMetal, [0.39, 0.105, 0.018], [0.35, 0.73, dashZ + 0.065], [-0.1, 0, 0]);
+    cabinBox(display, [0.34, 0.075, 0.014], [0.35, 0.74, dashZ + 0.052], [-0.1, 0, 0]);
     cabinBox(cabinChrome, [0.49, 0.018, 0.018], [0.35, 0.665, dashZ + 0.05]);
     for (const side of [-1, 1]) {
       const dial = new Mesh(new TorusGeometry(0.064, 0.009, 8, 24), cabinMetal);
@@ -534,48 +442,18 @@ export function buildCar(
     steering.rotation.y = Math.PI;
     cabin.add(steering);
     steering.add(new Mesh(new TorusGeometry(0.17, 0.021, 10, 36), upholstery));
-    cabinCylinder(
-      cabinChrome,
-      0.038,
-      0.045,
-      [0, 0, 0],
-      [Math.PI / 2, 0, 0],
-      steering,
-    );
+    cabinCylinder(cabinChrome, 0.038, 0.045, [0, 0, 0], [Math.PI / 2, 0, 0], steering);
     for (let spoke = 0; spoke < 3; spoke++) {
-      const bar = cabinBox(
-        cabinChrome,
-        [0.016, 0.135, 0.014],
-        [0, 0, 0],
-        null,
-        steering,
-      );
+      const bar = cabinBox(cabinChrome, [0.016, 0.135, 0.014], [0, 0, 0], null, steering);
       bar.rotation.z = (spoke * Math.PI * 2) / 3;
     }
-    cabinBox(
-      upholstery,
-      [0.09, 0.09, 0.24],
-      [-0.4, 0.56, dashZ + 0.56],
-      [-0.27, 0, 0],
-    );
+    cabinBox(upholstery, [0.09, 0.09, 0.24], [-0.4, 0.56, dashZ + 0.56], [-0.27, 0, 0]);
     cabinBox(upholstery, [0.3, 0.105, 0.98], [0.05, 0.34, 0.26], [-0.06, 0, 0]);
-    cabinBox(
-      softLeather,
-      [0.28, 0.035, 0.68],
-      [0.05, 0.405, 0.22],
-      [-0.06, 0, 0],
-    );
+    cabinBox(softLeather, [0.28, 0.035, 0.68], [0.05, 0.405, 0.22], [-0.06, 0, 0]);
     const gearLever = new Group();
     gearLever.position.set(0.13, 0.4, 0.12);
     cabin.add(gearLever);
-    cabinCylinder(
-      cabinChrome,
-      0.014,
-      0.16,
-      [0, 0.075, 0],
-      [-0.32, 0, 0],
-      gearLever,
-    );
+    cabinCylinder(cabinChrome, 0.014, 0.16, [0, 0.075, 0], [-0.32, 0, 0], gearLever);
     const gearKnob = new Mesh(new SphereGeometry(0.043, 14, 10), upholstery);
     gearKnob.position.set(0, 0.15, -0.025);
     gearLever.add(gearKnob);
@@ -583,13 +461,7 @@ export function buildCar(
     handbrake.position.set(-0.1, 0.4, 0.25);
     cabin.add(handbrake);
     cabinCylinder(cabinMetal, 0.013, 0.2, [0, 0.1, 0], [-0.3, 0, 0], handbrake);
-    cabinBox(
-      upholstery,
-      [0.065, 0.04, 0.095],
-      [0, 0.2, -0.045],
-      null,
-      handbrake,
-    );
+    cabinBox(upholstery, [0.065, 0.04, 0.095], [0, 0.2, -0.045], null, handbrake);
     for (const [px, width] of [
       [-0.59, 0.085],
       [-0.43, 0.105],
@@ -598,21 +470,9 @@ export function buildCar(
       const pedal = new Group();
       pedal.position.set(px, 0.245, dashZ + 0.53);
       cabin.add(pedal);
-      cabinBox(
-        cabinMetal,
-        [width, 0.13, 0.025],
-        [0, 0, -0.025],
-        [-0.2, 0, 0],
-        pedal,
-      );
+      cabinBox(cabinMetal, [width, 0.13, 0.025], [0, 0, -0.025], [-0.2, 0, 0], pedal);
       for (let line = -1; line <= 1; line++) {
-        cabinBox(
-          upholstery,
-          [width * 0.68, 0.009, 0.008],
-          [0, line * 0.033, -0.041],
-          null,
-          pedal,
-        );
+        cabinBox(upholstery, [width * 0.68, 0.009, 0.008], [0, line * 0.033, -0.041], null, pedal);
       }
     }
   }
@@ -626,21 +486,9 @@ export function buildCar(
     hx /= hn;
     hy /= hn;
     accessDoor = new Group();
-    accessDoor.position.set(
-      -(hingeP[0] + hx * 0.008),
-      hingeP[1] + hy * 0.008,
-      doorA - hl,
-    );
+    accessDoor.position.set(-(hingeP[0] + hx * 0.008), hingeP[1] + hy * 0.008, doorA - hl);
     i.add(accessDoor);
-    const buildDoorSurface = (
-      zStart,
-      zEnd,
-      sfStart,
-      sfEnd,
-      cabinSurface,
-      material,
-      offset,
-    ) => {
+    const buildDoorSurface = (zStart, zEnd, sfStart, sfEnd, cabinSurface, material, offset) => {
       const nz = 18;
       const ns = 12;
       const positions = [];
@@ -679,15 +527,7 @@ export function buildCar(
       mesh.receiveShadow = true;
       accessDoor.add(mesh);
     };
-    buildDoorSurface(
-      doorA + 0.015,
-      doorC - 0.015,
-      2.38,
-      4.62,
-      false,
-      paint,
-      0.014,
-    );
+    buildDoorSurface(doorA + 0.015, doorC - 0.015, 2.38, 4.62, false, paint, 0.014);
     buildDoorSurface(
       doorA + 0.045,
       doorC - 0.045,
@@ -745,16 +585,7 @@ export function buildCar(
     const outer = sp.hw(za) * 0.925 - 0.01;
     const wid = 0.5;
     const liner = new Mesh(
-      new CylinderGeometry(
-        sp.arch - 0.012,
-        sp.arch - 0.012,
-        wid,
-        30,
-        1,
-        true,
-        -0.6,
-        Math.PI + 1.2,
-      ),
+      new CylinderGeometry(sp.arch - 0.012, sp.arch - 0.012, wid, 30, 1, true, -0.6, Math.PI + 1.2),
       linerMat,
     );
     liner.rotation.z = Math.PI / 2;
@@ -807,20 +638,10 @@ export function buildCar(
   for (const sd of [-1, 1]) {
     if (!(detail && sd < 0)) {
       for (const zl of [doorA, doorC]) {
-        addMesh(
-          ribbonAcross(sp, zl, 2.35, 4.9, 0.012, 0.0025, sd, hl),
-          lineMat,
-          false,
-          false,
-        );
+        addMesh(ribbonAcross(sp, zl, 2.35, 4.9, 0.012, 0.0025, sd, hl), lineMat, false, false);
       }
     }
-    addMesh(
-      ribbonAlong(sp, 5.6, 0.05, 0.45, cbz.ws - 0.03, 0.002, sd, hl),
-      lineMat,
-      false,
-      false,
-    );
+    addMesh(ribbonAlong(sp, 5.6, 0.05, 0.45, cbz.ws - 0.03, 0.002, sd, hl), lineMat, false, false);
     // door handle
     if (!(detail && sd < 0)) {
       const hS = surfacePoint(sp, doorC - 0.3, 4.15, sd);
@@ -840,18 +661,8 @@ export function buildCar(
     i.add(stalk);
     stalk.position.set(sd * (wbM + 0.07), yM, zM - hl);
   }
-  addMesh(
-    ribbonAcross(sp, 0.55, 5, 7, 0.01, 0.002, 1, hl),
-    lineMat,
-    false,
-    false,
-  );
-  addMesh(
-    ribbonAcross(sp, 0.55, 5, 7, 0.01, 0.002, -1, hl),
-    lineMat,
-    false,
-    false,
-  );
+  addMesh(ribbonAcross(sp, 0.55, 5, 7, 0.01, 0.002, 1, hl), lineMat, false, false);
+  addMesh(ribbonAcross(sp, 0.55, 5, 7, 0.01, 0.002, -1, hl), lineMat, false, false);
 
   /* headlights */
   for (const sd of [-1, 1]) {
@@ -952,12 +763,7 @@ export function buildCar(
     glow.position.set(0, yr + 0.1, zc - hl);
     i.add(glow);
     for (const sd of [-1, 1]) {
-      addMesh(
-        ribbonAlong(sp, 3.3, 1, doorA + 0.02, doorC - 0.02, 0.004, sd, hl),
-        trim,
-        false,
-        false,
-      );
+      addMesh(ribbonAlong(sp, 3.3, 1, doorA + 0.02, doorC - 0.02, 0.004, sd, hl), trim, false, false);
     }
     const pb = new Mesh(new BoxGeometry(hwMax * 1.15, 0.07, 0.05), chrome);
     pb.position.set(0, sp.yBot(0) + 0.1, front - 0.05);
@@ -1017,23 +823,14 @@ export function buildCar(
 
   /* exhaust */
   {
-    const xs =
-      kind === "gtr" || kind === "hyper"
-        ? [-0.62, -0.46, 0.46, 0.62]
-        : [-0.5, 0.5];
+    const xs = kind === "gtr" || kind === "hyper" ? [-0.62, -0.46, 0.46, 0.62] : [-0.5, 0.5];
     for (const x of xs) {
-      const tip = new Mesh(
-        new CylinderGeometry(0.05, 0.05, 0.2, 20, 1, true),
-        chrome,
-      );
+      const tip = new Mesh(new CylinderGeometry(0.05, 0.05, 0.2, 20, 1, true), chrome);
       tip.material.side = 2;
       tip.rotation.x = Math.PI / 2;
       tip.position.set(x, sp.yBot(L) + 0.07, rear + 0.015);
       i.add(tip);
-      const inner = new Mesh(
-        new CylinderGeometry(0.042, 0.042, 0.02, 16),
-        matte,
-      );
+      const inner = new Mesh(new CylinderGeometry(0.042, 0.042, 0.02, 16), matte);
       inner.rotation.x = Math.PI / 2;
       inner.position.set(x, sp.yBot(L) + 0.07, rear - 0.06);
       i.add(inner);

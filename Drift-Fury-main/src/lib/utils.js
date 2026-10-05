@@ -1,5 +1,7 @@
-import { twMerge } from "tailwind-merge";
 import { clsx } from "clsx";
-export function cn(...e) {
-  return twMerge(clsx(e));
+import { twMerge } from "tailwind-merge";
+
+/** Joins class names and resolves conflicting Tailwind utilities (the last one wins). */
+export function cn(...inputs) {
+  return twMerge(clsx(inputs));
 }
