@@ -1,55 +1,56 @@
 import { CAR_SPECS } from "../vehicles/carSpecs.js";
-export function orientedBox(e, t, n, r, i) {
+export function orientedBox(x, z, heading, halfWidth, halfLength) {
   return {
-    x: e,
-    z: t,
-    hw: r,
-    hl: i,
-    cos: Math.cos(n),
-    sin: Math.sin(n),
+    x,
+    z,
+    hw: halfWidth,
+    hl: halfLength,
+    cos: Math.cos(heading),
+    sin: Math.sin(heading),
   };
 }
-export function collideOrientedBoxes(e, t) {
-  const n = t.x - e.x;
-  const r = t.z - e.z;
-  let i = Infinity;
-  let a = 0;
-  let o = 0;
-  let s = -Infinity;
+export function collideOrientedBoxes(first, second) {
+  const dx = second.x - first.x;
+  const dz = second.z - first.z;
+  let minOverlap = Infinity;
+  let normalX = 0;
+  let normalZ = 0;
+  let maxGap = -Infinity;
   for (let c = 0; c < 4; c++) {
-    const l = c < 2 ? e : t;
-    const u = c % 2 ? l.sin : l.cos;
-    const d = c % 2 ? l.cos : -l.sin;
-    const f = n * u + r * d;
-    const p =
-      e.hw * Math.abs(u * e.cos - d * e.sin) +
-      e.hl * Math.abs(u * e.sin + d * e.cos) +
-      (t.hw * Math.abs(u * t.cos - d * t.sin) + t.hl * Math.abs(u * t.sin + d * t.cos)) -
-      Math.abs(f);
-    if (p < i) {
-      i = p;
-      const e = f < 0 ? -1 : 1;
-      a = u * e;
-      o = d * e;
+    const box = c < 2 ? first : second;
+    const axisX = c % 2 ? box.sin : box.cos;
+    const axisZ = c % 2 ? box.cos : -box.sin;
+    const distance = dx * axisX + dz * axisZ;
+    const overlap =
+      first.hw * Math.abs(axisX * first.cos - axisZ * first.sin) +
+      first.hl * Math.abs(axisX * first.sin + axisZ * first.cos) +
+      (second.hw * Math.abs(axisX * second.cos - axisZ * second.sin) +
+        second.hl * Math.abs(axisX * second.sin + axisZ * second.cos)) -
+      Math.abs(distance);
+    if (overlap < minOverlap) {
+      minOverlap = overlap;
+      const direction = distance < 0 ? -1 : 1;
+      normalX = axisX * direction;
+      normalZ = axisZ * direction;
     }
-    if (-p > s) {
-      s = -p;
+    if (-overlap > maxGap) {
+      maxGap = -overlap;
     }
   }
-  return i > 0
+  return minOverlap > 0
     ? {
         overlap: true,
-        depth: i,
-        nx: a,
-        nz: o,
-        gap: -i,
+        depth: minOverlap,
+        nx: normalX,
+        nz: normalZ,
+        gap: -minOverlap,
       }
     : {
         overlap: false,
         depth: 0,
         nx: 0,
         nz: 0,
-        gap: s,
+        gap: maxGap,
       };
 }
 const collisionProfiles = new Map();
@@ -130,52 +131,54 @@ export function collideFootprintWithBox(car, box) {
   };
 }
 const GRID_CELL_SIZE = 24;
-export function buildSolidGrid(e) {
-  const t = new Map();
-  for (let n of e) {
-    const e = Math.floor((n.x - n.w) / GRID_CELL_SIZE);
-    const r = Math.floor((n.x + n.w) / GRID_CELL_SIZE);
-    const i = Math.floor((n.z - n.d) / GRID_CELL_SIZE);
-    const a = Math.floor((n.z + n.d) / GRID_CELL_SIZE);
-    for (let o = e; o <= r; o++) {
-      for (let e = i; e <= a; e++) {
-        const r = o + "," + e;
-        let i = t.get(r);
-        if (!i) {
-          i = [];
-          t.set(r, i);
+// Uniform grid over the static solids so collision checks only look at nearby boxes.
+export function buildSolidGrid(solids) {
+  const cells = new Map();
+  for (const solid of solids) {
+    const minX = Math.floor((solid.x - solid.w) / GRID_CELL_SIZE);
+    const maxX = Math.floor((solid.x + solid.w) / GRID_CELL_SIZE);
+    const minZ = Math.floor((solid.z - solid.d) / GRID_CELL_SIZE);
+    const maxZ = Math.floor((solid.z + solid.d) / GRID_CELL_SIZE);
+    for (let cellX = minX; cellX <= maxX; cellX++) {
+      for (let cellZ = minZ; cellZ <= maxZ; cellZ++) {
+        const key = cellX + "," + cellZ;
+        let bucket = cells.get(key);
+        if (!bucket) {
+          bucket = [];
+          cells.set(key, bucket);
         }
-        i.push(n);
+        bucket.push(solid);
       }
     }
   }
-  let n = 0;
+  // Each query stamps the solids it returns so a solid spanning several cells is listed once.
+  let queryId = 0;
   return {
-    near(e, r, i, a) {
-      n++;
-      if (a) {
-        a.length = 0;
+    near(x, z, radius, out) {
+      queryId++;
+      if (out) {
+        out.length = 0;
       } else {
-        a = [];
+        out = [];
       }
-      const o = Math.floor((e - i) / GRID_CELL_SIZE);
-      const s = Math.floor((e + i) / GRID_CELL_SIZE);
-      const c = Math.floor((r - i) / GRID_CELL_SIZE);
-      const l = Math.floor((r + i) / GRID_CELL_SIZE);
-      for (let e = o; e <= s; e++) {
-        for (let r = c; r <= l; r++) {
-          const i = t.get(e + "," + r);
-          if (i) {
-            for (let e of i) {
-              if (e._bp !== n) {
-                e._bp = n;
-                a.push(e);
+      const minX = Math.floor((x - radius) / GRID_CELL_SIZE);
+      const maxX = Math.floor((x + radius) / GRID_CELL_SIZE);
+      const minZ = Math.floor((z - radius) / GRID_CELL_SIZE);
+      const maxZ = Math.floor((z + radius) / GRID_CELL_SIZE);
+      for (let cellX = minX; cellX <= maxX; cellX++) {
+        for (let cellZ = minZ; cellZ <= maxZ; cellZ++) {
+          const bucket = cells.get(cellX + "," + cellZ);
+          if (bucket) {
+            for (const solid of bucket) {
+              if (solid._bp !== queryId) {
+                solid._bp = queryId;
+                out.push(solid);
               }
             }
           }
         }
       }
-      return a;
+      return out;
     },
   };
 }

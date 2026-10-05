@@ -2,50 +2,53 @@ import { ENGINE_REDLINE } from "../data/engines.js";
 import { gearTopSpeeds, reverseTopSpeed } from "./physics.js";
 const GEAR_COUNT = 7;
 const UPSHIFT_RPM_RATIO = 0.93;
-const clamp = (e, t, n) => Math.max(t, Math.min(n, e));
-export function updateGearbox(e, t, n, r, i, a, o) {
-  const s = ENGINE_REDLINE[t.id] || 7200;
-  const c = t.id === "V12" ? 1000 : 900;
-  const l = gearTopSpeeds(t.id);
-  const u = Math.abs(r);
-  e.redline = s;
-  e.shiftTimer = Math.max(0, (e.shiftTimer || 0) - n);
-  e.shiftCooldown = Math.max(0, (e.shiftCooldown || 0) - n);
-  const d = r < -0.6 || (u < 0.6 && a && !i);
-  const f = (e) => (u / l[e - 1]) * s;
-  let p = e.gear || 1;
-  if (d) {
-    p = -1;
-  } else if (p < 1 || u < 0.5) {
-    p = 1;
-  } else if (e.shiftCooldown === 0 && e.shiftTimer === 0 && !o) {
-    const e = s * (i ? 0.4 : 0.3);
-    if (p < GEAR_COUNT && f(p) > s * UPSHIFT_RPM_RATIO) {
-      p++;
-    } else if (p > 1 && f(p) < e) {
-      for (p--; p > 1 && f(p - 1) < s * 0.75; ) {
-        p--;
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+export function updateGearbox(state, engine, dt, forwardSpeed, throttle, brake, handbrake) {
+  const redline = ENGINE_REDLINE[engine.id] || 7200;
+  const idleRpm = engine.id === "V12" ? 1000 : 900;
+  const gearSpeeds = gearTopSpeeds(engine.id);
+  const speed = Math.abs(forwardSpeed);
+  state.redline = redline;
+  state.shiftTimer = Math.max(0, (state.shiftTimer || 0) - dt);
+  state.shiftCooldown = Math.max(0, (state.shiftCooldown || 0) - dt);
+  const reversing = forwardSpeed < -0.6 || (speed < 0.6 && brake && !throttle);
+  const rpmInGear = (gearNumber) => (speed / gearSpeeds[gearNumber - 1]) * redline;
+  let gear = state.gear || 1;
+  if (reversing) {
+    gear = -1;
+  } else if (gear < 1 || speed < 0.5) {
+    gear = 1;
+  } else if (state.shiftCooldown === 0 && state.shiftTimer === 0 && !handbrake) {
+    const downshiftRpm = redline * (throttle ? 0.4 : 0.3);
+    if (gear < GEAR_COUNT && rpmInGear(gear) > redline * UPSHIFT_RPM_RATIO) {
+      gear++;
+    } else if (gear > 1 && rpmInGear(gear) < downshiftRpm) {
+      for (gear--; gear > 1 && rpmInGear(gear - 1) < redline * 0.75; ) {
+        gear--;
       }
     }
   }
-  if (p !== e.gear) {
-    if (p > 0 && e.gear > 0 && u > 0.5) {
-      e.shiftDirection = Math.sign(p - e.gear);
-      e.shiftSerial = (e.shiftSerial || 0) + 1;
-      e.shiftTimer = t.id === "V12" ? 0.14 : 0.2;
-      e.shiftCooldown = 0.6;
+  if (gear !== state.gear) {
+    if (gear > 0 && state.gear > 0 && speed > 0.5) {
+      state.shiftDirection = Math.sign(gear - state.gear);
+      state.shiftSerial = (state.shiftSerial || 0) + 1;
+      state.shiftTimer = engine.id === "V12" ? 0.14 : 0.2;
+      state.shiftCooldown = 0.6;
     }
-    e.gear = p;
+    state.gear = gear;
   }
-  e.shifting = e.shiftTimer > 0;
-  const m = d ? a : i;
-  e.pedal = m;
-  e.driveThrottle = m * (e.shifting ? 0.08 : 1);
-  const h = d ? (u / reverseTopSpeed(t.id)) * s : f(e.gear);
-  const g = m * Math.max(0, 1 - u / 7) * 1600;
-  const _ = o && i ? 1800 : 0;
-  const v = e.shifting && e.shiftDirection < 0 ? 350 : 0;
-  const y = t && e.fuel > 0 ? clamp(Math.max(c + g, h) + _ + v, c, s) : 0;
-  const b = e.shifting ? 19 : m ? 15 : 10;
-  e.rpm = Math.round(e.rpm + (y - e.rpm) * (1 - Math.exp(-n * b)));
+  state.shifting = state.shiftTimer > 0;
+  const pedal = reversing ? brake : throttle;
+  state.pedal = pedal;
+  state.driveThrottle = pedal * (state.shifting ? 0.08 : 1);
+  const wheelRpm = reversing ? (speed / reverseTopSpeed(engine.id)) * redline : rpmInGear(state.gear);
+  const launchRpm = pedal * Math.max(0, 1 - speed / 7) * 1600;
+  const handbrakeRev = handbrake && throttle ? 1800 : 0;
+  const downshiftBlip = state.shifting && state.shiftDirection < 0 ? 350 : 0;
+  const targetRpm =
+    engine && state.fuel > 0
+      ? clamp(Math.max(idleRpm + launchRpm, wheelRpm) + handbrakeRev + downshiftBlip, idleRpm, redline)
+      : 0;
+  const rpmResponse = state.shifting ? 19 : pedal ? 15 : 10;
+  state.rpm = Math.round(state.rpm + (targetRpm - state.rpm) * (1 - Math.exp(-dt * rpmResponse)));
 }

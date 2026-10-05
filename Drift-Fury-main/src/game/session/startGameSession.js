@@ -27,6 +27,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
         camera,
         sun,
         staticBatch,
+        solids,
         get state() {
           return h.state;
         },
