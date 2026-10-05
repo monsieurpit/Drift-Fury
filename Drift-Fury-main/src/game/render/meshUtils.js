@@ -1,69 +1,67 @@
+import { CanvasTexture, ExtrudeGeometry, Mesh } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { Mesh, ExtrudeGeometry, CanvasTexture } from "three";
-export function mergeChildrenByMaterial(e, t = new Set()) {
-  const n = new Map();
-  for (let r of [...e.children]) {
-    if (!r.isMesh || r.name || t.has(r)) {
-      continue;
+/**
+ * Merges the direct child meshes of `group` that share a material into one mesh per material
+ * (named meshes and those in `keep` are left alone).
+ */
+export function mergeChildrenByMaterial(group, keep = new Set()) {
+  const byMaterial = new Map();
+  for (const child of [...group.children]) {
+    if (!child.isMesh || child.name || keep.has(child)) continue;
+    child.updateMatrix();
+    const geometry = child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone();
+    geometry.applyMatrix4(child.matrix);
+    geometry.clearGroups();
+    let entry = byMaterial.get(child.material);
+    if (!entry) {
+      entry = {
+        geos: [],
+        cast: false,
+        receive: false,
+      };
+      byMaterial.set(child.material, entry);
     }
-    r.updateMatrix();
-    const i = r.geometry.index ? r.geometry.toNonIndexed() : r.geometry.clone();
-    i.applyMatrix4(r.matrix);
-    i.clearGroups();
-    let a = n.get(r.material);
-    if (!a) {
-      n.set(
-        r.material,
-        (a = {
-          geos: [],
-          cast: false,
-          receive: false,
-        }),
-      );
-    }
-    a.geos.push(i);
-    a.cast ||= r.castShadow;
-    a.receive ||= r.receiveShadow;
-    r.geometry.dispose();
-    e.remove(r);
+    entry.geos.push(geometry);
+    entry.cast ||= child.castShadow;
+    entry.receive ||= child.receiveShadow;
+    child.geometry.dispose();
+    group.remove(child);
   }
-  for (let [t, r] of n) {
-    const n = r.geos.length === 1 ? r.geos[0] : mergeGeometries(r.geos);
-    if (r.geos.length > 1) {
-      r.geos.forEach((e) => e.dispose());
-    }
-    const i = new Mesh(n, t);
-    i.castShadow = r.cast;
-    i.receiveShadow = r.receive;
-    e.add(i);
+  for (const [material, entry] of byMaterial) {
+    const merged = entry.geos.length === 1 ? entry.geos[0] : mergeGeometries(entry.geos);
+    if (entry.geos.length > 1) entry.geos.forEach((geometry) => geometry.dispose());
+    const mesh = new Mesh(merged, material);
+    mesh.castShadow = entry.cast;
+    mesh.receiveShadow = entry.receive;
+    group.add(mesh);
   }
 }
-/* traffic and police cars never animate their parts, so each look is built and batched once, then cloned */
-export function createExtrudedMesh(e, t, n, r = 0.05) {
-  const i = new ExtrudeGeometry(e, {
-    depth: t,
+/** Extrudes a 2D shape sideways (along X) into a bevelled, shadow-casting mesh centred on X = 0. */
+export function createExtrudedMesh(shape, depth, material, bevel = 0.05) {
+  const geometry = new ExtrudeGeometry(shape, {
+    depth,
     bevelEnabled: true,
-    bevelThickness: r,
-    bevelSize: r,
+    bevelThickness: bevel,
+    bevelSize: bevel,
     bevelSegments: 5,
     steps: 1,
     curveSegments: 32,
   });
-  i.translate(0, 0, -t / 2);
-  i.rotateY(-Math.PI / 2);
-  i.computeVertexNormals();
-  const a = new Mesh(i, n);
-  a.castShadow = true;
-  a.receiveShadow = true;
-  return a;
+  geometry.translate(0, 0, -depth / 2);
+  geometry.rotateY(-Math.PI / 2);
+  geometry.computeVertexNormals();
+  const mesh = new Mesh(geometry, material);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }
-export function canvasTexture(w, h, fn) {
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  fn(c.getContext("2d"), w, h);
-  const t = new CanvasTexture(c);
-  t.anisotropy = 8;
-  return t;
+/** Draws into a new canvas with `draw(context, width, height)` and wraps it in a texture. */
+export function canvasTexture(width, height, draw) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  draw(canvas.getContext("2d"), width, height);
+  const texture = new CanvasTexture(canvas);
+  texture.anisotropy = 8;
+  return texture;
 }
-/* ---------- people: articulated humanoids (face -Z at rotation 0, like the cars) ---------- */

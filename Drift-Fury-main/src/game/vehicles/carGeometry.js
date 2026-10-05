@@ -9,8 +9,6 @@ export function createGeometry(pos, nor, idx) {
   }
   return g;
 }
-
-/* normals for a (rows x cols) point matrix whose columns wrap */
 /* normals for a (rows x cols) point matrix whose columns wrap */
 export function computeGridNormals(P, nz, nr) {
   const N = new Float32Array(P.length);
@@ -51,8 +49,6 @@ export function computeGridNormals(P, nz, nr) {
   }
   return N;
 }
-
-/* build one geometry per category from a point-matrix grid */
 /* build one geometry per category from a point-matrix grid */
 export function buildGridGeometries(P, N, nz, nr, cat) {
   const buckets = {};
@@ -96,8 +92,6 @@ export function buildGridGeometries(P, N, nz, nr, cat) {
   }
   return out;
 }
-
-/* flat polygon cap (convex-ish ring) with a fixed normal */
 /* flat polygon cap (convex-ish ring) with a fixed normal */
 export function buildCapGeometry(ring, z, nz_) {
   const pos = [];
@@ -128,8 +122,6 @@ export function buildCapGeometry(ring, z, nz_) {
   }
   return createGeometry(pos, nor, idx);
 }
-
-/* convex prism from a 2D polygon [r, t] (radial, tangential) rotated by phi around the x axis */
 /* convex prism from a 2D polygon [r, t] (radial, tangential) rotated by phi around the x axis */
 export function buildPrismGeometry(poly, x0, x1, phi, bevel) {
   const pos = [];
@@ -177,8 +169,6 @@ export function buildPrismGeometry(poly, x0, x1, phi, bevel) {
   }
   return createGeometry(pos, nor, idx);
 }
-
-/* surface of revolution about the x axis. prof = [[x, r], ...] ordered so the outside faces out */
 /* surface of revolution about the x axis. prof = [[x, r], ...] ordered so the outside faces out */
 export function buildLatheGeometry(prof, seg) {
   const nz = prof.length;

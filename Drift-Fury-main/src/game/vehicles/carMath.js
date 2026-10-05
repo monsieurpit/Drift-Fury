@@ -1,9 +1,5 @@
-export /* ======================================================================
-DRIFT FURY - realistic car builder (replaces the old LEGO-style Vw)
-Smooth lofted bodywork, tinted glass greenhouse, pillars, wheel arches,
-lathe-turned tyres and alloy wheels, shaped lights, per-model details.
-====================================================================== */
-function pchip(pts) {
+/** Monotone cubic (PCHIP) interpolation through [x, y] points: smooth without overshoot. */
+export function pchip(pts) {
   const n = pts.length;
   const xs = pts.map((p) => p[0]);
   const ys = pts.map((p) => p[1]);
@@ -84,5 +80,3 @@ export function smoothProfile(ctrl, iters) {
   }
   return pts;
 }
-
-/* ---------------------------------------------------------------- specs */

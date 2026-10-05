@@ -125,5 +125,3 @@ export function buildWheel(mats, o) {
   g.add(new Mesh(buildPrismGeometry(cal, xo * 0.08, xo * 0.4, o.calAng), mats.caliper));
   return g;
 }
-
-/* ---- surface helpers (points on the body skin) ---- */

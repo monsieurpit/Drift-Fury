@@ -359,43 +359,43 @@ export const CAR_SPECS = {
 };
 export function buildCarSpec(name) {
   const raw = CAR_SPECS[name] || CAR_SPECS.coupe;
-  const sp = Object.assign({}, raw);
-  sp.name = name in CAR_SPECS ? name : "coupe";
-  sp.yTop = pchip(raw.top);
-  sp.yBot = pchip(raw.bot);
-  sp.hw = pchip(raw.wid);
-  sp.arch = sp.R + 0.065;
-  sp.hump = (zf) => {
+  const spec = Object.assign({}, raw);
+  spec.name = name in CAR_SPECS ? name : "coupe";
+  spec.yTop = pchip(raw.top);
+  spec.yBot = pchip(raw.bot);
+  spec.hw = pchip(raw.wid);
+  spec.arch = spec.R + 0.065;
+  spec.hump = (zf) => {
     let h = 0;
     for (const [za, amp] of [
-      [sp.axF, sp.humpF],
-      [sp.axR, sp.humpR],
+      [spec.axF, spec.humpF],
+      [spec.axR, spec.humpR],
     ]) {
-      const t = (zf - za) / (sp.arch * 1.25);
+      const t = (zf - za) / (spec.arch * 1.25);
       if (Math.abs(t) < 1) {
         h += amp * (1 - t * t) * (1 - t * t);
       }
     }
     return h;
   };
-  sp.yEdge = (zf) => {
-    let y = sp.yBot(zf) + 0.05;
-    for (const za of [sp.axF, sp.axR]) {
+  spec.yEdge = (zf) => {
+    let y = spec.yBot(zf) + 0.05;
+    for (const za of [spec.axF, spec.axR]) {
       const dz = Math.abs(zf - za);
-      if (dz <= sp.arch) {
-        y = Math.max(y, sp.R + Math.sqrt(sp.arch * sp.arch - dz * dz));
+      if (dz <= spec.arch) {
+        y = Math.max(y, spec.R + Math.sqrt(spec.arch * spec.arch - dz * dz));
       }
     }
     return y;
   };
-  const c = sp.cab;
-  const base = (zf) => sp.yTop(zf) - 0.05;
+  const c = spec.cab;
+  const base = (zf) => spec.yTop(zf) - 0.05;
   const bws = base(c.ws);
   const brg = base(c.rg);
   const midRoof = (c.rf + c.rr) / 2;
   const hiRoof = c.roof;
-  sp.cabBase = base;
-  sp.roofY = pchip([
+  spec.cabBase = base;
+  spec.roofY = pchip([
     [c.ws, bws],
     [c.ws + (c.rf - c.ws) * 0.3, bws + (hiRoof - 0.05 - bws) * 0.26],
     [c.ws + (c.rf - c.ws) * 0.65, bws + (hiRoof - 0.05 - bws) * 0.66],
@@ -406,5 +406,5 @@ export function buildCarSpec(name) {
     [c.rr + (c.rg - c.rr) * 0.7, hiRoof - 0.035 - (hiRoof - 0.035 - brg) * 0.72],
     [c.rg, brg],
   ]);
-  return sp;
+  return spec;
 }

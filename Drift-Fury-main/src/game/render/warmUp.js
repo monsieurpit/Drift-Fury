@@ -13,4 +13,3 @@ export function warmUpSession(renderer, scene, camera, extraColors = []) {
     }
   } catch (error) {}
 }
-/* the player car keeps its moving parts (wheels, door, lamps) separate; everything else is batched */

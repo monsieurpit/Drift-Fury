@@ -17,4 +17,3 @@ export function createTrafficCar(color, shape, police = false) {
   };
   return car;
 }
-/* compile every shader the session can need before the first frame, so nothing stalls mid-drive */

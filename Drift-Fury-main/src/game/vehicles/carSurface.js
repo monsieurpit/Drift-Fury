@@ -1,14 +1,20 @@
 import { createGeometry } from "./carGeometry.js";
 import { chaikin, clamp, smoothstep } from "./carMath.js";
+/*
+ * Car body surface helpers. Coordinates follow the body loft used by carModel.js:
+ *   zf  distance along the car from the front bumper (0 .. spec.L)
+ *   sf  position around a cross-section ring: 0 at the bottom centre, 7 at the roof centre (right half),
+ *       14 back at the bottom on the left (rings are mirrored, so most helpers work on the right half)
+ */
 /* body cross-section ring at zf: [x, y, s] with s in 0..14 */
-export function bodyRing(sp, zf) {
-  const hw = sp.hw(zf);
-  const yt = sp.yTop(zf);
-  const yb = sp.yBot(zf);
-  const ye = sp.yEdge(zf);
-  const hump = sp.hump(zf);
-  const endFade = smoothstep(0, 0.35, Math.min(zf, sp.L - zf));
-  const cr = sp.crown * (0.4 + 0.6 * endFade);
+export function bodyRing(spec, zf) {
+  const hw = spec.hw(zf);
+  const yt = spec.yTop(zf);
+  const yb = spec.yBot(zf);
+  const ye = spec.yEdge(zf);
+  const hump = spec.hump(zf);
+  const endFade = smoothstep(0, 0.35, Math.min(zf, spec.L - zf));
+  const cr = spec.crown * (0.4 + 0.6 * endFade);
   const yS = ye + (yt + hump * 0.8 - ye) * 0.5;
   const yU = yt + hump * 0.85 - cr - Math.min(0.1, (yt - ye) * 0.22);
   const R = [
@@ -28,16 +34,15 @@ export function bodyRing(sp, zf) {
   }
   return chaikin(poly, 2, 14);
 }
+/* greenhouse cross-section at zf */
 
-/* greenhouse cross-section at zf */
-/* greenhouse cross-section at zf */
-export function cabinRing(sp, zf) {
-  const c = sp.cab;
-  const yb = sp.cabBase(zf);
-  const H = Math.max(0.006, sp.roofY(zf) - yb);
-  const Hr = c.roof - sp.cabBase((c.rf + c.rr) / 2);
+export function cabinRing(spec, zf) {
+  const c = spec.cab;
+  const yb = spec.cabBase(zf);
+  const H = Math.max(0.006, spec.roofY(zf) - yb);
+  const Hr = c.roof - spec.cabBase((c.rf + c.rr) / 2);
   const t = clamp(H / Hr, 0, 1);
-  const wb = sp.hw(zf) - c.inset - 0.02;
+  const wb = spec.hw(zf) - c.inset - 0.02;
   const TU = c.tum * Math.pow(t, 0.8);
   const cr = 0.028 * t + 0.004;
   const R = [
@@ -86,12 +91,12 @@ export function pointAt(half, sf) {
   return [b[0], b[1], b[2], b[0] - a[0], b[1] - a[1]];
 }
 /* position + outward normal on the body skin; side = +1 (right) / -1 (left) */
-/* position + outward normal on the body skin; side = +1 (right) / -1 (left) */
-export function surfacePoint(sp, zf, sf, side) {
-  const h0 = rightHalf(bodyRing(sp, zf));
+
+export function surfacePoint(spec, zf, sf, side) {
+  const h0 = rightHalf(bodyRing(spec, zf));
   const p = pointAt(h0, sf);
-  const h1 = rightHalf(bodyRing(sp, zf - 0.03));
-  const h2 = rightHalf(bodyRing(sp, zf + 0.03));
+  const h1 = rightHalf(bodyRing(spec, zf - 0.03));
+  const h2 = rightHalf(bodyRing(spec, zf + 0.03));
   const q1 = pointAt(h1, sf);
   const q2 = pointAt(h2, sf);
   const dx = p[3];
@@ -115,10 +120,10 @@ export function surfacePoint(sp, zf, sf, side) {
   };
 }
 /* thin ribbon laid on the body (door cuts, hood cuts, stripes) */
-/* thin ribbon laid on the body (door cuts, hood cuts, stripes) */
-export function ribbonAcross(sp, zf, sa, sb, w, off, side, hl) {
-  const A = bodyRing(sp, zf - w / 2);
-  const B = bodyRing(sp, zf + w / 2);
+
+export function ribbonAcross(spec, zf, sa, sb, w, off, side, halfLength) {
+  const A = bodyRing(spec, zf - w / 2);
+  const B = bodyRing(spec, zf + w / 2);
   const hA = rightHalf(A);
   const hB = rightHalf(B);
   const pos = [];
@@ -139,10 +144,10 @@ export function ribbonAcross(sp, zf, sa, sb, w, off, side, hl) {
     pos.push(
       side * (a[0] + nx * off),
       a[1] + ny * off,
-      zf - w / 2 - hl,
+      zf - w / 2 - halfLength,
       side * (b[0] + nx * off),
       b[1] + ny * off,
-      zf + w / 2 - hl,
+      zf + w / 2 - halfLength,
     );
     nor.push(side * nx, ny, 0, side * nx, ny, 0);
     if (k > 0) {
@@ -155,14 +160,14 @@ export function ribbonAcross(sp, zf, sa, sb, w, off, side, hl) {
   }
   return createGeometry(pos, nor, idx);
 }
-export function ribbonAlong(sp, sf0, sw, za, zb, off, side, hl) {
+export function ribbonAlong(spec, sf0, sw, za, zb, off, side, halfLength) {
   const pos = [];
   const nor = [];
   const idx = [];
   const n = Math.max(2, Math.round((zb - za) / 0.06));
   for (let k = 0; k <= n; k++) {
     const zf = za + ((zb - za) * k) / n;
-    const h = rightHalf(bodyRing(sp, zf));
+    const h = rightHalf(bodyRing(spec, zf));
     const a = pointAt(h, sf0 - sw / 2);
     const b = pointAt(h, sf0 + sw / 2);
     let nxA = a[4];
@@ -179,10 +184,10 @@ export function ribbonAlong(sp, sf0, sw, za, zb, off, side, hl) {
     pos.push(
       side * (a[0] + nxA * off),
       a[1] + nyA * off,
-      zf - hl,
+      zf - halfLength,
       side * (b[0] + nxB * off),
       b[1] + nyB * off,
-      zf - hl,
+      zf - halfLength,
     );
     nor.push(side * nxA, nyA, 0, side * nxB, nyB, 0);
     if (k > 0) {
@@ -195,5 +200,3 @@ export function ribbonAlong(sp, sf0, sw, za, zb, off, side, hl) {
   }
   return createGeometry(pos, nor, idx);
 }
-
-/* ---------------------------------------------------------------- the car */

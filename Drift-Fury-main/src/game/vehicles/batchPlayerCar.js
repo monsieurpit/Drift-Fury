@@ -18,4 +18,3 @@ export function batchPlayerCar(car) {
   }
   return car;
 }
-/* ---- static batching: merge never-moving meshes that share an identical material into one draw per area ---- */

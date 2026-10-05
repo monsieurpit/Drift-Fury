@@ -1,14 +1,11 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { base44 } from "../api/base44Client.js";
 import { appParams } from "./app-params.js";
-
 const AuthContext = createContext();
-
 const AUTH_REQUIRED = {
   type: "auth_required",
   message: "Authentication required",
 };
-
 /**
  * Checks the Base44 app settings and the signed-in user. When the Base44 backend is not reachable
  * (the usual case for this static deployment) it falls back to local mode: no user, no error,
@@ -22,17 +19,14 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [appPublicSettings, setAppPublicSettings] = useState(null);
-
   useEffect(() => {
     checkAppState();
   }, []);
-
   const continueWithoutUser = () => {
     setIsLoadingAuth(false);
     setIsAuthenticated(false);
     setAuthChecked(true);
   };
-
   const checkAppState = async () => {
     try {
       setIsLoadingPublicSettings(true);
@@ -75,7 +69,10 @@ export const AuthProvider = ({ children }) => {
                     type: "user_not_registered",
                     message: "User not registered for this app",
                   }
-                : { type: reason, message: error.message },
+                : {
+                    type: reason,
+                    message: error.message,
+                  },
           );
         } else {
           setAuthError({
@@ -96,7 +93,6 @@ export const AuthProvider = ({ children }) => {
       setIsLoadingAuth(false);
     }
   };
-
   const checkUserAuth = async () => {
     try {
       if (!base44?.auth || typeof base44.auth.me != "function") {
@@ -115,7 +111,6 @@ export const AuthProvider = ({ children }) => {
       if (error.status === 401 || error.status === 403) setAuthError(AUTH_REQUIRED);
     }
   };
-
   const logout = (shouldRedirect = true) => {
     setUser(null);
     setIsAuthenticated(false);
@@ -125,11 +120,9 @@ export const AuthProvider = ({ children }) => {
       base44.auth.logout();
     }
   };
-
   const navigateToLogin = () => {
     base44.auth.redirectToLogin(window.location.href);
   };
-
   return (
     <AuthContext.Provider
       value={{
@@ -150,7 +143,6 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
-
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw Error("useAuth must be used within an AuthProvider");
