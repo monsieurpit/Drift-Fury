@@ -1,10 +1,12 @@
-const http = require("node:http");
-const fs = require("node:fs");
-const path = require("node:path");
+// Serves the production build in dist/ (run `npm run build` first, or just `npm start`).
+// For development with instant reload, use `npm run dev` instead.
+import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = __dirname;
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "dist");
 const port = Number(process.env.PORT) || 3000;
-const reloadClients = new Set();
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -22,7 +24,7 @@ const contentTypes = {
 
 function sendFile(filePath, request, response) {
   const contentType = contentTypes[path.extname(filePath).toLowerCase()];
-  if (!contentType || ["server.js", "package.json"].includes(path.basename(filePath))) {
+  if (!contentType) {
     response.writeHead(404).end("Not found");
     return;
   }
@@ -33,9 +35,11 @@ function sendFile(filePath, request, response) {
       return;
     }
 
+    // Built assets have content hashes in their names, so they can be cached forever.
+    const immutable = filePath.startsWith(path.join(root, "assets") + path.sep);
     response.writeHead(200, {
       "Content-Type": contentType,
-      "Cache-Control": "no-cache",
+      "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
     });
     if (request.method === "HEAD") {
       response.end();
@@ -56,22 +60,6 @@ const server = http.createServer((request, response) => {
     pathname = decodeURIComponent(new URL(request.url, "http://localhost").pathname);
   } catch {
     response.writeHead(400).end("Bad request");
-    return;
-  }
-
-  if (pathname === "/__reload") {
-    if (request.method === "HEAD") {
-      response.writeHead(200, { "Content-Type": "text/event-stream" }).end();
-      return;
-    }
-    response.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    });
-    response.write(":\n\n");
-    reloadClients.add(response);
-    response.on("close", () => reloadClients.delete(response));
     return;
   }
 
@@ -107,26 +95,10 @@ const server = http.createServer((request, response) => {
   });
 });
 
-let reloadTimer;
-fs.watch(root, (eventType, filename) => {
-  if (filename && ![".html", ".css", ".js", ".json"].includes(path.extname(filename.toString()))) {
-    return;
-  }
-  clearTimeout(reloadTimer);
-  reloadTimer = setTimeout(() => {
-    for (const client of reloadClients) {
-      client.write("event: reload\ndata: update\n\n");
-    }
-  }, 100);
-}).on("error", (error) => {
-  console.error("Unable to watch site files for changes:", error);
-});
-const reloadHeartbeat = setInterval(() => {
-  for (const client of reloadClients) {
-    client.write(": keep-alive\n\n");
-  }
-}, 15000);
-reloadHeartbeat.unref();
+if (!fs.existsSync(path.join(root, "index.html"))) {
+  console.error("No build found in dist/. Run `npm run build` (or `npm start`, which builds first).");
+  process.exit(1);
+}
 
 server.listen(port, "0.0.0.0", () => {
   console.log(`Drift Fury is listening on port ${port}`);
