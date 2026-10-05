@@ -10,7 +10,7 @@ import {
   BufferGeometry,
   Float32BufferAttribute,
 } from "three";
-export function createEffects(e) {
+export function createEffects(scene) {
   const treadCanvas = document.createElement("canvas");
   treadCanvas.width = 64;
   treadCanvas.height = 128;
@@ -44,12 +44,12 @@ export function createEffects(e) {
   const smokeTexture = new CanvasTexture(smokeCanvas);
   smokeTexture.colorSpace = "srgb";
   const smokeGeometry = new PlaneGeometry(1, 1);
-  const t = Array.from(
+  const smokePuffs = Array.from(
     {
       length: 48,
     },
     () => {
-      const t = new Mesh(
+      const mesh = new Mesh(
         smokeGeometry,
         new MeshBasicMaterial({
           map: smokeTexture,
@@ -60,10 +60,10 @@ export function createEffects(e) {
           side: 2,
         }),
       );
-      t.visible = false;
-      e.add(t);
+      mesh.visible = false;
+      scene.add(mesh);
       return {
-        mesh: t,
+        mesh,
         life: 0,
         maxLife: 1,
         vx: 0,
@@ -72,12 +72,12 @@ export function createEffects(e) {
       };
     },
   );
-  const n = Array.from(
+  const crashSmoke = Array.from(
     {
       length: 20,
     },
     () => {
-      const t = new Mesh(
+      const mesh = new Mesh(
         new SphereGeometry(0.8, 6, 5),
         new MeshBasicMaterial({
           color: "#3a3d42",
@@ -86,31 +86,31 @@ export function createEffects(e) {
           depthWrite: false,
         }),
       );
-      t.visible = false;
-      e.add(t);
+      mesh.visible = false;
+      scene.add(mesh);
       return {
-        mesh: t,
+        mesh,
         life: 0,
         vy: 0,
       };
     },
   );
-  const r = Array.from(
+  const debris = Array.from(
     {
       length: 16,
     },
     () => {
-      const t = new Mesh(
+      const mesh = new Mesh(
         new BoxGeometry(0.15, 0.15, 0.15),
         new MeshStandardMaterial({
           color: "#444",
           roughness: 0.8,
         }),
       );
-      t.visible = false;
-      e.add(t);
+      mesh.visible = false;
+      scene.add(mesh);
       return {
-        mesh: t,
+        mesh,
         life: 0,
         vx: 0,
         vy: 0,
@@ -126,7 +126,7 @@ export function createEffects(e) {
     depthWrite: false,
     side: 2,
   });
-  const i = Array.from(
+  const skidTrails = Array.from(
     {
       length: 32,
     },
@@ -154,7 +154,7 @@ export function createEffects(e) {
           const mesh = new Mesh(geometry, skidMaterial);
           mesh.visible = false;
           mesh.frustumCulled = false;
-          e.add(mesh);
+          scene.add(mesh);
           return {
             geometry,
             mesh,
@@ -174,12 +174,12 @@ export function createEffects(e) {
       };
     },
   );
-  const a = Array.from(
+  const damageSmoke = Array.from(
     {
       length: 10,
     },
     () => {
-      const t = new Mesh(
+      const mesh = new Mesh(
         new SphereGeometry(0.3, 6, 5),
         new MeshBasicMaterial({
           color: "#2b2e32",
@@ -188,95 +188,95 @@ export function createEffects(e) {
           depthWrite: false,
         }),
       );
-      t.visible = false;
-      e.add(t);
+      mesh.visible = false;
+      scene.add(mesh);
       return {
-        mesh: t,
+        mesh,
         life: 0,
       };
     },
   );
-  let o = 0;
-  let s = 0;
+  let smokeTimer = 0;
+  let smokeCursor = 0;
   let trailCursor = 0;
   let activeTrail = null;
   let wasDrifting = false;
-  let l = 0;
-  let u = 0;
-  let d = 0;
-  let f = 0;
+  let crashSmokeCursor = 0;
+  let debrisCursor = 0;
+  let damageSmokeCursor = 0;
+  let damageSmokeTimer = 0;
   return {
-    update(e, l, camera) {
-      o += l;
-      t.forEach((particle) => {
+    update(state, dt, camera) {
+      smokeTimer += dt;
+      smokePuffs.forEach((particle) => {
         const mesh = particle.mesh;
         mesh.visible = particle.life > 0;
         if (particle.life > 0) {
-          particle.life -= l;
-          mesh.position.x += particle.vx * l;
-          mesh.position.y += particle.vy * l;
-          mesh.position.z += particle.vz * l;
-          mesh.scale.addScalar(l * 0.72);
+          particle.life -= dt;
+          mesh.position.x += particle.vx * dt;
+          mesh.position.y += particle.vy * dt;
+          mesh.position.z += particle.vz * dt;
+          mesh.scale.addScalar(dt * 0.72);
           if (camera) {
             mesh.lookAt(camera.position);
           }
           mesh.material.opacity = Math.max(0, particle.life / particle.maxLife) * 0.46;
         }
       });
-      n.forEach((e) => {
-        e.mesh.visible = e.life > 0;
-        if (e.life > 0) {
-          e.life -= l;
-          e.mesh.position.y += l * 0.7;
-          e.mesh.scale.addScalar(l * 0.8);
-          e.mesh.material.opacity = Math.max(0, e.life) * 0.22;
+      crashSmoke.forEach((puff) => {
+        puff.mesh.visible = puff.life > 0;
+        if (puff.life > 0) {
+          puff.life -= dt;
+          puff.mesh.position.y += dt * 0.7;
+          puff.mesh.scale.addScalar(dt * 0.8);
+          puff.mesh.material.opacity = Math.max(0, puff.life) * 0.22;
         }
       });
-      r.forEach((e) => {
-        if (e.life > 0) {
-          e.life -= l;
-          e.mesh.position.x += e.vx * l;
-          e.mesh.position.y += e.vy * l;
-          e.mesh.position.z += e.vz * l;
-          e.vy -= l * 9;
-          e.mesh.rotation.x += l * 8;
-          e.mesh.rotation.z += l * 6;
-          if (e.mesh.position.y < 0.1) {
-            e.mesh.position.y = 0.1;
-            e.vy *= -0.3;
-            e.vx *= 0.5;
-            e.vz *= 0.5;
+      debris.forEach((piece) => {
+        if (piece.life > 0) {
+          piece.life -= dt;
+          piece.mesh.position.x += piece.vx * dt;
+          piece.mesh.position.y += piece.vy * dt;
+          piece.mesh.position.z += piece.vz * dt;
+          piece.vy -= dt * 9;
+          piece.mesh.rotation.x += dt * 8;
+          piece.mesh.rotation.z += dt * 6;
+          if (piece.mesh.position.y < 0.1) {
+            piece.mesh.position.y = 0.1;
+            piece.vy *= -0.3;
+            piece.vx *= 0.5;
+            piece.vz *= 0.5;
           }
-          e.mesh.visible = e.life > 0;
+          piece.mesh.visible = piece.life > 0;
         }
       });
-      if (e.noPolice && e.health < 55) {
-        f += l;
-        const t = 1 - Math.max(0, e.health) / 100;
-        if (f > 0.14 - t * 0.1) {
-          f = 0;
-          const n = a[d++ % a.length];
-          n.life = 1 + t * 0.8;
-          n.mesh.position.set(
-            e.x - Math.sin(e.heading) * 1.6,
-            (e.y || 0) + 0.5,
-            e.z - Math.cos(e.heading) * 1.6,
+      if (state.noPolice && state.health < 55) {
+        damageSmokeTimer += dt;
+        const damage = 1 - Math.max(0, state.health) / 100;
+        if (damageSmokeTimer > 0.14 - damage * 0.1) {
+          damageSmokeTimer = 0;
+          const puff = damageSmoke[damageSmokeCursor++ % damageSmoke.length];
+          puff.life = 1 + damage * 0.8;
+          puff.mesh.position.set(
+            state.x - Math.sin(state.heading) * 1.6,
+            (state.y || 0) + 0.5,
+            state.z - Math.cos(state.heading) * 1.6,
           );
-          n.mesh.scale.setScalar(0.5);
+          puff.mesh.scale.setScalar(0.5);
         }
       }
-      a.forEach((e) => {
-        e.mesh.visible = e.life > 0;
-        if (e.life > 0) {
-          e.life -= l;
-          e.mesh.position.y += l * 0.9;
-          e.mesh.scale.addScalar(l * 0.7);
-          e.mesh.material.opacity = Math.max(0, e.life) * 0.3;
+      damageSmoke.forEach((puff) => {
+        puff.mesh.visible = puff.life > 0;
+        if (puff.life > 0) {
+          puff.life -= dt;
+          puff.mesh.position.y += dt * 0.9;
+          puff.mesh.scale.addScalar(dt * 0.7);
+          puff.mesh.material.opacity = Math.max(0, puff.life) * 0.3;
         }
       });
-      i.forEach((trail) => {
+      skidTrails.forEach((trail) => {
         if (trail !== activeTrail && trail.remaining > 0) {
-          trail.remaining = Math.max(0, trail.remaining - l);
+          trail.remaining = Math.max(0, trail.remaining - dt);
           if (trail.remaining === 0) {
             trail.wheels.forEach((wheel) => {
               wheel.mesh.visible = false;
@@ -286,8 +286,8 @@ export function createEffects(e) {
           }
         }
       });
-      if (e.drifting && !wasDrifting) {
-        activeTrail = i[trailCursor++ % i.length];
+      if (state.drifting && !wasDrifting) {
+        activeTrail = skidTrails[trailCursor++ % skidTrails.length];
         activeTrail.remaining = 0;
         activeTrail.wheels.forEach((wheel) => {
           wheel.segments = 0;
@@ -297,7 +297,7 @@ export function createEffects(e) {
           wheel.mesh.visible = false;
         });
       }
-      if (e.drifting) {
+      if (state.drifting) {
         const appendSkidSegment = (wheel, x1, z1, x2, z2, y, width) => {
           const dx = x2 - x1;
           const dz = z2 - z1;
@@ -352,9 +352,9 @@ export function createEffects(e) {
         if (activeTrail) {
           for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
             const side = sideIndex === 0 ? -1 : 1;
-            const x = e.x + Math.sin(e.heading) * 1.45 + Math.cos(e.heading) * side * 0.85;
-            const z = e.z + Math.cos(e.heading) * 1.45 - Math.sin(e.heading) * side * 0.85;
-            const y = (e.y || 0) + 0.09;
+            const x = state.x + Math.sin(state.heading) * 1.45 + Math.cos(state.heading) * side * 0.85;
+            const z = state.z + Math.cos(state.heading) * 1.45 - Math.sin(state.heading) * side * 0.85;
+            const y = (state.y || 0) + 0.09;
             const wheel = activeTrail.wheels[sideIndex];
             if (wheel.last) {
               appendSkidSegment(wheel, wheel.last.x, wheel.last.z, x, z, y, 0.16);
@@ -365,48 +365,50 @@ export function createEffects(e) {
             };
           }
         }
-        if (o > 0.045) {
-          o = 0;
-          for (let n of [-1, 1]) {
-            const r = Math.sin(e.heading) * 1.45 + Math.cos(e.heading) * n * 0.85;
-            const a = Math.cos(e.heading) * 1.45 - Math.sin(e.heading) * n * 0.85;
-            const x = e.x + r;
-            const z = e.z + a;
-            const y = e.y || 0;
-            const particle = t[s++ % t.length];
+        if (smokeTimer > 0.045) {
+          smokeTimer = 0;
+          for (let side of [-1, 1]) {
+            const offsetX = Math.sin(state.heading) * 1.45 + Math.cos(state.heading) * side * 0.85;
+            const offsetZ = Math.cos(state.heading) * 1.45 - Math.sin(state.heading) * side * 0.85;
+            const x = state.x + offsetX;
+            const z = state.z + offsetZ;
+            const y = state.y || 0;
+            const particle = smokePuffs[smokeCursor++ % smokePuffs.length];
             particle.maxLife = 0.9 + Math.random() * 0.55;
             particle.life = particle.maxLife;
             particle.mesh.position.set(x, y + 0.16 + Math.random() * 0.12, z);
             particle.mesh.scale.set(0.65 + Math.random() * 0.4, 0.5 + Math.random() * 0.3, 1);
-            particle.vx = Math.sin(e.heading) * (0.25 + e.speed * 0.035) + (Math.random() - 0.5) * 0.45;
+            particle.vx =
+              Math.sin(state.heading) * (0.25 + state.speed * 0.035) + (Math.random() - 0.5) * 0.45;
             particle.vy = 0.38 + Math.random() * 0.48;
-            particle.vz = Math.cos(e.heading) * (0.25 + e.speed * 0.035) + (Math.random() - 0.5) * 0.45;
+            particle.vz =
+              Math.cos(state.heading) * (0.25 + state.speed * 0.035) + (Math.random() - 0.5) * 0.45;
             particle.mesh.material.opacity = 0.25 + Math.random() * 0.12;
           }
         }
       }
-      if (!e.drifting && wasDrifting) {
+      if (!state.drifting && wasDrifting) {
         activeTrail.remaining = 20;
         activeTrail = null;
       }
-      wasDrifting = e.drifting;
+      wasDrifting = state.drifting;
     },
-    crash(e, t, i, a = 1) {
-      for (let r = 0; r < 8; r++) {
-        const r = n[l++ % n.length];
-        r.life = 1.5 + Math.random() * 0.5;
-        r.vy = 0.8 + Math.random() * 0.6;
-        r.mesh.position.set(e + (Math.random() - 0.5) * 2, t + 0.5, i + (Math.random() - 0.5) * 2);
-        r.mesh.scale.setScalar(1 + Math.random());
+    crash(x, y, z, strength = 1) {
+      for (let index = 0; index < 8; index++) {
+        const puff = crashSmoke[crashSmokeCursor++ % crashSmoke.length];
+        puff.life = 1.5 + Math.random() * 0.5;
+        puff.vy = 0.8 + Math.random() * 0.6;
+        puff.mesh.position.set(x + (Math.random() - 0.5) * 2, y + 0.5, z + (Math.random() - 0.5) * 2);
+        puff.mesh.scale.setScalar(1 + Math.random());
       }
-      for (let n = 0; n < 6; n++) {
-        const n = r[u++ % r.length];
-        n.life = 1.5;
-        n.mesh.position.set(e, t + 0.5, i);
-        n.vx = (Math.random() - 0.5) * 12 * a;
-        n.vy = 3 + Math.random() * 5;
-        n.vz = (Math.random() - 0.5) * 12 * a;
-        n.mesh.visible = true;
+      for (let index = 0; index < 6; index++) {
+        const piece = debris[debrisCursor++ % debris.length];
+        piece.life = 1.5;
+        piece.mesh.position.set(x, y + 0.5, z);
+        piece.vx = (Math.random() - 0.5) * 12 * strength;
+        piece.vy = 3 + Math.random() * 5;
+        piece.vz = (Math.random() - 0.5) * 12 * strength;
+        piece.mesh.visible = true;
       }
     },
   };

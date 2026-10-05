@@ -1,7 +1,7 @@
 import { PointLight, Vector3 } from "three";
 import { createAudio } from "../audio/createAudio.js";
 import { createEffects } from "../effects/effects.js";
-import { animatePerson, createPersonModel } from "../people/person.js";
+import { animatePerson, createPerson } from "../people/person.js";
 import { createRenderer } from "../render/renderer.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
 import { warmUpSession } from "../render/warmUp.js";
@@ -11,13 +11,13 @@ import { buildCar } from "../vehicles/carModel.js";
 import { createTrafficCar } from "../vehicles/trafficCars.js";
 import { buildWorld } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
-export function startGameSession(e, t, n, r, i, a = false) {
-  const o = createRenderer(e, true);
-  const { scene, renderer, camera, sun, touchDevice, composer } = o;
+export function startGameSession(container, car, engine, controls, callbacks, noPolice = false) {
+  const view = createRenderer(container, true);
+  const { scene, renderer, camera, sun, touchDevice, composer } = view;
   const { solids, lampPositions, signals } = buildWorld(scene);
   const staticBatch = batchStaticMeshes(scene, new Set(signals.flatMap((signal) => signal.lenses)), 96);
-  const h = createGame(t, n, solids, a);
-  const g = [];
+  const game = createGame(car, engine, solids, noPolice);
+  const lampLights = [];
   // ?dfdebug exposes the live session for profiling tools
   const debugSession = /[?&]dfdebug\b/.test(location.search)
     ? (window.__dfDbg = {
@@ -29,7 +29,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
         staticBatch,
         solids,
         get state() {
-          return h.state;
+          return game.state;
         },
       })
     : null;
@@ -56,120 +56,120 @@ export function startGameSession(e, t, n, r, i, a = false) {
       }
     }
   }
-  for (let e = 0; e < 6; e++) {
-    const e = new PointLight("#ffd9a0", 0.6, 26, 2);
-    scene.add(e);
-    g.push({
-      light: e,
+  for (let slot = 0; slot < 6; slot++) {
+    const light = new PointLight("#ffd9a0", 0.6, 26, 2);
+    scene.add(light);
+    lampLights.push({
+      light,
     });
   }
-  const _ = new Float32Array(lampPositions.length || 1);
-  const v = [];
+  const lampDistances = new Float32Array(lampPositions.length || 1);
+  const lampOrder = [];
   let lastLampX = Infinity;
   let lastLampZ = Infinity;
-  function y(e, t) {
-    if ((e - lastLampX) ** 2 + (t - lastLampZ) ** 2 < 25) {
+  function updateLampLights(x, z) {
+    if ((x - lastLampX) ** 2 + (z - lastLampZ) ** 2 < 25) {
       return;
     }
-    lastLampX = e;
-    lastLampZ = t;
-    const n = lampPositions;
-    const r = n.length;
-    for (let i = 0; i < r; i++) {
-      const r = n[i].x - e;
-      const a = n[i].z - t;
-      _[i] = r * r + a * a;
-      v[i] = i;
+    lastLampX = x;
+    lastLampZ = z;
+    const lamps = lampPositions;
+    const count = lamps.length;
+    for (let i = 0; i < count; i++) {
+      const dx = lamps[i].x - x;
+      const dz = lamps[i].z - z;
+      lampDistances[i] = dx * dx + dz * dz;
+      lampOrder[i] = i;
     }
-    v.length = r;
-    v.sort((e, t) => _[e] - _[t]);
-    for (let e = 0; e < 6; e++) {
-      const t = g[e];
-      const r = v[e];
-      if (r == null) {
-        t.light.visible = false;
+    lampOrder.length = count;
+    lampOrder.sort((e, t) => lampDistances[e] - lampDistances[t]);
+    for (let slot = 0; slot < 6; slot++) {
+      const lampLight = lampLights[slot];
+      const lampIndex = lampOrder[slot];
+      if (lampIndex == null) {
+        lampLight.light.visible = false;
       } else {
-        t.light.position.set(n[r].x, n[r].y, n[r].z);
-        t.light.visible = true;
+        lampLight.light.position.set(lamps[lampIndex].x, lamps[lampIndex].y, lamps[lampIndex].z);
+        lampLight.light.visible = true;
       }
     }
   }
-  y(0, 70);
+  updateLampLights(0, 70);
   let interaction = null;
-  let b = batchPlayerCar(buildCar(t.color, t.shape, false, true));
-  scene.add(b);
-  let x = h.state.playerVeh.spec;
-  const S = h.state.police.map(() => {
-    const e = createTrafficCar("#ffffff", "coupe", true);
-    scene.add(e);
-    return e;
+  let playerCar = batchPlayerCar(buildCar(car.color, car.shape, false, true));
+  scene.add(playerCar);
+  let playerCarSpec = game.state.playerVeh.spec;
+  const policeCars = game.state.police.map(() => {
+    const policeCar = createTrafficCar("#ffffff", "coupe", true);
+    scene.add(policeCar);
+    return policeCar;
   });
-  const C = createPersonModel("#2f3b4c");
-  C.visible = false;
-  scene.add(C);
-  const w = h.state.police.map(() => {
-    const e = createPersonModel("#1f2f4d");
-    e.visible = false;
-    scene.add(e);
-    return e;
+  const playerPerson = createPerson("#2f3b4c");
+  playerPerson.visible = false;
+  scene.add(playerPerson);
+  const officerPeople = game.state.police.map(() => {
+    const officer = createPerson("#1f2f4d");
+    officer.visible = false;
+    scene.add(officer);
+    return officer;
   });
-  const T = new Map();
-  function E(e) {
-    scene.remove(b);
-    b.traverse((e) => {
+  const trafficCars = new Map();
+  function swapPlayerCar(vehicle) {
+    scene.remove(playerCar);
+    playerCar.traverse((e) => {
       e.geometry?.dispose();
       e.material?.dispose();
     });
-    b = batchPlayerCar(buildCar(e.color, e.shape, e.kind === "police", true));
-    scene.add(b);
-    x = e.spec;
+    playerCar = batchPlayerCar(buildCar(vehicle.color, vehicle.shape, vehicle.kind === "police", true));
+    scene.add(playerCar);
+    playerCarSpec = vehicle.spec;
   }
-  function D() {
-    const e = h.state;
-    const t = new Set();
-    for (let n of e.vehicles) {
-      t.add(n.id);
-      let e = T.get(n.id);
-      if (!e) {
-        const t =
-          n.kind === "police"
+  function syncTrafficCars() {
+    const state = game.state;
+    const activeIds = new Set();
+    for (let vehicle of state.vehicles) {
+      activeIds.add(vehicle.id);
+      let entry = trafficCars.get(vehicle.id);
+      if (!entry) {
+        const carModel =
+          vehicle.kind === "police"
             ? createTrafficCar("#ffffff", "coupe", true)
-            : createTrafficCar(n.color, n.shape || "coupe");
-        scene.add(t);
-        e = {
-          car: t,
+            : createTrafficCar(vehicle.color, vehicle.shape || "coupe");
+        scene.add(carModel);
+        entry = {
+          car: carModel,
         };
-        T.set(n.id, e);
+        trafficCars.set(vehicle.id, entry);
       }
-      e.car.visible = true;
-      e.car.position.set(n.x, terrainHeight(n.x, n.z) + 0.1, n.z);
-      e.car.rotation.y = n.heading;
+      entry.car.visible = true;
+      entry.car.position.set(vehicle.x, terrainHeight(vehicle.x, vehicle.z) + 0.1, vehicle.z);
+      entry.car.rotation.y = vehicle.heading;
       if (
         interaction?.direction === "exit" &&
-        Math.hypot(n.x - interaction.carX, n.z - interaction.carZ) < 0.5
+        Math.hypot(vehicle.x - interaction.carX, vehicle.z - interaction.carZ) < 0.5
       ) {
-        e.car.visible = false;
+        entry.car.visible = false;
       }
     }
-    for (let [e, n] of T) {
-      if (!t.has(e)) {
-        scene.remove(n.car);
-        if (!n.car.userData.sharedTemplate) {
-          n.car.traverse((e) => {
+    for (let [id, entry] of trafficCars) {
+      if (!activeIds.has(id)) {
+        scene.remove(entry.car);
+        if (!entry.car.userData.sharedTemplate) {
+          entry.car.traverse((e) => {
             e.geometry?.dispose();
             e.material?.dispose();
           });
         }
-        T.delete(e);
+        trafficCars.delete(id);
       }
     }
   }
-  const O = r.current.audio || createAudio(n);
-  const k = createEffects(scene);
-  const A = {};
-  let j;
-  let M = performance.now();
-  let N = 0;
+  const audio = controls.current.audio || createAudio(engine);
+  const effects = createEffects(scene);
+  const keys = {};
+  let frameId;
+  let lastFrameTime = performance.now();
+  let hudTimer = 0;
   let cameraYaw = 0;
   let footCameraYaw = 0;
   let cameraPitch = 0;
@@ -227,7 +227,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
     }
     const yawDelta = -(e.clientX - lastPointerX) * 0.005;
     cameraYaw += yawDelta;
-    if (h.state.onFoot) {
+    if (game.state.onFoot) {
       footCameraYaw += yawDelta;
     }
     cameraPitch = Math.max(-0.45, Math.min(0.55, cameraPitch + (e.clientY - lastPointerY) * 0.004));
@@ -257,7 +257,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
     cameraZoom = Math.max(0.45, Math.min(2.8, cameraZoom * Math.exp(e.deltaY * 0.001)));
   }
   function addInteractionDoor() {
-    interaction.door = b.userData.accessDoor;
+    interaction.door = playerCar.userData.accessDoor;
     if (interaction.door) {
       interaction.door.rotation.set(0, 0, 0);
     }
@@ -279,108 +279,108 @@ export function startGameSession(e, t, n, r, i, a = false) {
   });
   renderer.shadowMap.autoUpdate = false;
   renderer.shadowMap.needsUpdate = true;
-  let P = 0;
-  const F = renderer.getPixelRatio();
-  let I = 1;
-  let L = 0;
-  let R = 0;
+  let shadowFrameCounter = 0;
+  const basePixelRatio = renderer.getPixelRatio();
+  let resolutionScale = 1;
+  let windowTime = 0;
+  let windowFrames = 0;
   let shadowFrameInterval = touchDevice ? 2 : 1;
   let slowWindows = 0;
   let fastWindows = 0;
   let fastWindowsNeeded = 4;
   let lastRaise = -Infinity;
   let skipWindow = false;
-  O.ready.catch(() => {});
-  const z = (e) => {
-    O.resume();
+  audio.ready.catch(() => {});
+  const onKeyDown = (e) => {
+    audio.resume();
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
       e.preventDefault();
     }
-    A[e.code] = true;
-    if (e.code === "KeyE" && !e.repeat && !h.state.onFoot && h.state.station >= 0) {
-      i.current.onStation();
+    keys[e.code] = true;
+    if (e.code === "KeyE" && !e.repeat && !game.state.onFoot && game.state.station >= 0) {
+      callbacks.current.onStation();
     }
     if (e.code === "Escape" && !e.repeat) {
-      i.current.onPause();
+      callbacks.current.onPause();
     }
   };
-  const ee = (e) => {
-    A[e.code] = false;
+  const onKeyUp = (e) => {
+    keys[e.code] = false;
   };
-  const B = () => {
-    Object.keys(A).forEach((e) => (A[e] = false));
+  const onBlur = () => {
+    Object.keys(keys).forEach((e) => (keys[e] = false));
   };
-  const V = () => O.resume();
-  const te = () => {
+  const onPointerDown = () => audio.resume();
+  const onVisibilityChange = () => {
     if (!document.hidden) {
-      O.resume();
+      audio.resume();
     }
   };
-  window.addEventListener("keydown", z);
-  window.addEventListener("keyup", ee);
-  window.addEventListener("blur", B);
-  window.addEventListener("pointerdown", V);
-  document.addEventListener("visibilitychange", te);
+  window.addEventListener("keydown", onKeyDown);
+  window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", onBlur);
+  window.addEventListener("pointerdown", onPointerDown);
+  document.addEventListener("visibilitychange", onVisibilityChange);
   camera.position.set(0, 9, 85);
-  const ne = new Vector3();
-  const re = new Vector3();
-  const ie = new Vector3();
-  function ae(t) {
-    j = requestAnimationFrame(ae);
-    const n = (t - M) / 1000;
-    const a = Math.min(n, 0.04);
+  const lookTarget = new Vector3();
+  const cameraTarget = new Vector3();
+  const shakeOffset = new Vector3();
+  function frame(time) {
+    frameId = requestAnimationFrame(frame);
+    const frameSeconds = (time - lastFrameTime) / 1000;
+    const dt = Math.min(frameSeconds, 0.04);
 
     // a frame longer than a second means the tab was hidden, not that the game is slow
-    M = t;
-    if (n < 1) {
-      L += n;
-      R++;
+    lastFrameTime = time;
+    if (frameSeconds < 1) {
+      windowTime += frameSeconds;
+      windowFrames++;
     }
-    if (L > 1) {
-      const t = L / R;
-      let n = I;
-      shadowFrameInterval = touchDevice ? 2 : t > 1 / 32 ? 3 : t > 1 / 48 ? 2 : 1;
+    if (windowTime > 1) {
+      const averageFrame = windowTime / windowFrames;
+      let nextScale = resolutionScale;
+      shadowFrameInterval = touchDevice ? 2 : averageFrame > 1 / 32 ? 3 : averageFrame > 1 / 48 ? 2 : 1;
       // resizing reallocates every post-processing target, so only react to sustained trends and
       // back off when a resolution increase did not hold
       if (skipWindow) {
         skipWindow = false;
       } else {
-        slowWindows = t > 1 / 45 ? slowWindows + 1 : 0;
-        fastWindows = t < 1 / 57 ? fastWindows + 1 : 0;
+        slowWindows = averageFrame > 1 / 45 ? slowWindows + 1 : 0;
+        fastWindows = averageFrame < 1 / 57 ? fastWindows + 1 : 0;
         if (slowWindows >= 2) {
-          n = Math.max(0.6, I - 0.1);
+          nextScale = Math.max(0.6, resolutionScale - 0.1);
           if (performance.now() - lastRaise < 8000) {
             fastWindowsNeeded = Math.min(32, fastWindowsNeeded * 2);
           }
         } else if (fastWindows >= fastWindowsNeeded) {
-          n = Math.min(1, I + 0.05);
+          nextScale = Math.min(1, resolutionScale + 0.05);
           lastRaise = performance.now();
         }
       }
-      if (n !== I) {
-        I = n;
+      if (nextScale !== resolutionScale) {
+        resolutionScale = nextScale;
         slowWindows = 0;
         fastWindows = 0;
         skipWindow = true;
-        renderer.setPixelRatio(F * I);
-        composer.setPixelRatio(F * I);
-        composer.setSize(e.clientWidth, e.clientHeight);
+        renderer.setPixelRatio(basePixelRatio * resolutionScale);
+        composer.setPixelRatio(basePixelRatio * resolutionScale);
+        composer.setSize(container.clientWidth, container.clientHeight);
       }
-      L = 0;
-      R = 0;
+      windowTime = 0;
+      windowFrames = 0;
     }
-    const o = h.state;
-    if (r.current.paused) {
-      O.update(o.rpm, 0, true, false, o);
+    const state = game.state;
+    if (controls.current.paused) {
+      audio.update(state.rpm, 0, true, false, state);
     } else {
-      const wasOnFoot = o.onFoot;
-      const oldX = o.x;
-      const oldZ = o.z;
-      h.update(
-        a,
+      const wasOnFoot = state.onFoot;
+      const oldX = state.x;
+      const oldZ = state.z;
+      game.update(
+        dt,
         {
-          ...A,
-          ...r.current.keys,
+          ...keys,
+          ...controls.current.keys,
           ...(interaction
             ? {
                 ArrowUp: false,
@@ -398,96 +398,99 @@ export function startGameSession(e, t, n, r, i, a = false) {
               }
             : {}),
         },
-        h.state.onFoot ? footCameraYaw : h.state.heading + cameraYaw,
+        game.state.onFoot ? footCameraYaw : game.state.heading + cameraYaw,
       );
-      if (wasOnFoot !== o.onFoot) {
-        if (o.onFoot) {
-          footCameraYaw = o.heading + cameraYaw;
+      if (wasOnFoot !== state.onFoot) {
+        if (state.onFoot) {
+          footCameraYaw = state.heading + cameraYaw;
         } else {
-          cameraYaw = footCameraYaw - o.heading;
+          cameraYaw = footCameraYaw - state.heading;
         }
       }
-      if (wasOnFoot !== o.onFoot) {
+      if (wasOnFoot !== state.onFoot) {
         interaction = {
-          direction: o.onFoot ? "exit" : "enter",
+          direction: state.onFoot ? "exit" : "enter",
           elapsed: 0,
           duration: 1.3,
-          carX: o.onFoot ? oldX : o.x,
-          carZ: o.onFoot ? oldZ : o.z,
-          heading: o.heading,
+          carX: state.onFoot ? oldX : state.x,
+          carZ: state.onFoot ? oldZ : state.z,
+          heading: state.heading,
           startX: oldX,
           startZ: oldZ,
-          endX: o.x,
-          endZ: o.z,
+          endX: state.x,
+          endZ: state.z,
           door: null,
         };
       }
-      sun.position.set(o.x + 40, 85, o.z - 25);
-      sun.target.position.set(o.x, 0, o.z);
+      sun.position.set(state.x + 40, 85, state.z - 25);
+      sun.target.position.set(state.x, 0, state.z);
       sun.target.updateMatrixWorld();
-      P++;
-      if (P >= shadowFrameInterval) {
+      shadowFrameCounter++;
+      if (shadowFrameCounter >= shadowFrameInterval) {
         renderer.shadowMap.needsUpdate = true;
-        P = 0;
+        shadowFrameCounter = 0;
       }
-      y(o.x, o.z);
-      o._crash &&=
-        (k.crash(o._crash.x, o._crash.y, o._crash.z, o._crash.intensity), O.crash(o._crash.intensity), null);
-      if (o.playerVeh.spec !== x) {
-        E(o.playerVeh);
+      updateLampLights(state.x, state.z);
+      if (state._crash) {
+        effects.crash(state._crash.x, state._crash.y, state._crash.z, state._crash.intensity);
+        audio.crash(state._crash.intensity);
+        state._crash = null;
       }
-      if (interaction && interaction.door?.parent !== b) {
+      if (state.playerVeh.spec !== playerCarSpec) {
+        swapPlayerCar(state.playerVeh);
+      }
+      if (interaction && interaction.door?.parent !== playerCar) {
         addInteractionDoor();
       }
-      b.visible = !o.onFoot || interaction?.direction === "exit";
-      if (!o.onFoot) {
-        b.position.set(o.x, (o.y || 0) + 0.12, o.z);
-        b.rotation.y = o.heading;
-        b.rotation.z = o.drifting ? Math.sin(o.elapsed * 7) * 0.015 : 0;
-        b.userData.wheels.forEach((e) => (e.rotation.x -= o.speed * 0.01 * a));
-        const e = o.brake > 0 || (o.speed > 5 && o.throttle === 0);
-        b.userData.brakeLights.forEach((t) => (t.material.emissiveIntensity = e ? 1.5 : 0.15));
+      playerCar.visible = !state.onFoot || interaction?.direction === "exit";
+      if (!state.onFoot) {
+        playerCar.position.set(state.x, (state.y || 0) + 0.12, state.z);
+        playerCar.rotation.y = state.heading;
+        playerCar.rotation.z = state.drifting ? Math.sin(state.elapsed * 7) * 0.015 : 0;
+        playerCar.userData.wheels.forEach((e) => (e.rotation.x -= state.speed * 0.01 * dt));
+        const braking = state.brake > 0 || (state.speed > 5 && state.throttle === 0);
+        playerCar.userData.brakeLights.forEach((t) => (t.material.emissiveIntensity = braking ? 1.5 : 0.15));
       }
-      C.visible = !!o.onFoot;
-      if (o.onFoot) {
-        C.position.set(o.x, o.y || 0, o.z);
-        C.rotation.y = o.footYaw || 0;
-        animatePerson(C, a, o.x, o.z);
+      playerPerson.visible = !!state.onFoot;
+      if (state.onFoot) {
+        playerPerson.position.set(state.x, state.y || 0, state.z);
+        playerPerson.rotation.y = state.footYaw || 0;
+        animatePerson(playerPerson, dt, state.x, state.z);
       }
-      S.forEach((e, n) => {
-        const r = o.police[n];
-        e.visible = !r.onFoot;
-        if (!r.onFoot) {
-          e.position.set(r.x, terrainHeight(r.x, r.z) + 0.1, r.z);
-          e.rotation.y = r.heading;
+      policeCars.forEach((policeCar, index) => {
+        const officer = state.police[index];
+        policeCar.visible = !officer.onFoot;
+        if (!officer.onFoot) {
+          policeCar.position.set(officer.x, terrainHeight(officer.x, officer.z) + 0.1, officer.z);
+          policeCar.rotation.y = officer.heading;
         }
-        const i =
-          e.userData.blueLight === undefined
-            ? (e.userData.blueLight = e.getObjectByName("blue") || null)
-            : e.userData.blueLight;
-        const a =
-          e.userData.redLight === undefined
-            ? (e.userData.redLight = e.getObjectByName("red") || null)
-            : e.userData.redLight;
-        if (i) {
-          i.visible = !r.onFoot && Math.sin(t * 0.018) > 0;
+        const blueLight =
+          policeCar.userData.blueLight === undefined
+            ? (policeCar.userData.blueLight = policeCar.getObjectByName("blue") || null)
+            : policeCar.userData.blueLight;
+        const redLight =
+          policeCar.userData.redLight === undefined
+            ? (policeCar.userData.redLight = policeCar.getObjectByName("red") || null)
+            : policeCar.userData.redLight;
+        if (blueLight) {
+          blueLight.visible = !officer.onFoot && Math.sin(time * 0.018) > 0;
         }
-        if (a) {
-          a.visible = !r.onFoot && Math.sin(t * 0.018) <= 0;
+        if (redLight) {
+          redLight.visible = !officer.onFoot && Math.sin(time * 0.018) <= 0;
         }
       });
-      w.forEach((e, t) => {
-        const n = o.police[t];
-        e.visible = !!n.onFoot;
-        if (n.onFoot) {
-          e.position.set(n.x, terrainHeight(n.x, n.z), n.z);
-          e.rotation.y = n.heading;
-          animatePerson(e, a, n.x, n.z);
+      officerPeople.forEach((person, index) => {
+        const officer = state.police[index];
+        person.visible = !!officer.onFoot;
+        if (officer.onFoot) {
+          person.position.set(officer.x, terrainHeight(officer.x, officer.z), officer.z);
+          person.rotation.y = officer.heading;
+          animatePerson(person, dt, officer.x, officer.z);
         }
       });
-      D();
+      syncTrafficCars();
       if (interaction) {
-        interaction.elapsed += a;
+        interaction.elapsed += dt;
         const time = Math.min(interaction.elapsed / interaction.duration, 1);
         const ease = (e) => e * e * (3 - 2 * e);
         const open = ease(Math.min(time / 0.2, 1)) * (1 - ease(Math.max(0, (time - 0.78) / 0.22)));
@@ -498,33 +501,33 @@ export function startGameSession(e, t, n, r, i, a = false) {
         const sideZ = interaction.carZ + Math.sin(interaction.heading) * 1.45;
         if (interaction.direction === "exit") {
           const step = ease(Math.max(0, Math.min((time - 0.16) / 0.56, 1)));
-          C.visible = true;
-          C.position.set(
+          playerPerson.visible = true;
+          playerPerson.position.set(
             sideX + (interaction.endX - sideX) * step,
             0,
             sideZ + (interaction.endZ - sideZ) * step,
           );
-          C.rotation.y = interaction.heading;
-          C.scale.setScalar(0.78 + 0.22 * ease(Math.min(time / 0.42, 1)));
-          b.position.set(
+          playerPerson.rotation.y = interaction.heading;
+          playerPerson.scale.setScalar(0.78 + 0.22 * ease(Math.min(time / 0.42, 1)));
+          playerCar.position.set(
             interaction.carX,
             terrainHeight(interaction.carX, interaction.carZ) + 0.1,
             interaction.carZ,
           );
-          b.rotation.y = interaction.heading;
+          playerCar.rotation.y = interaction.heading;
         } else {
           const approach = ease(Math.min(time / 0.48, 1));
           const enter = ease(Math.max(0, Math.min((time - 0.42) / 0.34, 1)));
-          C.visible = time < 0.84;
-          C.position.set(
+          playerPerson.visible = time < 0.84;
+          playerPerson.position.set(
             interaction.startX + (sideX - interaction.startX) * approach + (interaction.carX - sideX) * enter,
             0.12 * Math.sin(Math.PI * enter),
             interaction.startZ + (sideZ - interaction.startZ) * approach + (interaction.carZ - sideZ) * enter,
           );
-          C.rotation.y = interaction.heading;
-          C.scale.setScalar(1 - 0.72 * enter);
+          playerPerson.rotation.y = interaction.heading;
+          playerPerson.scale.setScalar(1 - 0.72 * enter);
         }
-        const limbs = C.userData.L;
+        const limbs = playerPerson.userData.L;
         if (limbs && time < 0.84) {
           const crouch = Math.sin(Math.PI * Math.min(time / 0.84, 1));
           limbs.body.position.y = 0.08 * crouch;
@@ -536,84 +539,84 @@ export function startGameSession(e, t, n, r, i, a = false) {
         }
         if (time >= 1) {
           removeInteractionDoor();
-          C.scale.setScalar(1);
+          playerPerson.scale.setScalar(1);
           interaction = null;
         }
       }
-      const e = Math.min(o.speed / 200, 1);
-      updateTrafficLights(a);
-      const targetFov = 45 + e * 12;
+      const speedFactor = Math.min(state.speed / 200, 1);
+      updateTrafficLights(dt);
+      const targetFov = 45 + speedFactor * 12;
       if (camera.fov !== targetFov) {
         camera.fov = targetFov;
         camera.updateProjectionMatrix();
       }
-      const inStore = o.onFoot && o.store >= 0;
-      const n = inStore ? 4.2 : 12 + e * 3;
-      const s = inStore ? 2.2 : 7.5 + e * 1.5;
-      const cameraHeading = o.onFoot ? footCameraYaw : o.heading + cameraYaw;
-      const cameraDistance = Math.hypot(n, s - 1) * cameraZoom;
-      const cameraAngle = Math.atan2(s - 1, n) + cameraPitch;
-      re.set(
-        o.x + Math.sin(cameraHeading) * Math.cos(cameraAngle) * cameraDistance,
-        (o.y || 0) + 1 + Math.sin(cameraAngle) * cameraDistance,
-        o.z + Math.cos(cameraHeading) * Math.cos(cameraAngle) * cameraDistance,
+      const inStore = state.onFoot && state.store >= 0;
+      const distanceBack = inStore ? 4.2 : 12 + speedFactor * 3;
+      const heightAbove = inStore ? 2.2 : 7.5 + speedFactor * 1.5;
+      const cameraHeading = state.onFoot ? footCameraYaw : state.heading + cameraYaw;
+      const cameraDistance = Math.hypot(distanceBack, heightAbove - 1) * cameraZoom;
+      const cameraAngle = Math.atan2(heightAbove - 1, distanceBack) + cameraPitch;
+      cameraTarget.set(
+        state.x + Math.sin(cameraHeading) * Math.cos(cameraAngle) * cameraDistance,
+        (state.y || 0) + 1 + Math.sin(cameraAngle) * cameraDistance,
+        state.z + Math.cos(cameraHeading) * Math.cos(cameraAngle) * cameraDistance,
       );
-      camera.position.lerp(re, 1 - Math.exp(-a * (o.onFoot ? 12 : 4.5)));
-      if (o.shake > 0.01) {
-        ie.set(
-          (Math.random() - 0.5) * o.shake * 0.8,
-          (Math.random() - 0.5) * o.shake * 0.5,
-          (Math.random() - 0.5) * o.shake * 0.8,
+      camera.position.lerp(cameraTarget, 1 - Math.exp(-dt * (state.onFoot ? 12 : 4.5)));
+      if (state.shake > 0.01) {
+        shakeOffset.set(
+          (Math.random() - 0.5) * state.shake * 0.8,
+          (Math.random() - 0.5) * state.shake * 0.5,
+          (Math.random() - 0.5) * state.shake * 0.8,
         );
-        camera.position.add(ie);
+        camera.position.add(shakeOffset);
       }
-      ne.set(o.x, (o.y || 0) + 1, o.z);
-      camera.lookAt(ne);
-      k.update(o, a, camera);
-      O.update(o.rpm, o.pedal, r.current.muted, o.drifting, o);
-      if (wasOnFoot && !o.onFoot) {
-        O.startEngine();
+      lookTarget.set(state.x, (state.y || 0) + 1, state.z);
+      camera.lookAt(lookTarget);
+      effects.update(state, dt, camera);
+      audio.update(state.rpm, state.pedal, controls.current.muted, state.drifting, state);
+      if (wasOnFoot && !state.onFoot) {
+        audio.startEngine();
       }
-      N += a;
-      if (N > 0.09) {
-        N = 0;
-        i.current.onHud({
-          ...o,
-          police: o.police.map((e) => ({
+      hudTimer += dt;
+      if (hudTimer > 0.09) {
+        hudTimer = 0;
+        callbacks.current.onHud({
+          ...state,
+          police: state.police.map((e) => ({
             ...e,
           })),
         });
       }
-      if (o.ended && !r.current.finished) {
-        r.current.finished = true;
-        r.current.paused = true;
-        i.current.onFinish({
-          ...o,
-          credits: Math.floor(o.score / 12 + o.elapsed * 2),
+      if (state.ended && !controls.current.finished) {
+        controls.current.finished = true;
+        controls.current.paused = true;
+        callbacks.current.onFinish({
+          ...state,
+          credits: Math.floor(state.score / 12 + state.elapsed * 2),
         });
       }
     }
     composer.render();
   }
-  warmUpSession(renderer, scene, camera, [t.color]);
+  warmUpSession(renderer, scene, camera, [car.color]);
   if (debugSession) {
-    debugSession.fx = k;
+    debugSession.fx = effects;
   }
-  j = requestAnimationFrame(ae);
+  frameId = requestAnimationFrame(frame);
   return {
     setCar(e) {
-      h.setCar(e);
-      scene.remove(b);
-      b.traverse((e) => {
+      game.setCar(e);
+      scene.remove(playerCar);
+      playerCar.traverse((e) => {
         e.geometry?.dispose();
         e.material?.dispose();
       });
-      b = batchPlayerCar(buildCar(e.color, e.shape, false, true));
-      scene.add(b);
-      x = `player|${e.color}|${e.shape}`;
+      playerCar = batchPlayerCar(buildCar(e.color, e.shape, false, true));
+      scene.add(playerCar);
+      playerCarSpec = `player|${e.color}|${e.shape}`;
     },
     dispose() {
-      cancelAnimationFrame(j);
+      cancelAnimationFrame(frameId);
       removeInteractionDoor();
       canvas.removeEventListener("pointerdown", startCameraDrag);
       canvas.removeEventListener("pointermove", moveCameraDrag);
@@ -621,13 +624,13 @@ export function startGameSession(e, t, n, r, i, a = false) {
       canvas.removeEventListener("pointercancel", stopCameraDrag);
       canvas.removeEventListener("contextmenu", preventCameraMenu);
       canvas.removeEventListener("wheel", zoomCamera);
-      window.removeEventListener("keydown", z);
-      window.removeEventListener("keyup", ee);
-      window.removeEventListener("blur", B);
-      window.removeEventListener("pointerdown", V);
-      document.removeEventListener("visibilitychange", te);
-      O.close();
-      o.dispose();
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      audio.close();
+      view.dispose();
     },
   };
 }
