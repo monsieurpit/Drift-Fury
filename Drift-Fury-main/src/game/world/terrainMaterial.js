@@ -21,6 +21,7 @@ vec3 terrainWeights;
 float terrainRockAmount;
 float terrainSnowAmount;
 float terrainGrassDry;
+float terrainFar;
 
 // Triplanar blend weights from the world normal (sharpened so each face mostly uses one projection).
 vec3 triplanarWeights(vec3 n) {
@@ -63,7 +64,12 @@ const COLOR_CHUNK = /* glsl */ `
     * (1.0 - smoothstep(0.5, 0.78, slope));
   terrainGrassDry = macro.r;
 
-  vec3 rock = triplanarColor(terrainRock, p, terrainWeights, 1.0 / 13.0);
+  // Rock at two unrelated scales: the near detail (13 m) and a rotated large sample (57 m) that takes over
+  // with distance and in macro patches, so cliff faces seen from afar don't show a regular weave.
+  terrainFar = smoothstep(40.0, 220.0, length(vViewPosition));
+  vec3 rockNear = triplanarColor(terrainRock, p, terrainWeights, 1.0 / 13.0);
+  vec3 rockFar = triplanarColor(terrainRock, p.zyx + vec3(31.0, 0.0, 17.0), terrainWeights.zyx, 1.0 / 57.0);
+  vec3 rock = mix(rockNear, rockFar, clamp(terrainFar * 0.85 + (macro.g - 0.5) * 0.8 + 0.25, 0.0, 1.0));
   rock *= mix(0.78, 1.12, macro.b) * mix(0.9, 1.06, macroFine.r);
   vec3 grass = antiTile(terrainGrass, p.xz, 1.0 / 7.5, macro.g).rgb;
   grass *= mix(0.72, 1.18, macro.r) * mix(0.88, 1.08, macroFine.g);
@@ -83,7 +89,10 @@ const NORMAL_CHUNK = /* glsl */ `
 {
   vec3 p = vTerrainPosition;
   vec3 n = normalize(vTerrainNormal);
-  vec3 rockN = triplanarNormal(terrainRockNormal, p, n, terrainWeights, 1.0 / 13.0, 1.4);
+  vec3 rockN = triplanarNormal(terrainRockNormal, p, n, terrainWeights, 1.0 / 13.0, mix(1.4, 0.5, terrainFar));
+  vec3 nSwap = n.zyx;
+  vec3 rockFarN = triplanarNormal(terrainRockNormal, p.zyx + vec3(31.0, 0.0, 17.0), nSwap, terrainWeights.zyx, 1.0 / 57.0, 1.6).zyx;
+  rockN = normalize(mix(rockN, rockFarN, 0.35 + terrainFar * 0.45));
   vec3 groundTex = mix(texture2D(terrainGrassNormal, p.xz / 7.5).xyz, texture2D(terrainSnowNormal, p.xz / 6.0).xyz, terrainSnowAmount) * 2.0 - 1.0;
   groundTex.xy *= 0.9;
   vec3 groundN = normalize(vec3(groundTex.x + n.x, abs(groundTex.z) * n.y, groundTex.y + n.z));
