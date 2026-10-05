@@ -815,6 +815,15 @@ function buildGrassTufts(world, random) {
     side: DoubleSide,
     roughness: 0.95,
   });
+  // Shade every blade with the ground's (world-up) normal on both faces; the default double-sided flip
+  // turns half the blades face-down and leaves them nearly black.
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <normal_fragment_begin>",
+      "#include <normal_fragment_begin>\nnormal = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);\nnonPerturbedNormal = normal;",
+    );
+  };
+  material.customProgramCacheKey = () => "drift-fury-grass-tuft";
   chunkedInstances(scene, tufts, grassTuftGeometry(), material, {
     name: "mountain-grass",
     castShadow: false,
