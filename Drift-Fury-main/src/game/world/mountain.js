@@ -17,6 +17,7 @@ import {
   Group,
   IcosahedronGeometry,
   InstancedMesh,
+  LOD,
   Mesh,
   MeshStandardMaterial,
   Object3D,
@@ -36,7 +37,7 @@ import {
   terrainHeight,
 } from "./terrain.js";
 import { createTerrainMaterial } from "./terrainMaterial.js";
-import { createFoliageMaterial } from "./foliageMaterial.js";
+import { createBranchCardMaterial, createFoliageMaterial } from "./foliageMaterial.js";
 import { getTerrainTextures } from "./terrainTextures.js";
 import { ROAD_TEXTURE_LENGTH, createRoadSurfaceMaterial } from "./roadSurface.js";
 
@@ -538,7 +539,7 @@ function buildSummit(world, { lift, postMaterial }) {
  * One pine: a trunk and drooping whorls of foliage, tapering to a spire, with ragged edges and dark-to-light
  * vertex colours (inside of the crown darker than the tips).
  */
-function pineGeometry(random, variant) {
+function pineGeometry(random, variant, withCards) {
   const parts = [];
   const height = 9 + variant * 1.6;
   const crownBase = 1.4 + random() * 0.6;
@@ -551,6 +552,9 @@ function pineGeometry(random, variant) {
   parts.push(trunk.toNonIndexed());
 
   const whorls = 7 + Math.floor(variant / 2);
+  const cards = { positions: [], normals: [], colors: [], uvs: [] };
+  // Cards draw from their own stream so the crown core is identical with and without them (no LOD pop).
+  const cardRandom = createRandom(Math.floor(random() * 1e9));
   const dark = new Color("#0e2116");
   const mid = new Color("#1d3a22");
   const tip = new Color("#3f5f33");
@@ -560,7 +564,16 @@ function pineGeometry(random, variant) {
       crownBase +
       Math.pow(t, 0.92) * (height - crownBase - 1.4) +
       (w > 0 && w < whorls - 1 ? (random() - 0.5) * 0.5 : 0);
-    const radius = ((1 - Math.pow(t, 1.15)) * (1.9 + variant * 0.2) + 0.3) * (0.78 + random() * 0.44);
+    const fullRadius = ((1 - Math.pow(t, 1.15)) * (1.9 + variant * 0.2) + 0.3) * (0.78 + random() * 0.44);
+    // Whorls carry branch cards around a slimmer, darker solid core (the shaded inside of the crown); only
+    // the leader at the very top stays solid.
+    const carded = withCards && w < whorls - 1;
+    const radius = carded ? fullRadius * 0.62 : fullRadius;
+    if (carded) {
+      addBranchCards(cards, cardRandom, y, fullRadius, t);
+      // Lower crown: a second, offset layer of limbs between this whorl and the next one up.
+      if (t < 0.45) addBranchCards(cards, cardRandom, y + 0.55, fullRadius * 0.9, t);
+    }
     const layerHeight = 1.5 - t * 0.5;
     const segments = 10;
     const positions = [];
@@ -583,8 +596,8 @@ function pineGeometry(random, variant) {
       const b = rim[(s + 1) % segments];
       // Upper surface (outside of the whorl).
       positions.push(...apex, ...b, ...a);
-      const top = shade(mid, 0.25 + t * 0.3);
-      const edge = shade(mid, 0.55 + random() * 0.25);
+      const top = shade(carded ? dark : mid, 0.25 + t * 0.3);
+      const edge = shade(carded ? dark : mid, 0.45 + random() * 0.25);
       colors.push(top.r, top.g, top.b, edge.r, edge.g, edge.b, edge.r, edge.g, edge.b);
       // Underside of the lower branches (dark, seen when looking up at trees above the road).
       if (w < 2) {
@@ -628,7 +641,64 @@ function pineGeometry(random, variant) {
       normal.setXYZ(i, n.x, n.y, n.z);
     }
   }
-  return merged;
+  if (!withCards) return merged;
+  merged.setAttribute("uv", new Float32BufferAttribute(new Float32Array(position.count * 2), 2));
+  const cardGeometry = new BufferGeometry();
+  cardGeometry.setAttribute("position", new Float32BufferAttribute(cards.positions, 3));
+  cardGeometry.setAttribute("normal", new Float32BufferAttribute(cards.normals, 3));
+  cardGeometry.setAttribute("color", new Float32BufferAttribute(cards.colors, 3));
+  cardGeometry.setAttribute("uv", new Float32BufferAttribute(cards.uvs, 2));
+  // Group 0: solid core (foliage material), group 1: branch cards (alpha-tested card material).
+  return mergeGeometries([merged, cardGeometry], true);
+}
+
+/**
+ * Branch cards for one whorl: each branch is a shallow V of two textured quads hinged along the twig, which
+ * reads as a feathery spray from the side and from above. Branches droop toward the tip like spruce limbs.
+ */
+function addBranchCards(cards, random, y, radius, t) {
+  const count = 8 + Math.floor(random() * 2);
+  const twist = random() * Math.PI * 2;
+  for (let b = 0; b < count; b++) {
+    const angle = twist + (b / count) * Math.PI * 2 + (random() - 0.5) * 0.5;
+    const length = radius * (0.95 + random() * 0.3);
+    const halfWidth = Math.max(0.4, length * 0.42);
+    const droop = (0.25 + random() * 0.35) * length * 0.45;
+    const lift = halfWidth * 0.45; // the two wings rise from the twig: a shallow V
+    const dirX = Math.cos(angle);
+    const dirZ = Math.sin(angle);
+    const sideX = -dirZ;
+    const sideZ = dirX;
+    const root = [dirX * 0.12, y + 0.05, dirZ * 0.12];
+    const tip = [dirX * length, y - droop, dirZ * length];
+    const at = (point, side, up) => [point[0] + sideX * side, point[1] + up, point[2] + sideZ * side];
+    const shadeRoot = 0.5 + t * 0.15;
+    const shadeTip = 0.95 + random() * 0.15;
+    for (const side of [-1, 1]) {
+      const rootEdge = at(root, side * halfWidth * 0.5, lift * 0.5);
+      const tipEdge = at(tip, side * halfWidth, lift);
+      const v = side < 0 ? 0 : 1;
+      // Two triangles: root, tip, tipEdge / root, tipEdge, rootEdge.
+      const quad = [
+        [root, 0, 0.5, shadeRoot],
+        [tip, 1, 0.5, shadeTip],
+        [tipEdge, 1, v, shadeTip],
+        [root, 0, 0.5, shadeRoot],
+        [tipEdge, 1, v, shadeTip],
+        [rootEdge, 0, v, shadeRoot],
+      ];
+      for (const [point, u, vv, shade] of quad) {
+        cards.positions.push(point[0], point[1], point[2]);
+        // "Up and out" normal: lit like the outside of a crown from any view, no dark backfaces.
+        const out = new Vector3(point[0], 0, point[2]);
+        const len = out.length() || 1;
+        const n = new Vector3(out.x / len, 0.9, out.z / len).normalize();
+        cards.normals.push(n.x, n.y, n.z);
+        cards.colors.push(shade, shade, shade * 0.95);
+        cards.uvs.push(u, vv);
+      }
+    }
+  }
 }
 
 /** Distant pine (seen from far away only): three stacked cones, ~20 triangles, coloured like the near ones. */
@@ -699,13 +769,17 @@ function boulderGeometry(seed) {
   return geometry;
 }
 
-/** Chunked instancing: each area of the map gets its own InstancedMesh so off-screen chunks are culled. */
+/**
+ * Chunked instancing: each area of the map gets its own InstancedMesh so off-screen chunks are culled.
+ * With `lod: { geometry, material, distance }` each chunk becomes a LOD that swaps to the lighter geometry
+ * once the camera is more than `distance` metres from the chunk centre.
+ */
 function chunkedInstances(
   scene,
   entries,
   geometry,
   material,
-  { chunkSize = 128, castShadow = true, name } = {},
+  { chunkSize = 128, castShadow = true, name, lod = null } = {},
 ) {
   const chunks = new Map();
   for (const entry of entries) {
@@ -714,10 +788,10 @@ function chunkedInstances(
     chunks.get(key).push(entry);
   }
   const dummy = new Object3D();
-  for (const list of chunks.values()) {
-    const mesh = new InstancedMesh(geometry, material, list.length);
+  const instances = (list, meshGeometry, meshMaterial, origin) => {
+    const mesh = new InstancedMesh(meshGeometry, meshMaterial, list.length);
     list.forEach((entry, index) => {
-      dummy.position.set(entry.x, entry.y, entry.z);
+      dummy.position.set(entry.x - origin.x, entry.y - origin.y, entry.z - origin.z);
       dummy.rotation.set(entry.tiltX || 0, entry.yaw || 0, entry.tiltZ || 0);
       dummy.scale.set(entry.sx ?? entry.scale, entry.sy ?? entry.scale, entry.sz ?? entry.scale);
       dummy.updateMatrix();
@@ -728,7 +802,25 @@ function chunkedInstances(
     mesh.castShadow = castShadow;
     mesh.receiveShadow = true;
     mesh.name = name;
-    scene.add(mesh);
+    return mesh;
+  };
+  for (const list of chunks.values()) {
+    if (!lod) {
+      scene.add(instances(list, geometry, material, { x: 0, y: 0, z: 0 }));
+      continue;
+    }
+    const center = { x: 0, y: 0, z: 0 };
+    for (const entry of list) {
+      center.x += entry.x / list.length;
+      center.y += entry.y / list.length;
+      center.z += entry.z / list.length;
+    }
+    const levels = new LOD();
+    levels.position.set(center.x, center.y, center.z);
+    levels.addLevel(instances(list, geometry, material, center), 0);
+    levels.addLevel(instances(list, lod.geometry, lod.material, center), lod.distance);
+    levels.name = name + "-lod";
+    scene.add(levels);
   }
 }
 
@@ -853,7 +945,8 @@ export function buildMountainScenery(world) {
 
   // Forest: jittered grid, density from large-scale noise (stands and clearings), slope and altitude.
   const variants = [0, 1, 2, 3].map((variant) => ({
-    geometry: pineGeometry(createRandom(400 + variant), variant),
+    geometry: pineGeometry(createRandom(400 + variant), variant, true),
+    simple: pineGeometry(createRandom(400 + variant), variant, false),
     trees: [],
   }));
   const treeLine = (x, z) => 118 + fbm(x / 160, z / 160, { seed: 77, octaves: 3 }) * 60;
@@ -901,8 +994,14 @@ export function buildMountainScenery(world) {
   };
   plant(NEAR.minX, NEAR.maxX, NEAR.minZ, NEAR.maxZ, 5.5, true);
   const foliage = createFoliageMaterial();
+  const branchCards = createBranchCardMaterial();
   for (const variant of variants) {
-    chunkedInstances(scene, variant.trees, variant.geometry, foliage, { name: "mountain-pines" });
+    // Branch-card crowns near the camera, the solid crown (a fraction of the triangles) further away.
+    chunkedInstances(scene, variant.trees, variant.geometry, [foliage, branchCards], {
+      name: "mountain-pines",
+      chunkSize: 64,
+      lod: { geometry: variant.simple, material: foliage, distance: 120 },
+    });
   }
   // Backdrop forest: the same placement rules, a much lighter model and no shadows.
   for (const variant of variants) variant.trees = [];

@@ -1,7 +1,19 @@
 // Conifer foliage: vertex-coloured crowns get needle-cluster detail from a generated texture projected in
 // world space from three axes (so any branch orientation works), modulating both colour and normal.
 // That turns flat low-poly whorls into something that reads as needles without extra geometry.
-import { CanvasTexture, MeshStandardMaterial, NoColorSpace, RepeatWrapping } from "three";
+import {
+  CanvasTexture,
+  ClampToEdgeWrapping,
+  DataTexture,
+  DoubleSide,
+  LinearFilter,
+  LinearMipmapLinearFilter,
+  MeshStandardMaterial,
+  NoColorSpace,
+  RGBAFormat,
+  RepeatWrapping,
+  SRGBColorSpace,
+} from "three";
 import { createRandom } from "../util/random.js";
 import { normalMapFromHeight } from "./textures.js";
 
@@ -113,5 +125,132 @@ export function createFoliageMaterial() {
       .replace("#include <normal_fragment_maps>", NORMAL);
   };
   material.customProgramCacheKey = () => "drift-fury-foliage";
+  return material;
+}
+
+/**
+ * A spruce branch spray for branch cards: u runs from the trunk (0) to the tip (1), v across the branch with
+ * the twig at v = 0.5. Side shoots angle forward off the twig and carry needles; the outline tapers to a
+ * point at the tip. Colour is rebuilt from grey levels so transparent texels keep a green colour (canvas
+ * drops the colour of alpha-0 pixels, which would darken mipmapped edges).
+ */
+function branchTexture() {
+  const width = 256;
+  const height = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  const random = createRandom(5150);
+  const mid = height / 2;
+  // Half-width of the spray along the branch (narrow at the trunk, widest past the middle, pointed tip).
+  const envelope = (t) => Math.sin(Math.PI * Math.min(1, t * 0.95 + 0.05) ** 0.8) * (height * 0.46);
+  const needles = (x0, y0, angle, length, level) => {
+    const count = Math.max(4, Math.floor(length / 1.6));
+    for (let n = 0; n < count; n++) {
+      const along = n / count;
+      const px = x0 + Math.cos(angle) * length * along;
+      const py = y0 + Math.sin(angle) * length * along;
+      for (const side of [-1, 1]) {
+        const needleAngle = angle + side * (0.7 + random() * 0.35);
+        const needleLength = (6.5 + random() * 4.5) * (1 - along * 0.3);
+        const shade = Math.round(level * (0.75 + random() * 0.4) * (0.8 + along * 0.35));
+        context.strokeStyle = `rgb(${Math.min(255, shade)},0,0)`;
+        context.lineWidth = 1.1 + random() * 0.6;
+        context.beginPath();
+        context.moveTo(px, py);
+        context.lineTo(px + Math.cos(needleAngle) * needleLength, py + Math.sin(needleAngle) * needleLength);
+        context.stroke();
+      }
+    }
+  };
+  // Main twig.
+  context.strokeStyle = "rgb(60,0,0)";
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(0, mid);
+  context.lineTo(width * 0.97, mid);
+  context.stroke();
+  needles(0, mid, 0, width * 0.97, 150);
+  // Side shoots alternating left and right, angled toward the tip, shorter near both ends.
+  for (let i = 0; i < 36; i++) {
+    const t = 0.03 + (i / 36) * 0.92 + random() * 0.015;
+    const side = i % 2 === 0 ? -1 : 1;
+    const length = envelope(t) * (0.9 + random() * 0.25);
+    const angle = side * (0.75 + random() * 0.3);
+    const x0 = t * width;
+    const level = 120 + t * 90;
+    context.strokeStyle = "rgb(55,0,0)";
+    context.lineWidth = 1.4;
+    context.beginPath();
+    context.moveTo(x0, mid);
+    context.lineTo(x0 + Math.cos(angle) * length, mid + Math.sin(angle) * length);
+    context.stroke();
+    needles(x0, mid, angle, length, level);
+  }
+  const pixels = context.getImageData(0, 0, width, height).data;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const source = (y * width + x) * 4;
+      const target = ((height - 1 - y) * width + x) * 4;
+      const alpha = pixels[source + 3];
+      const level = alpha > 0 ? pixels[source] / 255 : 0.55;
+      const t = x / width;
+      // Older, darker needles toward the trunk; fresh lighter growth on the outer third.
+      const fresh = Math.max(0, t - 0.62) * 2.2 * (level > 0.7 ? 1 : 0.5);
+      data[target] = Math.min(255, (34 + fresh * 30) * level * 1.5 + 8);
+      data[target + 1] = Math.min(255, (60 + fresh * 38) * level * 1.5 + 12);
+      data[target + 2] = Math.min(255, (36 + fresh * 8) * level * 1.5 + 8);
+      data[target + 3] = alpha;
+    }
+  }
+  const texture = new DataTexture(data, width, height, RGBAFormat);
+  texture.colorSpace = SRGBColorSpace;
+  texture.wrapS = texture.wrapT = ClampToEdgeWrapping;
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = 4;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+let branchMap = null;
+
+/**
+ * Material for alpha-tested pine branch cards (vertex colours + per-instance tint). Both faces use the
+ * geometry's "up and out" normal, and alpha is boosted as the texture minifies so distant crowns stay full
+ * instead of dissolving as the needles average away in the mipmaps.
+ */
+export function createBranchCardMaterial() {
+  if (!branchMap) branchMap = branchTexture();
+  const material = new MeshStandardMaterial({
+    map: branchMap,
+    vertexColors: true,
+    alphaTest: 0.5,
+    side: DoubleSide,
+    roughness: 0.9,
+    metalness: 0,
+  });
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <map_fragment>",
+        [
+          "#include <map_fragment>",
+          "{",
+          "  vec2 texel = vMapUv * vec2(256.0, 128.0);",
+          "  float lod = 0.5 * log2(max(dot(dFdx(texel), dFdx(texel)), dot(dFdy(texel), dFdy(texel))));",
+          "  diffuseColor.a *= 1.0 + min(max(0.0, lod), 4.0) * 0.25;",
+          "}",
+        ].join("\n"),
+      )
+      .replace(
+        "#include <normal_fragment_begin>",
+        "#include <normal_fragment_begin>\nnormal = normalize(vNormal);\nnonPerturbedNormal = normal;",
+      );
+  };
+  material.customProgramCacheKey = () => "drift-fury-branch-card";
   return material;
 }
