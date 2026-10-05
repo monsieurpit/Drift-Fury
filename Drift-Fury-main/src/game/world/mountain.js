@@ -680,6 +680,20 @@ function boulderGeometry(seed) {
     const scale = 0.72 + n * 0.55;
     position.setXYZ(i, x * scale, y * scale * 0.72, z * scale);
   }
+  // Fracture planes: clip the lump against a few random planes so it has the flat, broken faces of split
+  // rock instead of a pebble-smooth outline.
+  const random = createRandom(seed * 7 + 3);
+  const vertex = new Vector3();
+  for (let cut = 0; cut < 6; cut++) {
+    const plane = new Vector3(random() - 0.5, (random() - 0.3) * 0.8, random() - 0.5).normalize();
+    const offset = 0.5 + random() * 0.3;
+    for (let i = 0; i < position.count; i++) {
+      vertex.fromBufferAttribute(position, i);
+      const excess = vertex.dot(plane) - offset;
+      if (excess > 0) vertex.addScaledVector(plane, -excess);
+      position.setXYZ(i, vertex.x, vertex.y, vertex.z);
+    }
+  }
   geometry.deleteAttribute("uv");
   geometry.computeVertexNormals();
   return geometry;
@@ -902,6 +916,7 @@ export function buildMountainScenery(world) {
 
   // Boulders: scattered on slopes and along the verge, partly buried; rock material with moss/snow on top.
   const rockMaterial = createTerrainMaterial({ snowLine: [140, 70], rockBias: 0.55 });
+  rockMaterial.color.set("#8a8e84"); // weathered, lichen-dulled granite rather than fresh-cut stone
   const shapes = [0, 1, 2].map((seed) => ({ geometry: boulderGeometry(11 + seed * 17), rocks: [] }));
   for (let i = 0; i < 1400; i++) {
     const x = NEAR.minX + random() * (NEAR.maxX - NEAR.minX);
