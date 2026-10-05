@@ -7,7 +7,7 @@ import { buildBuildings } from "./buildings.js";
 import { buildStreetTrees } from "./streetTrees.js";
 import { buildGasStations } from "./gasStations.js";
 import { buildHighway } from "./highway.js";
-import { buildMountainRoad, buildMountainScenery } from "./mountain.js";
+import { buildMountainRoad, buildMountainScenery, buildMountainTerrain, updateMountain } from "./mountain.js";
 import { buildRoadClosure } from "./roadClosure.js";
 import { buildStars } from "./sky.js";
 /**
@@ -22,6 +22,7 @@ export function buildWorld(scene) {
   };
   createWorldContext(world);
   buildGround(world);
+  buildMountainTerrain(world);
   buildRoads(world);
   buildTrafficControl(world);
   buildStreetLights(world);
@@ -37,5 +38,7 @@ export function buildWorld(scene) {
     solids: world.solids,
     lampPositions: world.lampPositions,
     signals: world.signals,
+    /** Per-frame animation of world details (the summit beacon); `time` in seconds. */
+    update: (time) => updateMountain(world, time),
   };
 }

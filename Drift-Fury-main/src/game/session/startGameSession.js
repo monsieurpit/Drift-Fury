@@ -14,7 +14,20 @@ import { terrainHeight } from "../world/terrain.js";
 export function startGameSession(container, car, engine, controls, callbacks, noPolice = false) {
   const view = createRenderer(container, true);
   const { scene, renderer, camera, sun, touchDevice, composer } = view;
-  const { solids, lampPositions, signals } = buildWorld(scene);
+  const { solids, lampPositions, signals, update: updateWorld } = buildWorld(scene);
+  // Cars sit on the ground: pitch and roll follow the terrain under their wheels (flat in the city).
+  const sitOnGround = (object, x, z, heading, extraRoll = 0) => {
+    const forwardX = -Math.sin(heading);
+    const forwardZ = -Math.cos(heading);
+    const rightX = Math.cos(heading);
+    const rightZ = -Math.sin(heading);
+    const front = terrainHeight(x + forwardX * 1.4, z + forwardZ * 1.4);
+    const back = terrainHeight(x - forwardX * 1.4, z - forwardZ * 1.4);
+    const right = terrainHeight(x + rightX * 0.8, z + rightZ * 0.8);
+    const left = terrainHeight(x - rightX * 0.8, z - rightZ * 0.8);
+    object.rotation.order = "YXZ";
+    object.rotation.set(Math.atan2(front - back, 2.8), heading, Math.atan2(right - left, 1.6) + extraRoll);
+  };
   const staticBatch = batchStaticMeshes(scene, new Set(signals.flatMap((signal) => signal.lenses)), 96);
   const game = createGame(car, engine, solids, noPolice);
   const lampLights = [];
@@ -143,7 +156,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
       }
       entry.car.visible = true;
       entry.car.position.set(vehicle.x, terrainHeight(vehicle.x, vehicle.z) + 0.1, vehicle.z);
-      entry.car.rotation.y = vehicle.heading;
+      sitOnGround(entry.car, vehicle.x, vehicle.z, vehicle.heading);
       if (
         interaction?.direction === "exit" &&
         Math.hypot(vehicle.x - interaction.carX, vehicle.z - interaction.carZ) < 0.5
@@ -422,8 +435,9 @@ export function startGameSession(container, car, engine, controls, callbacks, no
           door: null,
         };
       }
-      sun.position.set(state.x + 40, 85, state.z - 25);
-      sun.target.position.set(state.x, 0, state.z);
+      // The moon follows the player (its shadow box covers 240 m around them), including up the mountain.
+      sun.position.set(state.x + 40, (state.y || 0) + 85, state.z - 25);
+      sun.target.position.set(state.x, state.y || 0, state.z);
       sun.target.updateMatrixWorld();
       shadowFrameCounter++;
       if (shadowFrameCounter >= shadowFrameInterval) {
@@ -445,8 +459,13 @@ export function startGameSession(container, car, engine, controls, callbacks, no
       playerCar.visible = !state.onFoot || interaction?.direction === "exit";
       if (!state.onFoot) {
         playerCar.position.set(state.x, (state.y || 0) + 0.12, state.z);
-        playerCar.rotation.y = state.heading;
-        playerCar.rotation.z = state.drifting ? Math.sin(state.elapsed * 7) * 0.015 : 0;
+        sitOnGround(
+          playerCar,
+          state.x,
+          state.z,
+          state.heading,
+          state.drifting ? Math.sin(state.elapsed * 7) * 0.015 : 0,
+        );
         playerCar.userData.wheels.forEach((e) => (e.rotation.x -= state.speed * 0.01 * dt));
         const braking = state.brake > 0 || (state.speed > 5 && state.throttle === 0);
         playerCar.userData.brakeLights.forEach((t) => (t.material.emissiveIntensity = braking ? 1.5 : 0.15));
@@ -462,7 +481,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
         policeCar.visible = !officer.onFoot;
         if (!officer.onFoot) {
           policeCar.position.set(officer.x, terrainHeight(officer.x, officer.z) + 0.1, officer.z);
-          policeCar.rotation.y = officer.heading;
+          sitOnGround(policeCar, officer.x, officer.z, officer.heading);
         }
         const blueLight =
           policeCar.userData.blueLight === undefined
@@ -502,11 +521,9 @@ export function startGameSession(container, car, engine, controls, callbacks, no
         if (interaction.direction === "exit") {
           const step = ease(Math.max(0, Math.min((time - 0.16) / 0.56, 1)));
           playerPerson.visible = true;
-          playerPerson.position.set(
-            sideX + (interaction.endX - sideX) * step,
-            0,
-            sideZ + (interaction.endZ - sideZ) * step,
-          );
+          const walkX = sideX + (interaction.endX - sideX) * step;
+          const walkZ = sideZ + (interaction.endZ - sideZ) * step;
+          playerPerson.position.set(walkX, terrainHeight(walkX, walkZ), walkZ);
           playerPerson.rotation.y = interaction.heading;
           playerPerson.scale.setScalar(0.78 + 0.22 * ease(Math.min(time / 0.42, 1)));
           playerCar.position.set(
@@ -514,15 +531,19 @@ export function startGameSession(container, car, engine, controls, callbacks, no
             terrainHeight(interaction.carX, interaction.carZ) + 0.1,
             interaction.carZ,
           );
-          playerCar.rotation.y = interaction.heading;
+          sitOnGround(playerCar, interaction.carX, interaction.carZ, interaction.heading);
         } else {
           const approach = ease(Math.min(time / 0.48, 1));
           const enter = ease(Math.max(0, Math.min((time - 0.42) / 0.34, 1)));
           playerPerson.visible = time < 0.84;
+          const walkX =
+            interaction.startX + (sideX - interaction.startX) * approach + (interaction.carX - sideX) * enter;
+          const walkZ =
+            interaction.startZ + (sideZ - interaction.startZ) * approach + (interaction.carZ - sideZ) * enter;
           playerPerson.position.set(
-            interaction.startX + (sideX - interaction.startX) * approach + (interaction.carX - sideX) * enter,
-            0.12 * Math.sin(Math.PI * enter),
-            interaction.startZ + (sideZ - interaction.startZ) * approach + (interaction.carZ - sideZ) * enter,
+            walkX,
+            terrainHeight(walkX, walkZ) + 0.12 * Math.sin(Math.PI * enter),
+            walkZ,
           );
           playerPerson.rotation.y = interaction.heading;
           playerPerson.scale.setScalar(1 - 0.72 * enter);
@@ -545,6 +566,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
       }
       const speedFactor = Math.min(state.speed / 200, 1);
       updateTrafficLights(dt);
+      updateWorld(state.elapsed);
       const targetFov = 45 + speedFactor * 12;
       if (camera.fov !== targetFov) {
         camera.fov = targetFov;

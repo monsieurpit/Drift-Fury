@@ -1,12 +1,4 @@
-import {
-  MeshStandardMaterial,
-  MeshBasicMaterial,
-  BoxGeometry,
-  Mesh,
-  Matrix4,
-  Vector3,
-  Quaternion,
-} from "three";
+import { MeshStandardMaterial, BoxGeometry, Mesh, Matrix4, Vector3, Quaternion } from "three";
 import { concreteTexture, createAsphaltMaterial, grassTexture } from "./textures.js";
 /** Shared materials, the box/solid helpers and scratch math objects used by every part of the map. */
 export function createWorldContext(world) {
@@ -32,11 +24,21 @@ export function createWorldContext(world) {
     metalness: 0,
     color: "#5a7a5e",
   });
-  const whitePaint = new MeshBasicMaterial({
-    color: "#e8e6d8",
+  // Road paint is lit like the asphalt (a little glossier, with a faint retroreflective glow) instead of
+  // unlit, which made every line glow like neon at night.
+  const whitePaint = new MeshStandardMaterial({
+    color: "#e4e2d6",
+    roughness: 0.5,
+    metalness: 0,
+    emissive: "#e4e2d6",
+    emissiveIntensity: 0.05,
   });
-  const yellowPaint = new MeshBasicMaterial({
-    color: "#e8c84a",
+  const yellowPaint = new MeshStandardMaterial({
+    color: "#d9b43c",
+    roughness: 0.5,
+    metalness: 0,
+    emissive: "#d9b43c",
+    emissiveIntensity: 0.05,
   });
   const poleMetal = new MeshStandardMaterial({
     color: "#2a3036",
