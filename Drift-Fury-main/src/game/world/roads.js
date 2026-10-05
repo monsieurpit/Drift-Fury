@@ -19,8 +19,8 @@ export function buildRoads(world) {
   });
   const streetlightZs = roadZs.slice(0, -1).map((z, index) => (z + roadZs[index + 1]) / 2);
   const streetlightXs = roadXs.slice(0, -1).map((x, index) => (x + roadXs[index + 1]) / 2);
-  const addWhiteLine = (e, t, n, r, i = 0.04) => addBox(n, 0.02, r, e, i, t, whitePaint);
-  const addYellowLine = (e, t, n, r, i = 0.04) => addBox(n, 0.02, r, e, i, t, yellowPaint);
+  const addWhiteLine = (x, z, width, depth, y = 0.04) => addBox(width, 0.02, depth, x, y, z, whitePaint);
+  const addYellowLine = (x, z, width, depth, y = 0.04) => addBox(width, 0.02, depth, x, y, z, yellowPaint);
   const signals = [];
   const puddleRandom = createRandom(731941);
   const puddleMat = new MeshStandardMaterial({
@@ -80,25 +80,25 @@ export function buildRoads(world) {
       );
     }
   }
-  for (let e of roadXs) {
+  for (const roadX of roadXs) {
     addBox(
       18,
       0.12,
       roadZs[roadZs.length - 1] - roadZs[0] + 18,
-      e,
+      roadX,
       0.01,
       (roadZs[0] + roadZs[roadZs.length - 1]) / 2,
       roadMaterial,
     );
   }
-  for (let e of roadZs) {
+  for (const roadZ of roadZs) {
     addBox(
       roadXs[roadXs.length - 1] - roadXs[0] + 18,
       0.12,
       18,
       (roadXs[0] + roadXs[roadXs.length - 1]) / 2,
       0.01,
-      e,
+      roadZ,
       roadMaterial,
     );
   }

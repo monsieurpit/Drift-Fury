@@ -1,44 +1,53 @@
 import { CanvasTexture, RepeatWrapping, MeshPhysicalMaterial, Vector2 } from "three";
 import { createRandom } from "../util/random.js";
-function fractalNoise(e, t, n, r, i) {
-  const a = createRandom(i);
-  const o = new Float32Array(t * t);
-  let s = 1;
-  let c = 0;
-  for (let e = 0; e < n; e++) {
-    const n = 2 ** e;
-    t / n;
-    const i = new Float32Array((n + 1) * (n + 1));
-    for (let e = 0; e < i.length; e++) {
-      i[e] = a();
+/**
+ * Fractal value noise on a size x size grid: `octaves` layers of smoothly interpolated random lattices,
+ * each twice as fine and `persistence` times as strong as the previous one. Returns the summed grid and
+ * the maximum possible value (for normalising). The first argument is unused (kept for call-site symmetry).
+ */
+function fractalNoise(_context, size, octaves, persistence, seed) {
+  const random = createRandom(seed);
+  const grid = new Float32Array(size * size);
+  let amplitude = 1;
+  let max = 0;
+  for (let octave = 0; octave < octaves; octave++) {
+    const cells = 2 ** octave;
+    const lattice = new Float32Array((cells + 1) * (cells + 1));
+    for (let index = 0; index < lattice.length; index++) {
+      lattice[index] = random();
     }
-    for (let e = 0; e < t; e++) {
-      for (let r = 0; r < t; r++) {
-        const a = (r / t) * n;
-        const c = (e / t) * n;
-        const l = Math.floor(a);
-        const u = Math.floor(c);
-        const d = a - l;
-        const f = c - u;
-        const p = i[u * (n + 1) + l];
-        const m = i[u * (n + 1) + l + 1];
-        const h = i[(u + 1) * (n + 1) + l];
-        const g = i[(u + 1) * (n + 1) + l + 1];
-        const _ = d * d * (3 - 2 * d);
-        const v = f * f * (3 - 2 * f);
-        o[e * t + r] += (p * (1 - _) * (1 - v) + m * _ * (1 - v) + h * (1 - _) * v + g * _ * v) * s;
+    for (let row = 0; row < size; row++) {
+      for (let column = 0; column < size; column++) {
+        const u = (column / size) * cells;
+        const v = (row / size) * cells;
+        const cellX = Math.floor(u);
+        const cellY = Math.floor(v);
+        const fx = u - cellX;
+        const fy = v - cellY;
+        const topLeft = lattice[cellY * (cells + 1) + cellX];
+        const topRight = lattice[cellY * (cells + 1) + cellX + 1];
+        const bottomLeft = lattice[(cellY + 1) * (cells + 1) + cellX];
+        const bottomRight = lattice[(cellY + 1) * (cells + 1) + cellX + 1];
+        const sx = fx * fx * (3 - 2 * fx);
+        const sy = fy * fy * (3 - 2 * fy);
+        grid[row * size + column] +=
+          (topLeft * (1 - sx) * (1 - sy) +
+            topRight * sx * (1 - sy) +
+            bottomLeft * (1 - sx) * sy +
+            bottomRight * sx * sy) *
+          amplitude;
       }
     }
-    c += s;
-    s *= r;
+    max += amplitude;
+    amplitude *= persistence;
   }
   return {
-    grid: o,
-    max: c,
+    grid,
+    max,
   };
 }
-export function normalMapFromHeight(e, t = 2.4) {
-  const sourceCanvas = e.image || e;
+export function normalMapFromHeight(heightMap, strength = 2.4) {
+  const sourceCanvas = heightMap.image || heightMap;
   const width = sourceCanvas.width;
   const height = sourceCanvas.height;
   const source = sourceCanvas.getContext("2d").getImageData(0, 0, width, height).data;
@@ -51,8 +60,8 @@ export function normalMapFromHeight(e, t = 2.4) {
     source[(Math.min(height - 1, Math.max(0, y)) * width + Math.min(width - 1, Math.max(0, x))) * 4] / 255;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const dx = (sample(x + 1, y) - sample(x - 1, y)) * t;
-      const dy = (sample(x, y + 1) - sample(x, y - 1)) * t;
+      const dx = (sample(x + 1, y) - sample(x - 1, y)) * strength;
+      const dy = (sample(x, y + 1) - sample(x, y - 1)) * strength;
       const length = Math.hypot(dx, dy, 1) || 1;
       const index = (y * width + x) * 4;
       image.data[index] = ((dx / length) * 0.5 + 0.5) * 255;
@@ -68,105 +77,105 @@ export function normalMapFromHeight(e, t = 2.4) {
   normalMap.anisotropy = 8;
   return normalMap;
 }
-export function createAsphaltMaterial(e = 6) {
-  const S = 512;
-  const mk = () => {
+export function createAsphaltMaterial(variant = 6) {
+  const size = 512;
+  const makeCanvas = () => {
     const cv = document.createElement("canvas");
-    cv.width = S;
-    cv.height = S;
+    cv.width = size;
+    cv.height = size;
     return cv;
   };
-  const rnd = createRandom(4242 + e);
-  const A = mk();
-  const H = mk();
-  const R = mk();
-  const a = A.getContext("2d");
-  const h = H.getContext("2d");
-  const r = R.getContext("2d");
+  const random = createRandom(4242 + variant);
+  const albedoCanvas = makeCanvas();
+  const heightCanvas = makeCanvas();
+  const roughnessCanvas = makeCanvas();
+  const albedo = albedoCanvas.getContext("2d");
+  const heightMap = heightCanvas.getContext("2d");
+  const roughnessMap = roughnessCanvas.getContext("2d");
   const wrap = (fn) => {
-    for (const ox of [-S, 0, S]) {
-      for (const oy of [-S, 0, S]) {
-        for (const c of [a, h, r]) {
+    for (const ox of [-size, 0, size]) {
+      for (const oy of [-size, 0, size]) {
+        for (const c of [albedo, heightMap, roughnessMap]) {
           c.save();
           c.translate(ox, oy);
         }
         fn();
-        for (const c of [a, h, r]) {
+        for (const c of [albedo, heightMap, roughnessMap]) {
           c.restore();
         }
       }
     }
   };
-  a.fillStyle = "#45494e";
-  a.fillRect(0, 0, S, S);
-  h.fillStyle = "#808080";
-  h.fillRect(0, 0, S, S);
-  r.fillStyle = "#c4c4c4";
-  r.fillRect(0, 0, S, S);
+  albedo.fillStyle = "#45494e";
+  albedo.fillRect(0, 0, size, size);
+  heightMap.fillStyle = "#808080";
+  heightMap.fillRect(0, 0, size, size);
+  roughnessMap.fillStyle = "#c4c4c4";
+  roughnessMap.fillRect(0, 0, size, size);
   // broad tonal variation
   for (let q = 0; q < 95; q++) {
-    const x = rnd() * S;
-    const y = rnd() * S;
-    const rad = 24 + rnd() * 82;
-    const dark = rnd() > 0.5;
+    const x = random() * size;
+    const y = random() * size;
+    const rad = 24 + random() * 82;
+    const dark = random() > 0.5;
     wrap(() => {
-      const gr = a.createRadialGradient(x, y, 0, x, y, rad);
+      const gr = albedo.createRadialGradient(x, y, 0, x, y, rad);
       gr.addColorStop(0, dark ? "rgba(12,14,17,0.09)" : "rgba(185,192,198,0.055)");
       gr.addColorStop(1, "rgba(0,0,0,0)");
-      a.fillStyle = gr;
-      a.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      albedo.fillStyle = gr;
+      albedo.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     });
   }
   // aggregate: fine stones, they carry the bump and the sparkle
   for (let q = 0; q < 56000; q++) {
-    const x = rnd() * S;
-    const y = rnd() * S;
-    const sz = 0.6 + rnd() * 1;
-    const t = rnd();
-    a.fillStyle =
+    const x = random() * size;
+    const y = random() * size;
+    const sz = 0.6 + random() * 1;
+    const t = random();
+    albedo.fillStyle =
       t > 0.68
-        ? `rgba(151,158,164,${0.1 + rnd() * 0.2})`
+        ? `rgba(151,158,164,${0.1 + random() * 0.2})`
         : t > 0.28
-          ? `rgba(18,21,24,${0.14 + rnd() * 0.24})`
-          : `rgba(91,94,97,${0.1 + rnd() * 0.19})`;
-    a.fillRect(x, y, sz, sz);
-    h.fillStyle =
-      t > 0.68 ? `rgba(255,255,255,${0.16 + rnd() * 0.22})` : `rgba(0,0,0,${0.12 + rnd() * 0.22})`;
-    h.fillRect(x, y, sz, sz);
+          ? `rgba(18,21,24,${0.14 + random() * 0.24})`
+          : `rgba(91,94,97,${0.1 + random() * 0.19})`;
+    albedo.fillRect(x, y, sz, sz);
+    heightMap.fillStyle =
+      t > 0.68 ? `rgba(255,255,255,${0.16 + random() * 0.22})` : `rgba(0,0,0,${0.12 + random() * 0.22})`;
+    heightMap.fillRect(x, y, sz, sz);
   }
   // old repair patches
   for (let q = 0; q < 2; q++) {
-    const x = rnd() * S * 0.8;
-    const y = rnd() * S * 0.8;
-    const pw = 60 + rnd() * 120;
-    const ph = 40 + rnd() * 90;
+    const x = random() * size * 0.8;
+    const y = random() * size * 0.8;
+    const pw = 60 + random() * 120;
+    const ph = 40 + random() * 90;
     wrap(() => {
-      a.fillStyle = "rgba(14,15,18,0.13)";
-      a.fillRect(x, y, pw, ph);
-      a.strokeStyle = "rgba(5,5,6,0.22)";
-      a.lineWidth = 1.2;
-      a.strokeRect(x, y, pw, ph);
-      h.strokeStyle = "rgba(0,0,0,0.45)";
-      h.lineWidth = 1.5;
-      h.strokeRect(x, y, pw, ph);
-      r.fillStyle = "rgba(170,170,170,0.35)";
-      r.fillRect(x, y, pw, ph);
+      albedo.fillStyle = "rgba(14,15,18,0.13)";
+      albedo.fillRect(x, y, pw, ph);
+      albedo.strokeStyle = "rgba(5,5,6,0.22)";
+      albedo.lineWidth = 1.2;
+      albedo.strokeRect(x, y, pw, ph);
+      heightMap.strokeStyle = "rgba(0,0,0,0.45)";
+      heightMap.lineWidth = 1.5;
+      heightMap.strokeRect(x, y, pw, ph);
+      roughnessMap.fillStyle = "rgba(170,170,170,0.35)";
+      roughnessMap.fillRect(x, y, pw, ph);
     });
   }
   // thin cracks
   for (let q = 0; q < 7; q++) {
-    let x = rnd() * S;
-    let y = rnd() * S;
+    let x = random() * size;
+    let y = random() * size;
     const pts = [[x, y]];
     for (let k = 0; k < 24; k++) {
-      x += (rnd() - 0.5) * 18;
-      y += (rnd() - 0.35) * 18;
+      x += (random() - 0.5) * 18;
+      y += (random() - 0.35) * 18;
       pts.push([x, y]);
     }
     wrap(() => {
       for (const [c, col, lw] of [
-        [a, "rgba(4,4,5,0.75)", 1.1],
-        [h, "rgba(0,0,0,0.9)", 2.4],
+        [albedo, "rgba(4,4,5,0.75)", 1.1],
+        [heightMap, "rgba(0,0,0,0.9)", 2.4],
       ]) {
         c.strokeStyle = col;
         c.lineWidth = lw;
@@ -178,23 +187,23 @@ export function createAsphaltMaterial(e = 6) {
   }
   // oil drips: darker and glossier
   for (let q = 0; q < 8; q++) {
-    const x = rnd() * S;
-    const y = rnd() * S;
-    const rad = 12 + rnd() * 30;
+    const x = random() * size;
+    const y = random() * size;
+    const rad = 12 + random() * 30;
     wrap(() => {
-      let gr = a.createRadialGradient(x, y, 0, x, y, rad);
+      let gr = albedo.createRadialGradient(x, y, 0, x, y, rad);
       gr.addColorStop(0, "rgba(6,6,8,0.55)");
       gr.addColorStop(1, "rgba(6,6,8,0)");
-      a.fillStyle = gr;
-      a.fillRect(x - rad, y - rad, rad * 2, rad * 2);
-      gr = r.createRadialGradient(x, y, 0, x, y, rad);
+      albedo.fillStyle = gr;
+      albedo.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      gr = roughnessMap.createRadialGradient(x, y, 0, x, y, rad);
       gr.addColorStop(0, "rgba(70,70,70,0.9)");
       gr.addColorStop(1, "rgba(70,70,70,0)");
-      r.fillStyle = gr;
-      r.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      roughnessMap.fillStyle = gr;
+      roughnessMap.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     });
   }
-  const tex = (cv, srgb) => {
+  const toTexture = (cv, srgb) => {
     const t = new CanvasTexture(cv);
     t.wrapS = RepeatWrapping;
     t.wrapT = RepeatWrapping;
@@ -204,11 +213,11 @@ export function createAsphaltMaterial(e = 6) {
     }
     return t;
   };
-  const mat = new MeshPhysicalMaterial({
-    map: tex(A, true),
-    normalMap: normalMapFromHeight(H, 2.8),
+  const material = new MeshPhysicalMaterial({
+    map: toTexture(albedoCanvas, true),
+    normalMap: normalMapFromHeight(heightCanvas, 2.8),
     normalScale: new Vector2(1.15, 1.15),
-    roughnessMap: tex(R, false),
+    roughnessMap: toTexture(roughnessCanvas, false),
     roughness: 1,
     metalness: 0,
     clearcoat: 0.3,
@@ -216,70 +225,72 @@ export function createAsphaltMaterial(e = 6) {
     envMapIntensity: 0.85,
     color: "#ffffff",
   });
-  mat.userData.tile = 10;
-  return mat;
+  material.userData.tile = 10;
+  return material;
 }
-export function concreteTexture(e = 4) {
-  const t = document.createElement("canvas");
-  t.width = 256;
-  t.height = 256;
-  const n = t.getContext("2d");
-  const { grid, max } = fractalNoise(n, 256, 4, 0.5, 4242);
-  const a = n.createImageData(256, 256);
-  for (let e = 0; e < 65536; e++) {
-    const t = 110 + (grid[e] / max) * 30;
-    a.data[e * 4] = t;
-    a.data[e * 4 + 1] = t + 1;
-    a.data[e * 4 + 2] = t + 3;
-    a.data[e * 4 + 3] = 255;
+const tiledTexture = (canvas, repeat) => {
+  const texture = new CanvasTexture(canvas);
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = RepeatWrapping;
+  texture.anisotropy = 8;
+  texture.repeat.set(repeat, repeat);
+  return texture;
+};
+
+/** Grey concrete slabs: noise with a 4x4 joint grid and fine dark speckles. */
+export function concreteTexture(repeat = 4) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const context = canvas.getContext("2d");
+  const { grid, max } = fractalNoise(context, 256, 4, 0.5, 4242);
+  const image = context.createImageData(256, 256);
+  for (let index = 0; index < 65536; index++) {
+    const shade = 110 + (grid[index] / max) * 30;
+    image.data[index * 4] = shade;
+    image.data[index * 4 + 1] = shade + 1;
+    image.data[index * 4 + 2] = shade + 3;
+    image.data[index * 4 + 3] = 255;
   }
-  n.putImageData(a, 0, 0);
-  n.strokeStyle = "rgba(0,0,0,0.4)";
-  n.lineWidth = 2;
-  for (let e = 0; e <= 256; e += 64) {
-    n.beginPath();
-    n.moveTo(e, 0);
-    n.lineTo(e, 256);
-    n.stroke();
-    n.beginPath();
-    n.moveTo(0, e);
-    n.lineTo(256, e);
-    n.stroke();
+  context.putImageData(image, 0, 0);
+  context.strokeStyle = "rgba(0,0,0,0.4)";
+  context.lineWidth = 2;
+  for (let joint = 0; joint <= 256; joint += 64) {
+    context.beginPath();
+    context.moveTo(joint, 0);
+    context.lineTo(joint, 256);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(0, joint);
+    context.lineTo(256, joint);
+    context.stroke();
   }
-  for (let e = 0; e < 1200; e++) {
-    n.fillStyle = `rgba(0,0,0,${Math.random() * 0.25})`;
-    n.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
+  for (let speck = 0; speck < 1200; speck++) {
+    context.fillStyle = `rgba(0,0,0,${Math.random() * 0.25})`;
+    context.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 1.5);
   }
-  const o = new CanvasTexture(t);
-  o.wrapS = RepeatWrapping;
-  o.wrapT = RepeatWrapping;
-  o.anisotropy = 8;
-  o.repeat.set(e, e);
-  return o;
+  return tiledTexture(canvas, repeat);
 }
+
+/** Mottled grass colour with dark specks, tiled 30 times across the ground. */
 export function grassTexture() {
-  const e = document.createElement("canvas");
-  e.width = 256;
-  e.height = 256;
-  const t = e.getContext("2d");
-  const { grid, max } = fractalNoise(t, 256, 5, 0.55, 7777);
-  const i = t.createImageData(256, 256);
-  for (let e = 0; e < 65536; e++) {
-    const t = grid[e] / max;
-    i.data[e * 4] = 28 + t * 26;
-    i.data[e * 4 + 1] = 50 + t * 36;
-    i.data[e * 4 + 2] = 36 + t * 22;
-    i.data[e * 4 + 3] = 255;
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const context = canvas.getContext("2d");
+  const { grid, max } = fractalNoise(context, 256, 5, 0.55, 7777);
+  const image = context.createImageData(256, 256);
+  for (let index = 0; index < 65536; index++) {
+    const shade = grid[index] / max;
+    image.data[index * 4] = 28 + shade * 26;
+    image.data[index * 4 + 1] = 50 + shade * 36;
+    image.data[index * 4 + 2] = 36 + shade * 22;
+    image.data[index * 4 + 3] = 255;
   }
-  t.putImageData(i, 0, 0);
-  for (let e = 0; e < 1600; e++) {
-    t.fillStyle = `rgba(20,40,24,${Math.random() * 0.4})`;
-    t.fillRect(Math.random() * 256, Math.random() * 256, 1.6, 1.6);
+  context.putImageData(image, 0, 0);
+  for (let speck = 0; speck < 1600; speck++) {
+    context.fillStyle = `rgba(20,40,24,${Math.random() * 0.4})`;
+    context.fillRect(Math.random() * 256, Math.random() * 256, 1.6, 1.6);
   }
-  const a = new CanvasTexture(e);
-  a.wrapS = RepeatWrapping;
-  a.wrapT = RepeatWrapping;
-  a.anisotropy = 8;
-  a.repeat.set(30, 30);
-  return a;
+  return tiledTexture(canvas, 30);
 }
