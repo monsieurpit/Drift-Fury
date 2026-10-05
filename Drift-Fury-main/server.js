@@ -1,4 +1,4 @@
-// Serves the production build in dist/ (run `npm run build` first, or just `npm start`).
+// Serves the production build in dist/ (run `npm run build` first, then `npm start`).
 // For development with instant reload, use `npm run dev` instead.
 import http from "node:http";
 import fs from "node:fs";
@@ -50,6 +50,12 @@ function sendFile(filePath, request, response) {
 }
 
 const server = http.createServer((request, response) => {
+  // Health check for hosting platforms (Railway's healthcheckPath points here).
+  if (request.url === "/health") {
+    response.writeHead(200, { "Content-Type": "text/plain", "Cache-Control": "no-store" }).end("ok");
+    return;
+  }
+
   if (!["GET", "HEAD"].includes(request.method)) {
     response.writeHead(405, { Allow: "GET, HEAD" }).end("Method not allowed");
     return;
@@ -96,10 +102,18 @@ const server = http.createServer((request, response) => {
 });
 
 if (!fs.existsSync(path.join(root, "index.html"))) {
-  console.error("No build found in dist/. Run `npm run build` (or `npm start`, which builds first).");
+  console.error("No build found in dist/. Run `npm run build` before `npm start`.");
   process.exit(1);
 }
 
 server.listen(port, "0.0.0.0", () => {
   console.log(`Drift Fury is listening on port ${port}`);
 });
+
+// Platforms stop containers with SIGTERM on redeploys: finish in-flight requests, then exit cleanly.
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.on(signal, () => {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 5000).unref();
+  });
+}

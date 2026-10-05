@@ -1,0 +1,13 @@
+{
+  "name": "drift-fury-deploy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deploy wrapper: the game lives in Drift-Fury-main/. Lets hosts like Railway build from the repo root.",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "build": "npm ci --prefix Drift-Fury-main --include=dev --no-audit --no-fund && npm run build --prefix Drift-Fury-main",
+    "start": "node Drift-Fury-main/server.js"
+  }
+}

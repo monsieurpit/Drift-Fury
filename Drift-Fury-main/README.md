@@ -13,7 +13,8 @@ Requires Node.js 20 or newer.
 ```sh
 npm install
 npm run dev     # development server with instant reload (http://localhost:5173)
-npm start       # production: builds into dist/ and serves it (PORT, default 3000)
+npm run build   # production build into dist/
+npm start       # serves dist/ (PORT, default 3000; /health returns ok)
 npm run build   # build only
 npm run serve   # serve an existing dist/ without rebuilding
 ```
@@ -56,3 +57,11 @@ the highway runs north-south at x = 175 and the mountain rises north of z = -150
 
 Add `?dfdebug` to the URL to expose the running session (scene, renderer, game state, collision solids)
 as `window.__dfDbg` in the browser console.
+
+## Deploying on Railway
+
+The repo root has a small `package.json`, `package-lock.json` and `railway.json` that install, build and
+serve this folder, so Railway works with its default settings (Root Directory left empty). Setting Root
+Directory to `Drift-Fury-main` also works: Railway then uses this folder's `package.json` directly
+(`npm ci`, `npm run build`, `npm start`). Node 22 is pinned through `engines` and `.nvmrc`; the server
+listens on Railway's `PORT` and answers health checks on `/health`.
