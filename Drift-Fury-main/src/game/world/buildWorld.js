@@ -9,7 +9,7 @@ import { buildGasStations } from "./gasStations.js";
 import { buildHighway } from "./highway.js";
 import { buildMountainRoad, buildMountainScenery, buildMountainTerrain, updateMountain } from "./mountain.js";
 import { buildRoadClosure } from "./roadClosure.js";
-import { buildStars } from "./sky.js";
+import { buildSky } from "./sky.js";
 /**
  * Builds the whole map into `scene`: city grid, gas stations, highway and the mountain.
  * Each part lives in its own module and shares materials and helpers through the `world` object;
@@ -33,12 +33,15 @@ export function buildWorld(scene) {
   buildMountainRoad(world);
   buildRoadClosure(world);
   buildMountainScenery(world);
-  buildStars(world);
+  const updateSky = buildSky(world);
   return {
     solids: world.solids,
     lampPositions: world.lampPositions,
     signals: world.signals,
-    /** Per-frame animation of world details (the summit beacon); `time` in seconds. */
-    update: (time) => updateMountain(world, time),
+    /** Per-frame animation of world details (summit beacon, sky); `time` in seconds. */
+    update: (time) => {
+      updateMountain(world, time);
+      updateSky(time);
+    },
   };
 }

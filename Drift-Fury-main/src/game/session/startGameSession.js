@@ -11,6 +11,7 @@ import { buildCar } from "../vehicles/carModel.js";
 import { createTrafficCar } from "../vehicles/trafficCars.js";
 import { buildWorld } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
+import { MOON_DIRECTION } from "../world/sky.js";
 export function startGameSession(container, car, engine, controls, callbacks, noPolice = false) {
   const view = createRenderer(container, true);
   const { scene, renderer, camera, sun, touchDevice, composer } = view;
@@ -435,8 +436,13 @@ export function startGameSession(container, car, engine, controls, callbacks, no
           door: null,
         };
       }
-      // The moon follows the player (its shadow box covers 240 m around them), including up the mountain.
-      sun.position.set(state.x + 40, (state.y || 0) + 85, state.z - 25);
+      // The moon follows the player (its shadow box covers 240 m around them), including up the mountain,
+      // and shines from where the moon is drawn in the sky.
+      sun.position.set(
+        state.x + MOON_DIRECTION.x * 127,
+        (state.y || 0) + MOON_DIRECTION.y * 127,
+        state.z + MOON_DIRECTION.z * 127,
+      );
       sun.target.position.set(state.x, state.y || 0, state.z);
       sun.target.updateMatrixWorld();
       shadowFrameCounter++;
