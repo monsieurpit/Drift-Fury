@@ -41,12 +41,11 @@ export function createAudio(e) {
         if (c) {
           e.close();
         } else {
-          ((s = e), o.setSynthEngine());
+          s = e;
+          o.setSynthEngine();
         }
       })
-      .catch(async () => {
-        return createSampleEngine(n, r, await loadEngineSamples(n, e.id), e.id);
-      }),
+      .catch(async () => createSampleEngine(n, r, await loadEngineSamples(n, e.id), e.id)),
     resume() {
       if (!c && n.state === "suspended") {
         return n.resume();
@@ -54,18 +53,22 @@ export function createAudio(e) {
     },
     update(e, t, i, a, d = {}) {
       if (!c) {
-        ((u = i),
-          n.state === "suspended" && n.resume(),
-          r.gain.setTargetAtTime(i || !s ? 0 : 1, n.currentTime, 0.035),
-          s &&
-            (s.update(e, t, d),
-            o.update(e, t, a, d, i),
-            d.shiftSerial > l &&
-              (!i &&
-                e > 2300 &&
-                (o.shift(d.shiftDirection > 0),
-                s.bang?.((d.shiftDirection > 0 ? 1 : 0.8) * Math.min(1.6, 0.6 + e / (d.redline || 7000)))),
-              (l = d.shiftSerial))));
+        u = i;
+        if (n.state === "suspended") {
+          n.resume();
+        }
+        r.gain.setTargetAtTime(i || !s ? 0 : 1, n.currentTime, 0.035);
+        if (s) {
+          s.update(e, t, d);
+          o.update(e, t, a, d, i);
+          if (d.shiftSerial > l) {
+            if (!i && e > 2300) {
+              o.shift(d.shiftDirection > 0);
+              s.bang?.((d.shiftDirection > 0 ? 1 : 0.8) * Math.min(1.6, 0.6 + e / (d.redline || 7000)));
+            }
+            l = d.shiftSerial;
+          }
+        }
       }
     },
     startEngine() {
@@ -80,13 +83,15 @@ export function createAudio(e) {
     },
     close() {
       if (!c) {
-        ((c = true),
-          s?.close(),
-          o.close(),
-          r.disconnect(),
-          a.disconnect(),
-          i.disconnect(),
-          n.state !== "closed" && n.close());
+        c = true;
+        s?.close();
+        o.close();
+        r.disconnect();
+        a.disconnect();
+        i.disconnect();
+        if (n.state !== "closed") {
+          n.close();
+        }
       }
     },
   };

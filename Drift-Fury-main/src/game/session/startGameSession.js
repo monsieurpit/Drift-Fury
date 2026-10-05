@@ -13,27 +13,19 @@ import { buildWorld } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
 export function startGameSession(e, t, n, r, i, a = false) {
   const o = createRenderer(e, true);
-  const { scene: s, renderer: c, camera: l, sun: u, touchDevice: d, composer: f } = o;
-  const { solids: p, lampPositions: m, signals } = buildWorld(s);
-  const staticBatch = batchStaticMeshes(
-    s,
-    new Set(
-      signals.flatMap((signal) => {
-        return signal.lenses;
-      }),
-    ),
-    96,
-  );
-  const h = createGame(t, n, p, a);
+  const { scene, renderer, camera, sun, touchDevice, composer } = o;
+  const { solids, lampPositions, signals } = buildWorld(scene);
+  const staticBatch = batchStaticMeshes(scene, new Set(signals.flatMap((signal) => signal.lenses)), 96);
+  const h = createGame(t, n, solids, a);
   const g = [];
   // ?dfdebug exposes the live session for profiling tools
   const debugSession = /[?&]dfdebug\b/.test(location.search)
     ? (window.__dfDbg = {
-        scene: s,
-        renderer: c,
-        composer: f,
-        camera: l,
-        sun: u,
+        scene,
+        renderer,
+        composer,
+        camera,
+        sun,
         staticBatch,
         get state() {
           return h.state;
@@ -65,12 +57,12 @@ export function startGameSession(e, t, n, r, i, a = false) {
   }
   for (let e = 0; e < 6; e++) {
     const e = new PointLight("#ffd9a0", 0.6, 26, 2);
-    s.add(e);
+    scene.add(e);
     g.push({
       light: e,
     });
   }
-  const _ = new Float32Array(m.length || 1);
+  const _ = new Float32Array(lampPositions.length || 1);
   const v = [];
   let lastLampX = Infinity;
   let lastLampZ = Infinity;
@@ -80,7 +72,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
     }
     lastLampX = e;
     lastLampZ = t;
-    const n = m;
+    const n = lampPositions;
     const r = n.length;
     for (let i = 0; i < r; i++) {
       const r = n[i].x - e;
@@ -89,47 +81,46 @@ export function startGameSession(e, t, n, r, i, a = false) {
       v[i] = i;
     }
     v.length = r;
-    v.sort((e, t) => {
-      return _[e] - _[t];
-    });
+    v.sort((e, t) => _[e] - _[t]);
     for (let e = 0; e < 6; e++) {
       const t = g[e];
       const r = v[e];
       if (r == null) {
         t.light.visible = false;
       } else {
-        (t.light.position.set(n[r].x, n[r].y, n[r].z), (t.light.visible = true));
+        t.light.position.set(n[r].x, n[r].y, n[r].z);
+        t.light.visible = true;
       }
     }
   }
   y(0, 70);
   let interaction = null;
   let b = batchPlayerCar(buildCar(t.color, t.shape, false, true));
-  s.add(b);
+  scene.add(b);
   let x = h.state.playerVeh.spec;
   const S = h.state.police.map(() => {
     const e = createTrafficCar("#ffffff", "coupe", true);
-    s.add(e);
+    scene.add(e);
     return e;
   });
   const C = createPersonModel("#2f3b4c");
   C.visible = false;
-  s.add(C);
+  scene.add(C);
   const w = h.state.police.map(() => {
     const e = createPersonModel("#1f2f4d");
     e.visible = false;
-    s.add(e);
+    scene.add(e);
     return e;
   });
   const T = new Map();
   function E(e) {
-    s.remove(b);
+    scene.remove(b);
     b.traverse((e) => {
       e.geometry?.dispose();
       e.material?.dispose();
     });
     b = batchPlayerCar(buildCar(e.color, e.shape, e.kind === "police", true));
-    s.add(b);
+    scene.add(b);
     x = e.spec;
   }
   function D() {
@@ -143,7 +134,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
           n.kind === "police"
             ? createTrafficCar("#ffffff", "coupe", true)
             : createTrafficCar(n.color, n.shape || "coupe");
-        s.add(t);
+        scene.add(t);
         e = {
           car: t,
         };
@@ -161,18 +152,19 @@ export function startGameSession(e, t, n, r, i, a = false) {
     }
     for (let [e, n] of T) {
       if (!t.has(e)) {
-        (s.remove(n.car),
-          n.car.userData.sharedTemplate ||
-            n.car.traverse((e) => {
-              e.geometry?.dispose();
-              e.material?.dispose();
-            }),
-          T.delete(e));
+        scene.remove(n.car);
+        if (!n.car.userData.sharedTemplate) {
+          n.car.traverse((e) => {
+            e.geometry?.dispose();
+            e.material?.dispose();
+          });
+        }
+        T.delete(e);
       }
     }
   }
   const O = r.current.audio || createAudio(n);
-  const k = createEffects(s);
+  const k = createEffects(scene);
   const A = {};
   let j;
   let M = performance.now();
@@ -186,7 +178,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
   let lastPointerY = 0;
   const touchPoints = new Map();
   let pinchDistance = 0;
-  const canvas = c.domElement;
+  const canvas = renderer.domElement;
   function startCameraDrag(e) {
     if (e.pointerType === "touch") {
       e.preventDefault();
@@ -284,14 +276,14 @@ export function startGameSession(e, t, n, r, i, a = false) {
   canvas.addEventListener("wheel", zoomCamera, {
     passive: false,
   });
-  c.shadowMap.autoUpdate = false;
-  c.shadowMap.needsUpdate = true;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
   let P = 0;
-  const F = c.getPixelRatio();
+  const F = renderer.getPixelRatio();
   let I = 1;
   let L = 0;
   let R = 0;
-  let shadowFrameInterval = d ? 2 : 1;
+  let shadowFrameInterval = touchDevice ? 2 : 1;
   let slowWindows = 0;
   let fastWindows = 0;
   let fastWindowsNeeded = 4;
@@ -315,13 +307,9 @@ export function startGameSession(e, t, n, r, i, a = false) {
     A[e.code] = false;
   };
   const B = () => {
-    Object.keys(A).forEach((e) => {
-      return (A[e] = false);
-    });
+    Object.keys(A).forEach((e) => (A[e] = false));
   };
-  const V = () => {
-    return O.resume();
-  };
+  const V = () => O.resume();
   const te = () => {
     if (!document.hidden) {
       O.resume();
@@ -332,7 +320,7 @@ export function startGameSession(e, t, n, r, i, a = false) {
   window.addEventListener("blur", B);
   window.addEventListener("pointerdown", V);
   document.addEventListener("visibilitychange", te);
-  l.position.set(0, 9, 85);
+  camera.position.set(0, 9, 85);
   const ne = new Vector3();
   const re = new Vector3();
   const ie = new Vector3();
@@ -344,12 +332,13 @@ export function startGameSession(e, t, n, r, i, a = false) {
     // a frame longer than a second means the tab was hidden, not that the game is slow
     M = t;
     if (n < 1) {
-      ((L += n), R++);
+      L += n;
+      R++;
     }
     if (L > 1) {
       const t = L / R;
       let n = I;
-      shadowFrameInterval = d ? 2 : t > 1 / 32 ? 3 : t > 1 / 48 ? 2 : 1;
+      shadowFrameInterval = touchDevice ? 2 : t > 1 / 32 ? 3 : t > 1 / 48 ? 2 : 1;
       // resizing reallocates every post-processing target, so only react to sustained trends and
       // back off when a resolution increase did not hold
       if (skipWindow) {
@@ -358,21 +347,23 @@ export function startGameSession(e, t, n, r, i, a = false) {
         slowWindows = t > 1 / 45 ? slowWindows + 1 : 0;
         fastWindows = t < 1 / 57 ? fastWindows + 1 : 0;
         if (slowWindows >= 2) {
-          ((n = Math.max(0.6, I - 0.1)),
-            performance.now() - lastRaise < 8000 &&
-              (fastWindowsNeeded = Math.min(32, fastWindowsNeeded * 2)));
+          n = Math.max(0.6, I - 0.1);
+          if (performance.now() - lastRaise < 8000) {
+            fastWindowsNeeded = Math.min(32, fastWindowsNeeded * 2);
+          }
         } else if (fastWindows >= fastWindowsNeeded) {
-          ((n = Math.min(1, I + 0.05)), (lastRaise = performance.now()));
+          n = Math.min(1, I + 0.05);
+          lastRaise = performance.now();
         }
       }
       if (n !== I) {
-        ((I = n),
-          (slowWindows = 0),
-          (fastWindows = 0),
-          (skipWindow = true),
-          c.setPixelRatio(F * I),
-          f.setPixelRatio(F * I),
-          f.setSize(e.clientWidth, e.clientHeight));
+        I = n;
+        slowWindows = 0;
+        fastWindows = 0;
+        skipWindow = true;
+        renderer.setPixelRatio(F * I);
+        composer.setPixelRatio(F * I);
+        composer.setSize(e.clientWidth, e.clientHeight);
       }
       L = 0;
       R = 0;
@@ -430,12 +421,13 @@ export function startGameSession(e, t, n, r, i, a = false) {
           door: null,
         };
       }
-      u.position.set(o.x + 40, 85, o.z - 25);
-      u.target.position.set(o.x, 0, o.z);
-      u.target.updateMatrixWorld();
+      sun.position.set(o.x + 40, 85, o.z - 25);
+      sun.target.position.set(o.x, 0, o.z);
+      sun.target.updateMatrixWorld();
       P++;
       if (P >= shadowFrameInterval) {
-        ((c.shadowMap.needsUpdate = true), (P = 0));
+        renderer.shadowMap.needsUpdate = true;
+        P = 0;
       }
       y(o.x, o.z);
       o._crash &&=
@@ -451,23 +443,22 @@ export function startGameSession(e, t, n, r, i, a = false) {
         b.position.set(o.x, (o.y || 0) + 0.12, o.z);
         b.rotation.y = o.heading;
         b.rotation.z = o.drifting ? Math.sin(o.elapsed * 7) * 0.015 : 0;
-        b.userData.wheels.forEach((e) => {
-          return (e.rotation.x -= o.speed * 0.01 * a);
-        });
+        b.userData.wheels.forEach((e) => (e.rotation.x -= o.speed * 0.01 * a));
         const e = o.brake > 0 || (o.speed > 5 && o.throttle === 0);
-        b.userData.brakeLights.forEach((t) => {
-          return (t.material.emissiveIntensity = e ? 1.5 : 0.15);
-        });
+        b.userData.brakeLights.forEach((t) => (t.material.emissiveIntensity = e ? 1.5 : 0.15));
       }
       C.visible = !!o.onFoot;
       if (o.onFoot) {
-        (C.position.set(o.x, o.y || 0, o.z), (C.rotation.y = o.footYaw || 0), animatePerson(C, a, o.x, o.z));
+        C.position.set(o.x, o.y || 0, o.z);
+        C.rotation.y = o.footYaw || 0;
+        animatePerson(C, a, o.x, o.z);
       }
       S.forEach((e, n) => {
         const r = o.police[n];
         e.visible = !r.onFoot;
         if (!r.onFoot) {
-          (e.position.set(r.x, terrainHeight(r.x, r.z) + 0.1, r.z), (e.rotation.y = r.heading));
+          e.position.set(r.x, terrainHeight(r.x, r.z) + 0.1, r.z);
+          e.rotation.y = r.heading;
         }
         const i =
           e.userData.blueLight === undefined
@@ -488,18 +479,16 @@ export function startGameSession(e, t, n, r, i, a = false) {
         const n = o.police[t];
         e.visible = !!n.onFoot;
         if (n.onFoot) {
-          (e.position.set(n.x, terrainHeight(n.x, n.z), n.z),
-            (e.rotation.y = n.heading),
-            animatePerson(e, a, n.x, n.z));
+          e.position.set(n.x, terrainHeight(n.x, n.z), n.z);
+          e.rotation.y = n.heading;
+          animatePerson(e, a, n.x, n.z);
         }
       });
       D();
       if (interaction) {
         interaction.elapsed += a;
         const time = Math.min(interaction.elapsed / interaction.duration, 1);
-        const ease = (e) => {
-          return e * e * (3 - 2 * e);
-        };
+        const ease = (e) => e * e * (3 - 2 * e);
         const open = ease(Math.min(time / 0.2, 1)) * (1 - ease(Math.max(0, (time - 0.78) / 0.22)));
         if (interaction.door) {
           interaction.door.rotation.y = -open * 1.12;
@@ -553,9 +542,9 @@ export function startGameSession(e, t, n, r, i, a = false) {
       const e = Math.min(o.speed / 200, 1);
       updateTrafficLights(a);
       const targetFov = 45 + e * 12;
-      if (l.fov !== targetFov) {
-        l.fov = targetFov;
-        l.updateProjectionMatrix();
+      if (camera.fov !== targetFov) {
+        camera.fov = targetFov;
+        camera.updateProjectionMatrix();
       }
       const inStore = o.onFoot && o.store >= 0;
       const n = inStore ? 4.2 : 12 + e * 3;
@@ -568,46 +557,44 @@ export function startGameSession(e, t, n, r, i, a = false) {
         (o.y || 0) + 1 + Math.sin(cameraAngle) * cameraDistance,
         o.z + Math.cos(cameraHeading) * Math.cos(cameraAngle) * cameraDistance,
       );
-      l.position.lerp(re, 1 - Math.exp(-a * (o.onFoot ? 12 : 4.5)));
+      camera.position.lerp(re, 1 - Math.exp(-a * (o.onFoot ? 12 : 4.5)));
       if (o.shake > 0.01) {
-        (ie.set(
+        ie.set(
           (Math.random() - 0.5) * o.shake * 0.8,
           (Math.random() - 0.5) * o.shake * 0.5,
           (Math.random() - 0.5) * o.shake * 0.8,
-        ),
-          l.position.add(ie));
+        );
+        camera.position.add(ie);
       }
       ne.set(o.x, (o.y || 0) + 1, o.z);
-      l.lookAt(ne);
-      k.update(o, a, l);
+      camera.lookAt(ne);
+      k.update(o, a, camera);
       O.update(o.rpm, o.pedal, r.current.muted, o.drifting, o);
       if (wasOnFoot && !o.onFoot) {
         O.startEngine();
       }
       N += a;
       if (N > 0.09) {
-        ((N = 0),
-          i.current.onHud({
-            ...o,
-            police: o.police.map((e) => {
-              return {
-                ...e,
-              };
-            }),
-          }));
+        N = 0;
+        i.current.onHud({
+          ...o,
+          police: o.police.map((e) => ({
+            ...e,
+          })),
+        });
       }
       if (o.ended && !r.current.finished) {
-        ((r.current.finished = true),
-          (r.current.paused = true),
-          i.current.onFinish({
-            ...o,
-            credits: Math.floor(o.score / 12 + o.elapsed * 2),
-          }));
+        r.current.finished = true;
+        r.current.paused = true;
+        i.current.onFinish({
+          ...o,
+          credits: Math.floor(o.score / 12 + o.elapsed * 2),
+        });
       }
     }
-    f.render();
+    composer.render();
   }
-  warmUpSession(c, s, l, [t.color]);
+  warmUpSession(renderer, scene, camera, [t.color]);
   if (debugSession) {
     debugSession.fx = k;
   }
@@ -615,13 +602,13 @@ export function startGameSession(e, t, n, r, i, a = false) {
   return {
     setCar(e) {
       h.setCar(e);
-      s.remove(b);
+      scene.remove(b);
       b.traverse((e) => {
         e.geometry?.dispose();
         e.material?.dispose();
       });
       b = batchPlayerCar(buildCar(e.color, e.shape, false, true));
-      s.add(b);
+      scene.add(b);
       x = `player|${e.color}|${e.shape}`;
     },
     dispose() {

@@ -10,12 +10,7 @@ export function getCarShadowTexture(sp) {
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
-    const carWidth =
-      Math.max(
-        ...sp.wid.map(([, halfWidth]) => {
-          return halfWidth;
-        }),
-      ) * 2;
+    const carWidth = Math.max(...sp.wid.map(([, halfWidth]) => halfWidth)) * 2;
     const planeWidth = carWidth + 0.75;
     const planeLength = sp.L + 1;
     context.translate(width / 2, height / 2);

@@ -142,7 +142,8 @@ export function buildSolidGrid(e) {
         const r = o + "," + e;
         let i = t.get(r);
         if (!i) {
-          ((i = []), t.set(r, i));
+          i = [];
+          t.set(r, i);
         }
         i.push(n);
       }
@@ -167,7 +168,8 @@ export function buildSolidGrid(e) {
           if (i) {
             for (let e of i) {
               if (e._bp !== n) {
-                ((e._bp = n), a.push(e));
+                e._bp = n;
+                a.push(e);
               }
             }
           }

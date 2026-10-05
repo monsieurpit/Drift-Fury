@@ -13,13 +13,12 @@ function createPerson(col) {
   const cop = col === "#1f2f4d";
   const g = new Group();
   const L = {};
-  const mt = (c, r = 0.8, m = 0) => {
-    return new MeshStandardMaterial({
+  const mt = (c, r = 0.8, m = 0) =>
+    new MeshStandardMaterial({
       color: c,
       roughness: r,
       metalness: m,
     });
-  };
   const skin = mt(cop ? "#c99a78" : "#d9b48f", 0.62);
   const shirt = mt(col, 0.88);
   const vest = mt("#131b2a", 0.9);

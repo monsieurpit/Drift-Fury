@@ -12,200 +12,166 @@ import { PickerModal } from "../game/ui/PickerModal.jsx";
 import { ResultScreen } from "../game/ui/ResultScreen.jsx";
 import { TouchControls } from "../game/ui/TouchControls.jsx";
 export function GamePage() {
-  const [e, t] = React.useState(loadProgress);
-  const [n, r] = React.useState("lobby");
-  const [i, a] = React.useState(null);
-  const [o, s] = React.useState(INITIAL_HUD);
-  const [c, l] = React.useState(null);
-  const [u, d] = React.useState(false);
-  const [f, p] = React.useState(false);
-  const [m, h] = React.useState(false);
-  const g = React.useRef({
+  const [progress, setProgress] = React.useState(loadProgress);
+  const [screen, setScreen] = React.useState("lobby");
+  const [picker, setPicker] = React.useState(null);
+  const [hud, setHud] = React.useState(INITIAL_HUD);
+  const [result, setResult] = React.useState(null);
+  const [paused, setPaused] = React.useState(false);
+  const [muted, setMuted] = React.useState(false);
+  const [noPolice, setNoPolice] = React.useState(false);
+  const controls = React.useRef({
     keys: {},
     paused: false,
     muted: false,
     finished: false,
   });
-  const v =
-    CARS.find((t) => {
-      return t.id === e.car;
-    }) || CARS[0];
-  const y =
-    ENGINES.find((t) => {
-      return t.id === e.engine;
-    }) || ENGINES[0];
+  const car = CARS.find((t) => t.id === progress.car) || CARS[0];
+  const engine = ENGINES.find((t) => t.id === progress.engine) || ENGINES[0];
+  React.useEffect(() => saveProgress(progress), [progress]);
   React.useEffect(() => {
-    return saveProgress(e);
-  }, [e]);
-  React.useEffect(() => {
-    g.current.paused = !!(u || i || c);
-    if (g.current.paused) {
-      g.current.keys = {};
+    controls.current.paused = !!(paused || picker || result);
+    if (controls.current.paused) {
+      controls.current.keys = {};
     }
-  }, [u, i, c]);
+  }, [paused, picker, result]);
   React.useEffect(() => {
-    g.current.muted = f;
-  }, [f]);
-  const b = () => {
-    const e = createAudio(y);
-    e.resume();
-    g.current = {
+    controls.current.muted = muted;
+  }, [muted]);
+  const startSession = () => {
+    const audio = createAudio(engine);
+    audio.resume();
+    controls.current = {
       keys: {},
       paused: false,
-      muted: f,
+      muted,
       finished: false,
-      audio: e,
+      audio,
     };
-    s({
+    setHud({
       ...INITIAL_HUD,
       audioLoading: true,
     });
-    l(null);
-    d(false);
-    r("race");
+    setResult(null);
+    setPaused(false);
+    setScreen("race");
   };
-  const x = (e) => {
-    if (c) {
+  const finishSession = (summary) => {
+    if (result) {
       return;
     }
-    g.current.paused = true;
-    g.current.finished = true;
-    d(false);
-    a(null);
-    const n = e.credits ?? Math.floor(e.score / 12 + (e.elapsed || 0) * 2);
-    t((t) => {
-      return {
-        ...t,
-        credits: t.credits + n,
-        best: Math.max(t.best, e.score),
-      };
-    });
-    l({
-      ...e,
-      credits: n,
+    controls.current.paused = true;
+    controls.current.finished = true;
+    setPaused(false);
+    setPicker(null);
+    const earned = summary.credits ?? Math.floor(summary.score / 12 + (summary.elapsed || 0) * 2);
+    setProgress((t) => ({
+      ...t,
+      credits: t.credits + earned,
+      best: Math.max(t.best, summary.score),
+    }));
+    setResult({
+      ...summary,
+      credits: earned,
     });
   };
-  const S = () => {
-    r("lobby");
-    l(null);
-    d(false);
-    a(null);
+  const returnToLobby = () => {
+    setScreen("lobby");
+    setResult(null);
+    setPaused(false);
+    setPicker(null);
   };
-  const C = () => {
-    if (!c) {
-      if (i) {
-        a(null);
+  const togglePause = () => {
+    if (!result) {
+      if (picker) {
+        setPicker(null);
         return;
       }
-      d((e) => {
-        return !e;
-      });
+      setPaused((e) => !e);
     }
   };
   return (
     <div className="nightshift">
-      {n === "lobby" ? (
+      {screen === "lobby" ? (
         <GarageScreen
-          progress={e}
-          car={v}
-          engine={y}
-          onGarage={a}
-          onStart={b}
-          muted={f}
-          onMute={() => {
-            return p((e) => {
-              return !e;
-            });
-          }}
-          noPolice={m}
-          onToggleNoPolice={() => {
-            return h((e) => {
-              return !e;
-            });
-          }}
+          progress={progress}
+          car={car}
+          engine={engine}
+          onGarage={setPicker}
+          onStart={startSession}
+          muted={muted}
+          onMute={() => setMuted((e) => !e)}
+          noPolice={noPolice}
+          onToggleNoPolice={() => setNoPolice((e) => !e)}
         />
       ) : (
         <div className="relative h-[100dvh] w-full overflow-hidden">
           <GameView
-            car={v}
-            engine={y}
-            controls={g}
-            onHud={s}
-            onFinish={x}
-            onStation={() => {
-              return a("cars");
-            }}
-            onPause={C}
-            noPolice={m}
+            car={car}
+            engine={engine}
+            controls={controls}
+            onHud={setHud}
+            onFinish={finishSession}
+            onStation={() => setPicker("cars")}
+            onPause={togglePause}
+            noPolice={noPolice}
           />
           <Hud
-            hud={o}
-            engine={y}
-            muted={f}
-            onMute={() => {
-              return p((e) => {
-                return !e;
-              });
-            }}
-            onPause={C}
-            onStation={() => {
-              return a("cars");
-            }}
+            hud={hud}
+            engine={engine}
+            muted={muted}
+            onMute={() => setMuted((e) => !e)}
+            onPause={togglePause}
+            onStation={() => setPicker("cars")}
           />
-          {!u && !c && !i && <TouchControls controls={g} />}
+          {!paused && !result && !picker && <TouchControls controls={controls} />}
           <div className="pointer-events-none absolute bottom-2 left-1/2 hidden -translate-x-1/2 text-[8px] tracking-widest text-white/50 xl:block">
             {
               "ZQSD / WASD / FLÈCHES • CONDUIRE \xA0 ESPACE • DRIFT \xA0 E • STATION \xA0 F • PIED/ENTRER \xA0 ESC • PAUSE"
             }
           </div>
-          {u && !c && (
+          {paused && !result && (
             <PauseMenu
-              onResume={() => {
-                return d(false);
-              }}
-              onEnd={() => {
-                return x({
-                  ...o,
+              onResume={() => setPaused(false)}
+              onEnd={() =>
+                finishSession({
+                  ...hud,
                   reason: "Session terminée",
-                });
-              }}
+                })
+              }
             />
           )}{" "}
-          {c && <ResultScreen result={c} onReturn={S} />}
+          {result && <ResultScreen result={result} onReturn={returnToLobby} />}
         </div>
       )}
-      {i && (
+      {picker && (
         <PickerModal
-          type={i}
-          progress={e}
-          onSelect={(e) => {
-            const n = i === "cars";
-            const r = (n ? CARS : ENGINES).find((t) => {
-              return t.id === e;
-            });
-            const o = n ? "car" : "engine";
-            const s = n ? "cars" : "engines";
-            t((t) => {
-              return t[s].includes(e)
+          type={picker}
+          progress={progress}
+          onSelect={(id) => {
+            const isCar = picker === "cars";
+            const item = (isCar ? CARS : ENGINES).find((t) => t.id === id);
+            const selectedKey = isCar ? "car" : "engine";
+            const ownedKey = isCar ? "cars" : "engines";
+            setProgress((t) =>
+              t[ownedKey].includes(id)
                 ? {
                     ...t,
-                    [o]: e,
+                    [selectedKey]: id,
                   }
-                : t.credits < r.price
+                : t.credits < item.price
                   ? t
                   : {
                       ...t,
-                      [o]: e,
-                      [s]: [...t[s], e],
-                      credits: t.credits - r.price,
-                    };
-            });
-            a(null);
+                      [selectedKey]: id,
+                      [ownedKey]: [...t[ownedKey], id],
+                      credits: t.credits - item.price,
+                    },
+            );
+            setPicker(null);
           }}
-          onClose={() => {
-            return a(null);
-          }}
-          station={n === "race"}
+          onClose={() => setPicker(null)}
+          station={screen === "race"}
         />
       )}
     </div>

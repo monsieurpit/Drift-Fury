@@ -1,9 +1,7 @@
 import React from "react";
 import { startCarPreview } from "../session/carPreview.js";
-export function CarPreview({ car: e }) {
-  const t = React.useRef(null);
-  React.useEffect(() => {
-    return startCarPreview(t.current, e);
-  }, [e.id]);
-  return <div ref={t} className="absolute inset-0" aria-label={`Aperçu 3D de ${e.name}`} />;
+export function CarPreview({ car }) {
+  const containerRef = React.useRef(null);
+  React.useEffect(() => startCarPreview(containerRef.current, car), [car.id]);
+  return <div ref={containerRef} className="absolute inset-0" aria-label={`Aperçu 3D de ${car.name}`} />;
 }

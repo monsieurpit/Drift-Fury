@@ -145,27 +145,20 @@ export function buildWorld(e) {
   const C = [-120, -60, 0, 60, 120];
   const w = [-80, -30, 20, 70];
   const stationRoadAccesses = FUEL_STATIONS.map((station) => {
-    const roadX = C.reduce((nearest, x) => {
-      return Math.abs(x - station.x) < Math.abs(nearest - station.x) ? x : nearest;
-    }, C[0]);
+    const roadX = C.reduce(
+      (nearest, x) => (Math.abs(x - station.x) < Math.abs(nearest - station.x) ? x : nearest),
+      C[0],
+    );
     return {
       station,
       roadX,
       side: Math.sign(station.x - roadX),
     };
   });
-  const streetlightZs = w.slice(0, -1).map((z, index) => {
-    return (z + w[index + 1]) / 2;
-  });
-  const streetlightXs = C.slice(0, -1).map((x, index) => {
-    return (x + C[index + 1]) / 2;
-  });
-  const T = (e, t, n, r, i = 0.04) => {
-    return m(n, 0.02, r, e, i, t, c);
-  };
-  const E = (e, t, n, r, i = 0.04) => {
-    return m(n, 0.02, r, e, i, t, l);
-  };
+  const streetlightZs = w.slice(0, -1).map((z, index) => (z + w[index + 1]) / 2);
+  const streetlightXs = C.slice(0, -1).map((x, index) => (x + C[index + 1]) / 2);
+  const T = (e, t, n, r, i = 0.04) => m(n, 0.02, r, e, i, t, c);
+  const E = (e, t, n, r, i = 0.04) => m(n, 0.02, r, e, i, t, l);
   const signals = [];
   const puddleRandom = createRandom(731941);
   const puddleMat = new MeshStandardMaterial({
@@ -279,15 +272,9 @@ export function buildWorld(e) {
   for (const x of C) {
     for (const side of [-1, 1]) {
       const accessCuts = stationRoadAccesses
-        .filter((access) => {
-          return access.roadX === x && access.side === side;
-        })
-        .map((access) => {
-          return [access.station.z - 4.75, access.station.z + 4.75];
-        })
-        .sort((first, second) => {
-          return first[0] - second[0];
-        });
+        .filter((access) => access.roadX === x && access.side === side)
+        .map((access) => [access.station.z - 4.75, access.station.z + 4.75])
+        .sort((first, second) => first[0] - second[0]);
       const addSidewalkSegment = (start, end) => {
         if (end > start) {
           m(2.4, 0.22, end - start, x + side * 10.2, 0.11, (start + end) / 2, a);
@@ -468,9 +455,7 @@ export function buildWorld(e) {
         [connected.east, 1, 0, connected.west],
         [connected.north, 0, -1, connected.south],
         [connected.south, 0, 1, connected.north],
-      ].filter(([hasRoad]) => {
-        return hasRoad;
-      });
+      ].filter(([hasRoad]) => hasRoad);
       if (arms.length === 4) {
         O(x + 14, z + 14, 0, 0);
         O(x - 14, z - 14, Math.PI, 0);
@@ -550,9 +535,7 @@ export function buildWorld(e) {
     };
     const tint = (hex, k) => {
       const v = parseInt(hex.slice(1), 16);
-      const cl = (q) => {
-        return Math.max(0, Math.min(255, Math.round(q * k)));
-      };
+      const cl = (q) => Math.max(0, Math.min(255, Math.round(q * k)));
       return `rgb(${cl((v >> 16) & 255)},${cl((v >> 8) & 255)},${cl(v & 255)})`;
     };
     const textureOf = (cv) => {
@@ -586,14 +569,15 @@ export function buildWorld(e) {
       roughness: 0.4,
     });
     const SIGNS = ["#c6dc77", "#5a9fd4", "#e89978", "#8c87c7", "#ff7a7a"];
-    const trimMats = SIGNS.map((col) => {
-      return new MeshStandardMaterial({
-        color: "#050505",
-        emissive: col,
-        emissiveIntensity: 1.7,
-        roughness: 0.4,
-      });
-    });
+    const trimMats = SIGNS.map(
+      (col) =>
+        new MeshStandardMaterial({
+          color: "#050505",
+          emissive: col,
+          emissiveIntensity: 1.7,
+          roughness: 0.4,
+        }),
+    );
 
     /* --- facade textures: map + matching emissive map + normal map (one shared random layout) --- */
     const facadeCache = new Map();
@@ -826,11 +810,7 @@ export function buildWorld(e) {
         const bx = (C[bi] + C[bi + 1]) / 2;
         const bz = (w[bj] + w[bj + 1]) / 2;
         m(37.2, 0.14, 27.2, bx, 0.02, bz, lotMat);
-        if (
-          FUEL_STATIONS.some((st) => {
-            return Math.abs(st.x - bx) < 32 && Math.abs(st.z - bz) < 32;
-          })
-        ) {
+        if (FUEL_STATIONS.some((st) => Math.abs(st.x - bx) < 32 && Math.abs(st.z - bz) < 32)) {
           continue;
         }
         for (const side of [-1, 1]) {
@@ -1041,18 +1021,10 @@ export function buildWorld(e) {
     for (const ax of C) {
       for (const side of [-1, 1]) {
         for (let tz = w[0] - 4; tz <= w[w.length - 1] + 4; tz += 12) {
-          if (
-            w.some((sz) => {
-              return Math.abs(tz - sz) < 14.5;
-            })
-          ) {
+          if (w.some((sz) => Math.abs(tz - sz) < 14.5)) {
             continue;
           }
-          if (
-            streetlightZs.some((pz) => {
-              return Math.abs(tz - pz) < 4.5;
-            })
-          ) {
+          if (streetlightZs.some((pz) => Math.abs(tz - pz) < 4.5)) {
             continue;
           }
           spots.push([ax + side * 10.2, tz, 0.88 + j() * 0.28]);
@@ -1069,9 +1041,7 @@ export function buildWorld(e) {
       [0.12, 1.35, 0.08, 0.84, 0.8, 0.86],
       [-0.34, -0.08, 0.36, 0.72, 0.7, 0.78],
     ];
-    const trunkHeight = (scale) => {
-      return 4.85 * scale;
-    };
+    const trunkHeight = (scale) => 4.85 * scale;
     const trunks = new InstancedMesh(new CylinderGeometry(0.13, 0.24, 1, 12), barkMat, spots.length);
     const branches = new InstancedMesh(new CylinderGeometry(0.055, 0.095, 1, 8), barkMat, spots.length * 4);
     trunks.castShadow = true;
@@ -1300,18 +1270,14 @@ export function buildWorld(e) {
   let stationShelfBoardCount = 0;
   let stationCoolerShelfCount = 0;
   let stationHoseCount = 0;
-  const stationShelfProducts = stationProductMats.map((material) => {
-    return new InstancedMesh(new BoxGeometry(0.17, 0.27, 0.2), material, 216);
-  });
-  const stationCoolerProducts = stationProductMats.map((material) => {
-    return new InstancedMesh(new BoxGeometry(0.12, 0.25, 0.12), material, 72);
-  });
-  const stationShelfProductCounts = stationProductMats.map(() => {
-    return 0;
-  });
-  const stationCoolerProductCounts = stationProductMats.map(() => {
-    return 0;
-  });
+  const stationShelfProducts = stationProductMats.map(
+    (material) => new InstancedMesh(new BoxGeometry(0.17, 0.27, 0.2), material, 216),
+  );
+  const stationCoolerProducts = stationProductMats.map(
+    (material) => new InstancedMesh(new BoxGeometry(0.12, 0.25, 0.12), material, 72),
+  );
+  const stationShelfProductCounts = stationProductMats.map(() => 0);
+  const stationCoolerProductCounts = stationProductMats.map(() => 0);
   const placeStationProduct = (meshes, counts, materialIndex, x, yPos, z) => {
     const mesh = meshes[materialIndex];
     const instance = counts[materialIndex]++;

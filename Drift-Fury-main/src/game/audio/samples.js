@@ -32,22 +32,15 @@ function prepareEngineSample(e, t, n, r = false) {
         return Math.sqrt(r / Math.max(1, i));
       },
     );
-    const n =
-      t.reduce((e, t) => {
-        return e + t;
-      }, 0) / 6;
+    const n = t.reduce((e, t) => e + t, 0) / 6;
     if (n < 0.003) {
       continue;
     }
-    const i =
-      t.reduce((e, t) => {
-        return e + (t - n) ** 2;
-      }, 0) /
-      6 /
-      n ** 2;
+    const i = t.reduce((e, t) => e + (t - n) ** 2, 0) / 6 / n ** 2;
     const o = (r ? n : Math.sqrt(n)) / (1 + i * 12);
     if (o > d) {
-      ((d = o), (u = e));
+      d = o;
+      u = e;
     }
   }
   const f = Math.min(Math.floor(i * 0.06), Math.floor(c / 5));
@@ -106,13 +99,7 @@ export async function loadEngineSamples(e, t) {
   const n = ENGINE_SAMPLE_LAYERS[t] || ENGINE_SAMPLE_LAYERS.V6;
   const r = new Map(
     await Promise.all(
-      [
-        ...new Set(
-          n.map(([e]) => {
-            return e;
-          }),
-        ),
-      ].map(async (t) => {
+      [...new Set(n.map(([e]) => e))].map(async (t) => {
         const n = await fetch(t);
         if (!n.ok) {
           throw Error("Impossible de charger le son moteur.");
@@ -121,9 +108,7 @@ export async function loadEngineSamples(e, t) {
       }),
     ),
   );
-  const i = n.map(([t, n], i) => {
-    return prepareEngineSample(e, r.get(t), n, i >= 3);
-  });
+  const i = n.map(([t, n], i) => prepareEngineSample(e, r.get(t), n, i >= 3));
   sampleCache.set(t, i);
   return i;
 }
@@ -195,10 +180,7 @@ export function createSampleEngine(e, t, n, r) {
         const i = Math.abs(t - r);
         return Math.max(0, 1 - i / (n === 0 ? 1200 : 1100));
       });
-      const l =
-        o.reduce((e, t) => {
-          return e + t;
-        }, 0) || 1;
+      const l = o.reduce((e, t) => e + t, 0) || 1;
       const u = 0.6 + n * 0.4 + (r.shifting && r.shiftDirection < 0 ? 0.2 : 0);
       const d = r.shifting ? 0.4 : 1;
       const f = t > (r.redline || 8000) * 0.985 ? 0.65 + 0.35 * Math.max(0, Math.sin(a * 90)) : 1;
@@ -294,9 +276,7 @@ export function createSampleEngine(e, t, n, r) {
       catchEngine.stop(now + 1.18);
     },
     close() {
-      c.forEach(({ source: e }) => {
-        return e.stop();
-      });
+      c.forEach(({ source }) => source.stop());
       a.disconnect();
       o.disconnect();
       s.disconnect();

@@ -11,12 +11,8 @@ import {
 import { updateGearbox } from "./gearbox.js";
 import { createCarPhysics } from "./physics.js";
 import { terrainHeight } from "../world/terrain.js";
-const clamp = (e, t, n) => {
-  return Math.max(t, Math.min(n, e));
-};
-const distance2D = (e, t) => {
-  return Math.hypot(e.x - t.x, e.z - t.z);
-};
+const clamp = (e, t, n) => Math.max(t, Math.min(n, e));
+const distance2D = (e, t) => Math.hypot(e.x - t.x, e.z - t.z);
 const PLAYER_HALF_WIDTH = 1;
 const PLAYER_HALF_LENGTH = 2.25;
 const NPC_HALF_WIDTH = 1.05;
@@ -122,9 +118,7 @@ export function createGame(e, t, n, r = false) {
     }
   }
   const a = buildSolidGrid(n);
-  const o = n.filter((e) => {
-    return e.w >= 3;
-  });
+  const o = n.filter((e) => e.w >= 3);
   const s = [];
   function c(e) {
     if (distance2D(e, i) > 75) {
@@ -148,9 +142,7 @@ export function createGame(e, t, n, r = false) {
       ((i.health = clamp(i.health - e, 0, 100)),
       (i.collisionTimer = 0.5),
       (i.shake = Math.min(i.shake + e * 0.08, 1.2)),
-      i.police.some((e) => {
-        return distance2D(e, i) < 85;
-      }) && (i.wanted = clamp(i.wanted + 0.6, 0, 5)),
+      i.police.some((e) => distance2D(e, i) < 85) && (i.wanted = clamp(i.wanted + 0.6, 0, 5)),
       true)
     );
   }
@@ -161,21 +153,19 @@ export function createGame(e, t, n, r = false) {
       for (let n of i.vehicles) {
         const r = distance2D(n, i);
         if (r < t) {
-          ((t = r), (e = n));
+          t = r;
+          e = n;
         }
       }
       if (!e) {
         return;
       }
-      i.vehicles = i.vehicles.filter((t) => {
-        return t.id !== e.id;
-      });
+      i.vehicles = i.vehicles.filter((t) => t.id !== e.id);
       if (e.kind === "police") {
-        const t = i.police.find((t) => {
-          return t.carId === e.id;
-        });
+        const t = i.police.find((t) => t.carId === e.id);
         if (t) {
-          ((t.onFoot = true), (t.carId = null));
+          t.onFoot = true;
+          t.carId = null;
         }
         i.wanted = clamp(i.wanted + 1, 0, 5);
       }
@@ -217,9 +207,7 @@ export function createGame(e, t, n, r = false) {
       i.w = 0;
       i.yaw = 0;
       let t = 0;
-      const n = [...i.police].sort((e, t) => {
-        return distance2D(e, i) - distance2D(t, i);
-      });
+      const n = [...i.police].sort((e, t) => distance2D(e, i) - distance2D(t, i));
       for (let e of n) {
         if (t >= 2) {
           break;
@@ -366,30 +354,32 @@ export function createGame(e, t, n, r = false) {
           break;
         }
         if (i.x < -200 || i.x > 250 || i.z > 150 || i.z < -700) {
-          ((i.x = clamp(i.x, -200, 250)),
-            (i.z = clamp(i.z, -700, 150)),
-            (i.vx *= -0.3),
-            (i.vz *= -0.3),
-            l(_ * 0.7) &&
-              (i._crash = {
-                x: i.x,
-                y: i.y || 0,
-                z: i.z,
-                intensity: Math.min(_ * 0.06, 1),
-              }));
+          i.x = clamp(i.x, -200, 250);
+          i.z = clamp(i.z, -700, 150);
+          i.vx *= -0.3;
+          i.vz *= -0.3;
+          if (l(_ * 0.7)) {
+            i._crash = {
+              x: i.x,
+              y: i.y || 0,
+              z: i.z,
+              intensity: Math.min(_ * 0.06, 1),
+            };
+          }
         }
       }
       const v = i.slipAngle;
       i.drifting = _ > 6 && v > 0.13 && i.u > 0;
       if (i.drifting) {
-        ((i.driftTime += e),
-          (i.combo = clamp(1 + Math.floor(i.driftTime / 2) + Math.floor(v * 1.8), 1, 8)),
-          (i.score += e * _ * v * i.combo * 15),
-          i.police.some((e) => {
-            return distance2D(e, i) < 85;
-          }) && (i.wanted = clamp(i.wanted + e * 0.27, 0, 5)));
+        i.driftTime += e;
+        i.combo = clamp(1 + Math.floor(i.driftTime / 2) + Math.floor(v * 1.8), 1, 8);
+        i.score += e * _ * v * i.combo * 15;
+        if (i.police.some((e) => distance2D(e, i) < 85)) {
+          i.wanted = clamp(i.wanted + e * 0.27, 0, 5);
+        }
       } else {
-        ((i.driftTime = 0), (i.combo = 1));
+        i.driftTime = 0;
+        i.combo = 1;
       }
       if (!i.onFoot) {
         i.fuel = clamp(
@@ -398,18 +388,16 @@ export function createGame(e, t, n, r = false) {
           100,
         );
       }
-      i.station = FUEL_STATIONS.findIndex((e) => {
-        return distance2D(e, i) < 8 && _ < 2.5;
-      });
+      i.station = FUEL_STATIONS.findIndex((e) => distance2D(e, i) < 8 && _ < 2.5);
       i.store = i.onFoot
-        ? FUEL_STATIONS.findIndex((station) => {
-            return Math.abs(i.x - station.x) < 5.25 && i.z > station.z + 7.05 && i.z < station.z + 15.3;
-          })
+        ? FUEL_STATIONS.findIndex(
+            (station) => Math.abs(i.x - station.x) < 5.25 && i.z > station.z + 7.05 && i.z < station.z + 15.3,
+          )
         : -1;
       i.shop = i.onFoot
-        ? FUEL_STATIONS.findIndex((station) => {
-            return Math.abs(i.x - station.x) < 2.35 && i.z > station.z + 5.15 && i.z < station.z + 7.25;
-          })
+        ? FUEL_STATIONS.findIndex(
+            (station) => Math.abs(i.x - station.x) < 2.35 && i.z > station.z + 5.15 && i.z < station.z + 7.25,
+          )
         : -1;
       if (!i.onFoot && i.station >= 0) {
         i.fuel = clamp(i.fuel + e * 14, 0, 100);
@@ -434,11 +422,10 @@ export function createGame(e, t, n, r = false) {
             t = i.x;
             r = i.z;
           } else {
-            const e = i.vehicles.find((e) => {
-              return e.id === n.carId;
-            });
+            const e = i.vehicles.find((e) => e.id === n.carId);
             if (e) {
-              ((t = e.x), (r = e.z));
+              t = e.x;
+              r = e.z;
             }
           }
           if (t != null) {
@@ -447,26 +434,23 @@ export function createGame(e, t, n, r = false) {
             const s = Math.hypot(a, o);
             n.heading = Math.atan2(-a, -o);
             if (s > 0.4) {
-              ((n.x += (a / (s || 1)) * Math.min(s, OFFICER_RUN_SPEED * e)),
-                (n.z += (o / (s || 1)) * Math.min(s, OFFICER_RUN_SPEED * e)));
+              n.x += (a / (s || 1)) * Math.min(s, OFFICER_RUN_SPEED * e);
+              n.z += (o / (s || 1)) * Math.min(s, OFFICER_RUN_SPEED * e);
             }
             if (!i.onFoot && n.carId != null) {
-              const e = i.vehicles.find((e) => {
-                return e.id === n.carId;
-              });
+              const e = i.vehicles.find((e) => e.id === n.carId);
               if (e && Math.hypot(e.x - n.x, e.z - n.z) < 2.5) {
-                ((i.vehicles = i.vehicles.filter((e) => {
-                  return e.id !== n.carId;
-                })),
-                  (n.onFoot = false),
-                  (n.x = e.x),
-                  (n.z = e.z),
-                  (n.heading = e.heading),
-                  (n.carId = null));
+                i.vehicles = i.vehicles.filter((e) => e.id !== n.carId);
+                n.onFoot = false;
+                n.x = e.x;
+                n.z = e.z;
+                n.heading = e.heading;
+                n.carId = null;
               }
             }
             if (i.onFoot && distance2D(n, i) < 1.8) {
-              ((i.arrestTimer = Math.min(i.arrestTimer + e * 2.5, 5)), (S = true));
+              i.arrestTimer = Math.min(i.arrestTimer + e * 2.5, 5);
+              S = true;
             }
           }
           if (i.wanted > 0.15 && c(n)) {
@@ -486,7 +470,8 @@ export function createGame(e, t, n, r = false) {
           d = i.x + i.vx * e;
           f = i.z + i.vz * e;
           if (n.mode === 3 && u > 30) {
-            ((d += h * 10), (f += g * 10));
+            d += h * 10;
+            f += g * 10;
           }
         } else {
           d = [-50, 50, -30, 30][r];
@@ -517,7 +502,8 @@ export function createGame(e, t, n, r = false) {
           for (let i of e) {
             const e = v(n.heading + i, _);
             if (e > r) {
-              ((r = e), (t = n.heading + i));
+              r = e;
+              t = n.heading + i;
             }
           }
           m = t;
@@ -546,9 +532,11 @@ export function createGame(e, t, n, r = false) {
             const t = n.x - e.x;
             const r = n.z - e.z;
             if (e.w + 1 - Math.abs(t) < e.d + 2 - Math.abs(r)) {
-              ((n.x = e.x + Math.sign(t || 1) * (e.w + 1)), (n.speed *= 0.5));
+              n.x = e.x + Math.sign(t || 1) * (e.w + 1);
+              n.speed *= 0.5;
             } else {
-              ((n.z = e.z + Math.sign(r || 1) * (e.d + 2)), (n.speed *= 0.5));
+              n.z = e.z + Math.sign(r || 1) * (e.d + 2);
+              n.speed *= 0.5;
             }
             break;
           }
@@ -603,7 +591,11 @@ export function createGame(e, t, n, r = false) {
         }
       }
       if (i.wanted > 0.15 && !x) {
-        ((i.escape += e), i.escape >= 5 && ((i.wanted = 0), (i.escape = 0)));
+        i.escape += e;
+        if (i.escape >= 5) {
+          i.wanted = 0;
+          i.escape = 0;
+        }
       } else {
         i.escape = 0;
       }
@@ -625,7 +617,8 @@ export function createGame(e, t, n, r = false) {
       i.zone = i.z < -160 ? "Montagne Kuro" : i.x > 130 ? "Autoroute A9" : "Centre-ville";
       i.y = terrainHeight(i.x, i.z);
       if (i.health <= 0 || i.arrest >= 100) {
-        ((i.ended = true), (i.reason = i.health <= 0 ? "Véhicule détruit" : "Vous êtes arrêté"));
+        i.ended = true;
+        i.reason = i.health <= 0 ? "Véhicule détruit" : "Vous êtes arrêté";
       }
       return i;
     },

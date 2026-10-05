@@ -85,11 +85,7 @@ export function batchStaticMeshes(root, keepMaterials = new Set(), cellSize = 48
       return false;
     }
     const materials = Array.isArray(object.material) ? object.material : [object.material];
-    if (
-      materials.some((material) => {
-        return !material || material.transparent;
-      })
-    ) {
+    if (materials.some((material) => !material || material.transparent)) {
       return false;
     }
     if (Array.isArray(object.material) && !geometry.groups.length) {
@@ -141,20 +137,14 @@ export function batchStaticMeshes(root, keepMaterials = new Set(), cellSize = 48
       geometry.computeBoundingSphere();
     }
     sphere.copy(geometry.boundingSphere).applyMatrix4(matrix);
-    const signature = names
-      .map((name) => {
-        return name + geometry.attributes[name].itemSize;
-      })
-      .join(",");
+    const signature = names.map((name) => name + geometry.attributes[name].itemSize).join(",");
     const total = geometry.index ? geometry.index.count : geometry.attributes.position.count;
     const pieces = Array.isArray(object.material)
-      ? geometry.groups.map((group) => {
-          return {
-            material: object.material[group.materialIndex],
-            start: group.start,
-            count: Math.min(group.count, total - group.start),
-          };
-        })
+      ? geometry.groups.map((group) => ({
+          material: object.material[group.materialIndex],
+          start: group.start,
+          count: Math.min(group.count, total - group.start),
+        }))
       : [
           {
             material: object.material,
@@ -252,9 +242,7 @@ export function batchStaticMeshes(root, keepMaterials = new Set(), cellSize = 48
       }
       const flip = matrix.determinant() < 0;
       const source = geometry.index ? geometry.index.array : null;
-      const at = (index) => {
-        return source ? source[index] : index;
-      };
+      const at = (index) => (source ? source[index] : index);
       for (let index = start; index + 2 < start + pieceCount; index += 3) {
         indices[indexOffset++] = at(index) + vertexOffset;
         indices[indexOffset++] = at(flip ? index + 2 : index + 1) + vertexOffset;
@@ -281,41 +269,29 @@ export function batchStaticMeshes(root, keepMaterials = new Set(), cellSize = 48
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
     root.add(mesh);
-    group.objects.forEach((object) => {
-      return removed.add(object);
-    });
+    group.objects.forEach((object) => removed.add(object));
     merged += group.items.length;
     batches++;
   }
   // a multi-material mesh only goes away when every one of its pieces was merged
   for (const group of groups.values()) {
     if (group.items.length < 2) {
-      group.objects.forEach((object) => {
-        return removed.delete(object);
-      });
+      group.objects.forEach((object) => removed.delete(object));
     }
   }
-  removed.forEach((object) => {
-    return object.parent && object.parent.remove(object);
-  });
+  removed.forEach((object) => object.parent && object.parent.remove(object));
   for (const group of groups.values()) {
     if (group.items.length >= 2) {
       for (const object of group.objects) {
         if (!removed.has(object) && Array.isArray(object.material)) {
           // partially merged multi-material mesh: hide the pieces now drawn by a batch
           const merged = new Set(
-            group.items
-              .filter((item) => {
-                return item.object === object;
-              })
-              .map((item) => {
-                return item.start;
-              }),
+            group.items.filter((item) => item.object === object).map((item) => item.start),
           );
           object.geometry = object.geometry.clone();
-          object.geometry.groups = object.geometry.groups.filter((entry) => {
-            return !merged.has(entry.start) || object.material[entry.materialIndex] === undefined;
-          });
+          object.geometry.groups = object.geometry.groups.filter(
+            (entry) => !merged.has(entry.start) || object.material[entry.materialIndex] === undefined,
+          );
         }
       }
     }
@@ -330,12 +306,8 @@ export function batchStaticMeshes(root, keepMaterials = new Set(), cellSize = 48
   };
   prune(root);
   const geometries = new Set();
-  root.traverse((object) => {
-    return object.geometry && geometries.add(object.geometry);
-  });
-  removed.forEach((object) => {
-    return geometries.has(object.geometry) || object.geometry.dispose();
-  });
+  root.traverse((object) => object.geometry && geometries.add(object.geometry));
+  removed.forEach((object) => geometries.has(object.geometry) || object.geometry.dispose());
   return {
     merged,
     batches,

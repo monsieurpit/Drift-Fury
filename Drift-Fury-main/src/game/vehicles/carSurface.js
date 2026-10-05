@@ -22,9 +22,7 @@ export function bodyRing(sp, zf) {
     [0, yt],
   ];
   const poly = [];
-  R.forEach((p, i) => {
-    return poly.push([p[0], p[1], i]);
-  });
+  R.forEach((p, i) => poly.push([p[0], p[1], i]));
   for (let i = 6; i >= 1; i--) {
     poly.push([-R[i][0], R[i][1], 14 - i]);
   }
@@ -52,9 +50,7 @@ export function cabinRing(sp, zf) {
     [0, yb + H],
   ];
   const poly = [];
-  R.forEach((p, i) => {
-    return poly.push([p[0], p[1], i]);
-  });
+  R.forEach((p, i) => poly.push([p[0], p[1], i]));
   for (let i = 5; i >= 1; i--) {
     poly.push([-R[i][0], R[i][1], 12 - i]);
   }

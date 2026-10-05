@@ -1,13 +1,7 @@
 import { ENGINE_REDLINE, GEARBOX } from "../data/engines.js";
-const clamp = (e, t, n) => {
-  return Math.max(t, Math.min(n, e));
-};
-const lerp = (e, t, n) => {
-  return e + (t - e) * n;
-};
-const damp = (e, t, n, r) => {
-  return e + (t - e) * (1 - Math.exp(-n * r));
-};
+const clamp = (e, t, n) => Math.max(t, Math.min(n, e));
+const lerp = (e, t, n) => e + (t - e) * n;
+const damp = (e, t, n, r) => e + (t - e) * (1 - Math.exp(-n * r));
 const TAU = Math.PI * 2;
 const WHEELBASE = {
   coupe: 2.62,
@@ -17,9 +11,7 @@ const WHEELBASE = {
 const MAX_STEER_ANGLE = 0.55;
 export function gearTopSpeeds(e) {
   const t = ENGINE_REDLINE[e] || 7200;
-  return GEARBOX.ratios.map((e) => {
-    return (t / 60 / (e * GEARBOX.finalDrive)) * TAU * GEARBOX.wheel;
-  });
+  return GEARBOX.ratios.map((e) => (t / 60 / (e * GEARBOX.finalDrive)) * TAU * GEARBOX.wheel);
 }
 export function reverseTopSpeed(e) {
   return (
@@ -100,7 +92,11 @@ export function createCarPhysics(e, t) {
     e.w = _;
     e.ax = M;
     if (Math.abs(g) < 0.15 && Math.abs(_) < 0.15 && !r.throttle && !r.brake) {
-      ((e.vx = 0), (e.vz = 0), (e.u = 0), (e.w = 0), (e.yaw = 0));
+      e.vx = 0;
+      e.vz = 0;
+      e.u = 0;
+      e.w = 0;
+      e.yaw = 0;
     }
   }
   return {

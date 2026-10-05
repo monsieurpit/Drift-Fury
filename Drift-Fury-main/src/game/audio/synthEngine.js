@@ -196,9 +196,7 @@ export function createSynthEngine(e, t, n) {
     },
     close() {
       o.stop();
-      d.forEach((e) => {
-        return e.stop();
-      });
+      d.forEach((e) => e.stop());
       c.disconnect();
       u.disconnect();
     },

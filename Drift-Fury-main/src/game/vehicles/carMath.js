@@ -1,16 +1,12 @@
 export /* ======================================================================
-   DRIFT FURY - realistic car builder (replaces the old LEGO-style Vw)
-   Smooth lofted bodywork, tinted glass greenhouse, pillars, wheel arches,
-   lathe-turned tyres and alloy wheels, shaped lights, per-model details.
-   ====================================================================== */
+DRIFT FURY - realistic car builder (replaces the old LEGO-style Vw)
+Smooth lofted bodywork, tinted glass greenhouse, pillars, wheel arches,
+lathe-turned tyres and alloy wheels, shaped lights, per-model details.
+====================================================================== */
 function pchip(pts) {
   const n = pts.length;
-  const xs = pts.map((p) => {
-    return p[0];
-  });
-  const ys = pts.map((p) => {
-    return p[1];
-  });
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
   const h = [];
   const d = [];
   const m = new Array(n);
@@ -51,9 +47,7 @@ function pchip(pts) {
     );
   };
 }
-export const clamp = (x, a, b) => {
-  return Math.min(b, Math.max(a, x));
-};
+export const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 export const smoothstep = (a, b, x) => {
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
@@ -72,9 +66,7 @@ export function chaikin(P, iters, sMax) {
     }
     pts = out;
   }
-  return pts.map((p) => {
-    return [p[0], p[1], p[2] % sMax];
-  });
+  return pts.map((p) => [p[0], p[1], p[2] % sMax]);
 }
 export function smoothProfile(ctrl, iters) {
   /* open Chaikin keeping the end points */

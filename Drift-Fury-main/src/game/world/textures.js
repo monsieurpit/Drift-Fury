@@ -47,11 +47,8 @@ export function normalMapFromHeight(e, t = 2.4) {
   normalCanvas.height = height;
   const context = normalCanvas.getContext("2d");
   const image = context.createImageData(width, height);
-  const sample = (x, y) => {
-    return (
-      source[(Math.min(height - 1, Math.max(0, y)) * width + Math.min(width - 1, Math.max(0, x))) * 4] / 255
-    );
-  };
+  const sample = (x, y) =>
+    source[(Math.min(height - 1, Math.max(0, y)) * width + Math.min(width - 1, Math.max(0, x))) * 4] / 255;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const dx = (sample(x + 1, y) - sample(x - 1, y)) * t;
@@ -174,9 +171,7 @@ export function createAsphaltMaterial(e = 6) {
         c.strokeStyle = col;
         c.lineWidth = lw;
         c.beginPath();
-        pts.forEach(([px, py], k) => {
-          return k ? c.lineTo(px, py) : c.moveTo(px, py);
-        });
+        pts.forEach(([px, py], k) => (k ? c.lineTo(px, py) : c.moveTo(px, py)));
         c.stroke();
       }
     });
@@ -229,10 +224,10 @@ export function concreteTexture(e = 4) {
   t.width = 256;
   t.height = 256;
   const n = t.getContext("2d");
-  const { grid: r, max: i } = fractalNoise(n, 256, 4, 0.5, 4242);
+  const { grid, max } = fractalNoise(n, 256, 4, 0.5, 4242);
   const a = n.createImageData(256, 256);
   for (let e = 0; e < 65536; e++) {
-    const t = 110 + (r[e] / i) * 30;
+    const t = 110 + (grid[e] / max) * 30;
     a.data[e * 4] = t;
     a.data[e * 4 + 1] = t + 1;
     a.data[e * 4 + 2] = t + 3;
@@ -267,10 +262,10 @@ export function grassTexture() {
   e.width = 256;
   e.height = 256;
   const t = e.getContext("2d");
-  const { grid: n, max: r } = fractalNoise(t, 256, 5, 0.55, 7777);
+  const { grid, max } = fractalNoise(t, 256, 5, 0.55, 7777);
   const i = t.createImageData(256, 256);
   for (let e = 0; e < 65536; e++) {
-    const t = n[e] / r;
+    const t = grid[e] / max;
     i.data[e * 4] = 28 + t * 26;
     i.data[e * 4 + 1] = 50 + t * 36;
     i.data[e * 4 + 2] = 36 + t * 22;

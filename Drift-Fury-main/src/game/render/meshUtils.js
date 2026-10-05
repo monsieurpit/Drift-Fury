@@ -30,9 +30,7 @@ export function mergeChildrenByMaterial(e, t = new Set()) {
   for (let [t, r] of n) {
     const n = r.geos.length === 1 ? r.geos[0] : mergeGeometries(r.geos);
     if (r.geos.length > 1) {
-      r.geos.forEach((e) => {
-        return e.dispose();
-      });
+      r.geos.forEach((e) => e.dispose());
     }
     const i = new Mesh(n, t);
     i.castShadow = r.cast;

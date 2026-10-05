@@ -1,37 +1,33 @@
 import React from "react";
 import { startGameSession } from "../session/startGameSession.js";
-export function GameView({
-  car: e,
-  engine: t,
-  controls: n,
-  onHud: r,
-  onFinish: i,
-  onStation: a,
-  onPause: o,
-  noPolice: s,
-}) {
-  const c = React.useRef(null);
-  const l = React.useRef(null);
-  const u = React.useRef({
-    onHud: r,
-    onFinish: i,
-    onStation: a,
-    onPause: o,
+export function GameView({ car, engine, controls, onHud, onFinish, onStation, onPause, noPolice }) {
+  const containerRef = React.useRef(null);
+  const sessionRef = React.useRef(null);
+  const callbacksRef = React.useRef({
+    onHud,
+    onFinish,
+    onStation,
+    onPause,
   });
-  u.current = {
-    onHud: r,
-    onFinish: i,
-    onStation: a,
-    onPause: o,
+  callbacksRef.current = {
+    onHud,
+    onFinish,
+    onStation,
+    onPause,
   };
   React.useEffect(() => {
-    l.current = startGameSession(c.current, e, t, n, u, s);
-    return () => {
-      return l.current.dispose();
-    };
+    sessionRef.current = startGameSession(
+      containerRef.current,
+      car,
+      engine,
+      controls,
+      callbacksRef,
+      noPolice,
+    );
+    return () => sessionRef.current.dispose();
   }, []);
   React.useEffect(() => {
-    l.current?.setCar(e);
-  }, [e.id]);
-  return <div ref={c} className="absolute inset-0" />;
+    sessionRef.current?.setCar(car);
+  }, [car.id]);
+  return <div ref={containerRef} className="absolute inset-0" />;
 }

@@ -20,8 +20,8 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 function createComposer(e, t, n, r, i, a) {
   const o = new EffectComposer(e);
   if (e.capabilities.isWebGL2) {
-    ((o.renderTarget1.samples = Math.min(4, e.capabilities.maxSamples)),
-      (o.renderTarget2.samples = Math.min(4, e.capabilities.maxSamples)));
+    o.renderTarget1.samples = Math.min(4, e.capabilities.maxSamples);
+    o.renderTarget2.samples = Math.min(4, e.capabilities.maxSamples);
   }
   o.setPixelRatio(e.getPixelRatio());
   o.setSize(r, i);
@@ -230,7 +230,10 @@ export function createRenderer(e, t = false) {
     const t = e.clientWidth;
     const n = e.clientHeight;
     if (t && n) {
-      (r.setSize(t, n), (a.aspect = t / n), a.updateProjectionMatrix(), h.setSize(t, n));
+      r.setSize(t, n);
+      a.aspect = t / n;
+      a.updateProjectionMatrix();
+      h.setSize(t, n);
     }
   });
   g.observe(e);
@@ -246,9 +249,7 @@ export function createRenderer(e, t = false) {
       n.traverse((e) => {
         e.geometry?.dispose();
         if (e.material) {
-          (Array.isArray(e.material) ? e.material : [e.material]).forEach((e) => {
-            return e.dispose();
-          });
+          (Array.isArray(e.material) ? e.material : [e.material]).forEach((e) => e.dispose());
         }
       });
       h.dispose();

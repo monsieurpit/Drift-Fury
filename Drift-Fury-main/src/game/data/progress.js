@@ -1,5 +1,5 @@
 export function loadProgress() {
-  const e = {
+  const defaults = {
     credits: 0,
     best: 0,
     car: "sakura",
@@ -8,18 +8,18 @@ export function loadProgress() {
     engines: ["V6", "V8", "V12", "W16"],
   };
   try {
-    const t = JSON.parse(localStorage.getItem("nightshift-progress") || "{}");
-    const n = {
-      ...e,
-      ...t,
+    const saved = JSON.parse(localStorage.getItem("nightshift-progress") || "{}");
+    const progress = {
+      ...defaults,
+      ...saved,
     };
-    n.cars = Array.from(new Set([...e.cars, ...(n.cars || [])]));
-    n.engines = Array.from(new Set([...e.engines, ...(n.engines || [])]));
-    return n;
+    progress.cars = Array.from(new Set([...defaults.cars, ...(progress.cars || [])]));
+    progress.engines = Array.from(new Set([...defaults.engines, ...(progress.engines || [])]));
+    return progress;
   } catch {
-    return e;
+    return defaults;
   }
 }
-export function saveProgress(e) {
-  localStorage.setItem("nightshift-progress", JSON.stringify(e));
+export function saveProgress(progress) {
+  localStorage.setItem("nightshift-progress", JSON.stringify(progress));
 }

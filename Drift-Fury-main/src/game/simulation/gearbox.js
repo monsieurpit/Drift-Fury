@@ -2,9 +2,7 @@ import { ENGINE_REDLINE } from "../data/engines.js";
 import { gearTopSpeeds, reverseTopSpeed } from "./physics.js";
 const GEAR_COUNT = 7;
 const UPSHIFT_RPM_RATIO = 0.93;
-const clamp = (e, t, n) => {
-  return Math.max(t, Math.min(n, e));
-};
+const clamp = (e, t, n) => Math.max(t, Math.min(n, e));
 export function updateGearbox(e, t, n, r, i, a, o) {
   const s = ENGINE_REDLINE[t.id] || 7200;
   const c = t.id === "V12" ? 1000 : 900;
@@ -14,9 +12,7 @@ export function updateGearbox(e, t, n, r, i, a, o) {
   e.shiftTimer = Math.max(0, (e.shiftTimer || 0) - n);
   e.shiftCooldown = Math.max(0, (e.shiftCooldown || 0) - n);
   const d = r < -0.6 || (u < 0.6 && a && !i);
-  const f = (e) => {
-    return (u / l[e - 1]) * s;
-  };
+  const f = (e) => (u / l[e - 1]) * s;
   let p = e.gear || 1;
   if (d) {
     p = -1;
@@ -33,14 +29,13 @@ export function updateGearbox(e, t, n, r, i, a, o) {
     }
   }
   if (p !== e.gear) {
-    (p > 0 &&
-      e.gear > 0 &&
-      u > 0.5 &&
-      ((e.shiftDirection = Math.sign(p - e.gear)),
-      (e.shiftSerial = (e.shiftSerial || 0) + 1),
-      (e.shiftTimer = t.id === "V12" ? 0.14 : 0.2),
-      (e.shiftCooldown = 0.6)),
-      (e.gear = p));
+    if (p > 0 && e.gear > 0 && u > 0.5) {
+      e.shiftDirection = Math.sign(p - e.gear);
+      e.shiftSerial = (e.shiftSerial || 0) + 1;
+      e.shiftTimer = t.id === "V12" ? 0.14 : 0.2;
+      e.shiftCooldown = 0.6;
+    }
+    e.gear = p;
   }
   e.shifting = e.shiftTimer > 0;
   const m = d ? a : i;

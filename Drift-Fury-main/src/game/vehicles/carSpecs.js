@@ -389,9 +389,7 @@ export function buildCarSpec(name) {
     return y;
   };
   const c = sp.cab;
-  const base = (zf) => {
-    return sp.yTop(zf) - 0.05;
-  };
+  const base = (zf) => sp.yTop(zf) - 0.05;
   const bws = base(c.ws);
   const brg = base(c.rg);
   const midRoof = (c.rf + c.rr) / 2;

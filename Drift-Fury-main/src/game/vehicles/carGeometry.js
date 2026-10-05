@@ -137,9 +137,7 @@ export function buildPrismGeometry(poly, x0, x1, phi, bevel) {
   const idx = [];
   const c = Math.cos(phi);
   const s = Math.sin(phi);
-  const W = (r, t, x) => {
-    return [x, r * c - t * s, r * s + t * c];
-  };
+  const W = (r, t, x) => [x, r * c - t * s, r * s + t * c];
   const n = poly.length;
   const addTri = (a, b, d, nrm) => {
     const k = pos.length / 3;

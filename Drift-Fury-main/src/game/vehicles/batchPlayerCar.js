@@ -12,9 +12,7 @@ export function batchPlayerCar(car) {
     skip.add(data.accessDoor);
   }
   batchStaticMeshes(car, new Set(), Infinity, skip);
-  data.wheels.forEach((wheel) => {
-    return batchStaticMeshes(wheel, new Set(), Infinity);
-  });
+  data.wheels.forEach((wheel) => batchStaticMeshes(wheel, new Set(), Infinity));
   if (data.accessDoor) {
     batchStaticMeshes(data.accessDoor, new Set(), Infinity);
   }

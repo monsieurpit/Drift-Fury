@@ -212,36 +212,42 @@ export function createEffects(e) {
         const mesh = particle.mesh;
         mesh.visible = particle.life > 0;
         if (particle.life > 0) {
-          ((particle.life -= l),
-            (mesh.position.x += particle.vx * l),
-            (mesh.position.y += particle.vy * l),
-            (mesh.position.z += particle.vz * l),
-            mesh.scale.addScalar(l * 0.72),
-            camera && mesh.lookAt(camera.position),
-            (mesh.material.opacity = Math.max(0, particle.life / particle.maxLife) * 0.46));
+          particle.life -= l;
+          mesh.position.x += particle.vx * l;
+          mesh.position.y += particle.vy * l;
+          mesh.position.z += particle.vz * l;
+          mesh.scale.addScalar(l * 0.72);
+          if (camera) {
+            mesh.lookAt(camera.position);
+          }
+          mesh.material.opacity = Math.max(0, particle.life / particle.maxLife) * 0.46;
         }
       });
       n.forEach((e) => {
         e.mesh.visible = e.life > 0;
         if (e.life > 0) {
-          ((e.life -= l),
-            (e.mesh.position.y += l * 0.7),
-            e.mesh.scale.addScalar(l * 0.8),
-            (e.mesh.material.opacity = Math.max(0, e.life) * 0.22));
+          e.life -= l;
+          e.mesh.position.y += l * 0.7;
+          e.mesh.scale.addScalar(l * 0.8);
+          e.mesh.material.opacity = Math.max(0, e.life) * 0.22;
         }
       });
       r.forEach((e) => {
         if (e.life > 0) {
-          ((e.life -= l),
-            (e.mesh.position.x += e.vx * l),
-            (e.mesh.position.y += e.vy * l),
-            (e.mesh.position.z += e.vz * l),
-            (e.vy -= l * 9),
-            (e.mesh.rotation.x += l * 8),
-            (e.mesh.rotation.z += l * 6),
-            e.mesh.position.y < 0.1 &&
-              ((e.mesh.position.y = 0.1), (e.vy *= -0.3), (e.vx *= 0.5), (e.vz *= 0.5)),
-            (e.mesh.visible = e.life > 0));
+          e.life -= l;
+          e.mesh.position.x += e.vx * l;
+          e.mesh.position.y += e.vy * l;
+          e.mesh.position.z += e.vz * l;
+          e.vy -= l * 9;
+          e.mesh.rotation.x += l * 8;
+          e.mesh.rotation.z += l * 6;
+          if (e.mesh.position.y < 0.1) {
+            e.mesh.position.y = 0.1;
+            e.vy *= -0.3;
+            e.vx *= 0.5;
+            e.vz *= 0.5;
+          }
+          e.mesh.visible = e.life > 0;
         }
       });
       if (e.noPolice && e.health < 55) {
@@ -262,10 +268,10 @@ export function createEffects(e) {
       a.forEach((e) => {
         e.mesh.visible = e.life > 0;
         if (e.life > 0) {
-          ((e.life -= l),
-            (e.mesh.position.y += l * 0.9),
-            e.mesh.scale.addScalar(l * 0.7),
-            (e.mesh.material.opacity = Math.max(0, e.life) * 0.3));
+          e.life -= l;
+          e.mesh.position.y += l * 0.9;
+          e.mesh.scale.addScalar(l * 0.7);
+          e.mesh.material.opacity = Math.max(0, e.life) * 0.3;
         }
       });
       i.forEach((trail) => {
@@ -281,15 +287,15 @@ export function createEffects(e) {
         }
       });
       if (e.drifting && !wasDrifting) {
-        ((activeTrail = i[trailCursor++ % i.length]),
-          (activeTrail.remaining = 0),
-          activeTrail.wheels.forEach((wheel) => {
-            wheel.segments = 0;
-            wheel.distance = 0;
-            wheel.last = null;
-            wheel.geometry.setDrawRange(0, 0);
-            wheel.mesh.visible = false;
-          }));
+        activeTrail = i[trailCursor++ % i.length];
+        activeTrail.remaining = 0;
+        activeTrail.wheels.forEach((wheel) => {
+          wheel.segments = 0;
+          wheel.distance = 0;
+          wheel.last = null;
+          wheel.geometry.setDrawRange(0, 0);
+          wheel.mesh.visible = false;
+        });
       }
       if (e.drifting) {
         const appendSkidSegment = (wheel, x1, z1, x2, z2, y, width) => {
@@ -380,7 +386,8 @@ export function createEffects(e) {
         }
       }
       if (!e.drifting && wasDrifting) {
-        ((activeTrail.remaining = 20), (activeTrail = null));
+        activeTrail.remaining = 20;
+        activeTrail = null;
       }
       wasDrifting = e.drifting;
     },

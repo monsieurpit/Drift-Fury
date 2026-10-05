@@ -166,9 +166,7 @@ export function buildCar(e = "#a9b7bf", t = "coupe", n = false, r = false, hi = 
   /* ---- lower body loft ---- */
   const bz = [0, 0.012, 0.03, 0.055, 0.09, 0.13, 0.18, 0.24, 0.31];
   const rowsB = new Set(bz);
-  bz.forEach((z) => {
-    return rowsB.add(Math.round((L - z) * 10000) / 10000);
-  });
+  bz.forEach((z) => rowsB.add(Math.round((L - z) * 10000) / 10000));
   for (let z = 0.4; z < L - 0.3; z += 0.09) {
     rowsB.add(Math.round(z * 10000) / 10000);
   }
@@ -182,38 +180,24 @@ export function buildCar(e = "#a9b7bf", t = "coupe", n = false, r = false, hi = 
     rowsB.add(Math.round((za + ar) * 10000) / 10000);
     rowsB.add(Math.round((za + ar + 0.004) * 10000) / 10000);
   }
-  const rb = [...rowsB]
-    .filter((z) => {
-      return z >= 0 && z <= L;
-    })
-    .sort((p, q) => {
-      return p - q;
-    });
+  const rb = [...rowsB].filter((z) => z >= 0 && z <= L).sort((p, q) => p - q);
   const ring0 = bodyRing(sp, rb[0]);
   const nr = ring0.length;
   const nzB = rb.length;
   const PB = new Float32Array(nzB * nr * 3);
-  const ringsB = rb.map((z) => {
-    return bodyRing(sp, z);
-  });
-  ringsB.forEach((ring, ii) => {
-    return ring.forEach((p, j) => {
+  const ringsB = rb.map((z) => bodyRing(sp, z));
+  ringsB.forEach((ring, ii) =>
+    ring.forEach((p, j) => {
       const a = (ii * nr + j) * 3;
       PB[a] = p[0];
       PB[a + 1] = p[1];
       PB[a + 2] = rb[ii] - hl;
-    });
-  });
+    }),
+  );
   const NB = computeGridNormals(PB, nzB, nr);
-  const fold14 = (s) => {
-    return s <= 7 ? s : 14 - s;
-  };
-  const sfB = ring0.map((p) => {
-    return fold14(p[2]);
-  });
-  const inArch = (z) => {
-    return Math.abs(z - sp.axF) < sp.arch + 0.03 || Math.abs(z - sp.axR) < sp.arch + 0.03;
-  };
+  const fold14 = (s) => (s <= 7 ? s : 14 - s);
+  const sfB = ring0.map((p) => fold14(p[2]));
+  const inArch = (z) => Math.abs(z - sp.axF) < sp.arch + 0.03 || Math.abs(z - sp.axR) < sp.arch + 0.03;
   const bodyGeos = buildGridGeometries(PB, NB, nzB, nr, (ii, j) => {
     const zf = (rb[ii] + rb[ii + 1]) / 2;
     const j1 = (j + 1) % nr;
@@ -237,9 +221,7 @@ export function buildCar(e = "#a9b7bf", t = "coupe", n = false, r = false, hi = 
   }
   addMesh(
     buildCapGeometry(
-      ringsB[0].map((p) => {
-        return [p[0], p[1]];
-      }),
+      ringsB[0].map((p) => [p[0], p[1]]),
       rb[0] - hl,
       -1,
     ),
@@ -247,9 +229,7 @@ export function buildCar(e = "#a9b7bf", t = "coupe", n = false, r = false, hi = 
   );
   addMesh(
     buildCapGeometry(
-      ringsB[nzB - 1].map((p) => {
-        return [p[0], p[1]];
-      }),
+      ringsB[nzB - 1].map((p) => [p[0], p[1]]),
       rb[nzB - 1] - hl,
       1,
     ),
@@ -272,32 +252,22 @@ export function buildCar(e = "#a9b7bf", t = "coupe", n = false, r = false, hi = 
   for (let z = cb.ws; z < cb.rg; z += 0.07) {
     cz.add(Math.round(z * 10000) / 10000);
   }
-  const rc = [...cz]
-    .filter((z) => {
-      return z >= cb.ws - 0.000001 && z <= cb.rg + 0.000001;
-    })
-    .sort((p, q) => {
-      return p - q;
-    });
+  const rc = [...cz].filter((z) => z >= cb.ws - 0.000001 && z <= cb.rg + 0.000001).sort((p, q) => p - q);
   const ringC0 = cabinRing(sp, rc[0]);
   const ncr = ringC0.length;
   const nzC = rc.length;
   const PC = new Float32Array(nzC * ncr * 3);
-  rc.forEach((z, ii) => {
-    return cabinRing(sp, z).forEach((p, j) => {
+  rc.forEach((z, ii) =>
+    cabinRing(sp, z).forEach((p, j) => {
       const a = (ii * ncr + j) * 3;
       PC[a] = p[0];
       PC[a + 1] = p[1];
       PC[a + 2] = z - hl;
-    });
-  });
+    }),
+  );
   const NC = computeGridNormals(PC, nzC, ncr);
-  const fold12 = (s) => {
-    return s <= 6 ? s : 12 - s;
-  };
-  const sfC = ringC0.map((p) => {
-    return fold12(p[2]);
-  });
+  const fold12 = (s) => (s <= 6 ? s : 12 - s);
+  const sfC = ringC0.map((p) => fold12(p[2]));
   const cabGeos = buildGridGeometries(PC, NC, nzC, ncr, (ii, j) => {
     const zf = (rc[ii] + rc[ii + 1]) / 2;
     const j1 = (j + 1) % ncr;
@@ -845,7 +815,11 @@ export function buildCar(e = "#a9b7bf", t = "coupe", n = false, r = false, hi = 
       for (let k = 1; k < pts.length; k++) {
         sh_.lineTo(pts[k][0], pts[k][1]);
       }
-      sh_.closePath ? sh_.closePath() : 0;
+      if (sh_.closePath) {
+        sh_.closePath();
+      } else {
+        0;
+      }
       return sh_;
     };
     const wingPack = (chord, hgt, span, zc, thick) => {
@@ -909,9 +883,7 @@ export function buildCar(e = "#a9b7bf", t = "coupe", n = false, r = false, hi = 
       lip(L - 0.55, L - 0.08, 0.07, hwMax * 1.55);
     }
   }
-  ae.forEach((w) => {
-    return mergeChildrenByMaterial(w);
-  });
+  ae.forEach((w) => mergeChildrenByMaterial(w));
   mergeChildrenByMaterial(i, new Set([...brake, ...heads]));
   i.userData = {
     wheels: ae,

@@ -15,12 +15,12 @@ export function startCarPreview(e, t) {
     return () => {};
   }
   const n = createRenderer(e);
-  const { scene: r, renderer: i, camera: a, composer: o } = n;
-  a.position.set(7, 3.2, 8.2);
-  a.lookAt(0, 0.5, 0);
+  const { scene, renderer, camera, composer } = n;
+  camera.position.set(7, 3.2, 8.2);
+  camera.lookAt(0, 0.5, 0);
   const s = buildCar(t.color, t.shape);
   s.rotation.y = -0.25;
-  r.add(s);
+  scene.add(s);
   const c = new Mesh(
     new PlaneGeometry(100, 100),
     new MeshStandardMaterial({
@@ -31,7 +31,7 @@ export function startCarPreview(e, t) {
   );
   c.rotation.x = -Math.PI / 2;
   c.position.y = -0.04;
-  r.add(c);
+  scene.add(c);
   const l = new Mesh(
     new CylinderGeometry(4.7, 4.8, 0.16, 80),
     new MeshStandardMaterial({
@@ -41,7 +41,7 @@ export function startCarPreview(e, t) {
     }),
   );
   l.position.y = -0.03;
-  r.add(l);
+  scene.add(l);
   const u = new Mesh(
     new TorusGeometry(4.73, 0.012, 8, 100),
     new MeshBasicMaterial({
@@ -50,11 +50,11 @@ export function startCarPreview(e, t) {
   );
   u.rotation.x = Math.PI / 2;
   u.position.y = 0.06;
-  r.add(u);
+  scene.add(u);
   for (let e of [-5, 5]) {
     const t = new PointLight(e < 0 ? "#bbd9ff" : "#c6dc77", 80, 25);
     t.position.set(e, 4, -2);
-    r.add(t);
+    scene.add(t);
     const n = new Mesh(
       new BoxGeometry(0.035, 4, 0.035),
       new MeshBasicMaterial({
@@ -62,14 +62,14 @@ export function startCarPreview(e, t) {
       }),
     );
     n.position.set(e, 2, -5);
-    r.add(n);
+    scene.add(n);
   }
   let d;
   const f = performance.now();
   function p() {
     d = requestAnimationFrame(p);
     s.rotation.y = -0.25 + Math.sin((performance.now() - f) * 0.00012) * 0.18;
-    o.render();
+    composer.render();
   }
   p();
   return () => {
