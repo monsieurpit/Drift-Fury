@@ -1,9 +1,9 @@
 import { createSampleEngine, loadEngineSamples } from "./samples.js";
-import { createSynthEngine } from "./synthEngine.js";
+import { createSoundEffects } from "./soundEffects.js";
 import { createWorkletEngine } from "./workletEngine.js";
-export function createAudio(e) {
-  const t = window.AudioContext || window.webkitAudioContext;
-  if (!t) {
+export function createAudio(engine) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
     return {
       ready: Promise.resolve(),
       update() {},
@@ -13,84 +13,88 @@ export function createAudio(e) {
       close() {},
     };
   }
-  const n = new t({
+  const context = new AudioContextClass({
     latencyHint: "interactive",
   });
-  const r = n.createGain();
-  r.gain.value = 0;
-  const i = n.createDynamicsCompressor();
-  i.threshold.value = -14;
-  i.knee.value = 12;
-  i.ratio.value = 3;
-  i.attack.value = 0.008;
-  i.release.value = 0.16;
-  const a = n.createBiquadFilter();
-  a.type = "highpass";
-  a.frequency.value = 28;
-  r.connect(a);
-  a.connect(i);
-  i.connect(n.destination);
-  const o = createSynthEngine(n, r, e.id);
-  let s = null;
-  let c = false;
-  let l = 0;
-  let u = true;
+  const master = context.createGain();
+  master.gain.value = 0;
+  const compressor = context.createDynamicsCompressor();
+  compressor.threshold.value = -14;
+  compressor.knee.value = 12;
+  compressor.ratio.value = 3;
+  compressor.attack.value = 0.008;
+  compressor.release.value = 0.16;
+  const highpass = context.createBiquadFilter();
+  highpass.type = "highpass";
+  highpass.frequency.value = 28;
+  master.connect(highpass);
+  highpass.connect(compressor);
+  compressor.connect(context.destination);
+  const soundEffects = createSoundEffects(context, master, engine.id);
+  let engineVoice = null;
+  let closed = false;
+  let lastShiftSerial = 0;
+  let muted = true;
   return {
-    ready: createWorkletEngine(n, r, e.id)
-      .then((e) => {
-        if (c) {
-          e.close();
+    ready: createWorkletEngine(context, master, engine.id)
+      .then((voice) => {
+        if (closed) {
+          voice.close();
         } else {
-          s = e;
-          o.setSynthEngine();
+          engineVoice = voice;
+          soundEffects.setWorkletActive();
         }
       })
-      .catch(async () => createSampleEngine(n, r, await loadEngineSamples(n, e.id), e.id)),
+      .catch(async () =>
+        createSampleEngine(context, master, await loadEngineSamples(context, engine.id), engine.id),
+      ),
     resume() {
-      if (!c && n.state === "suspended") {
-        return n.resume();
+      if (!closed && context.state === "suspended") {
+        return context.resume();
       }
     },
-    update(e, t, i, a, d = {}) {
-      if (!c) {
-        u = i;
-        if (n.state === "suspended") {
-          n.resume();
+    update(rpm, pedal, isMuted, drifting, state = {}) {
+      if (!closed) {
+        muted = isMuted;
+        if (context.state === "suspended") {
+          context.resume();
         }
-        r.gain.setTargetAtTime(i || !s ? 0 : 1, n.currentTime, 0.035);
-        if (s) {
-          s.update(e, t, d);
-          o.update(e, t, a, d, i);
-          if (d.shiftSerial > l) {
-            if (!i && e > 2300) {
-              o.shift(d.shiftDirection > 0);
-              s.bang?.((d.shiftDirection > 0 ? 1 : 0.8) * Math.min(1.6, 0.6 + e / (d.redline || 7000)));
+        master.gain.setTargetAtTime(isMuted || !engineVoice ? 0 : 1, context.currentTime, 0.035);
+        if (engineVoice) {
+          engineVoice.update(rpm, pedal, state);
+          soundEffects.update(rpm, pedal, drifting, state, isMuted);
+          if (state.shiftSerial > lastShiftSerial) {
+            if (!isMuted && rpm > 2300) {
+              soundEffects.shift(state.shiftDirection > 0);
+              engineVoice.bang?.(
+                (state.shiftDirection > 0 ? 1 : 0.8) * Math.min(1.6, 0.6 + rpm / (state.redline || 7000)),
+              );
             }
-            l = d.shiftSerial;
+            lastShiftSerial = state.shiftSerial;
           }
         }
       }
     },
     startEngine() {
-      if (!c && !u && n.state === "running") {
-        o.startEngine();
+      if (!closed && !muted && context.state === "running") {
+        soundEffects.startEngine();
       }
     },
-    crash(e = 1) {
-      if (!c && !u) {
-        o.crash(e);
+    crash(strength = 1) {
+      if (!closed && !muted) {
+        soundEffects.crash(strength);
       }
     },
     close() {
-      if (!c) {
-        c = true;
-        s?.close();
-        o.close();
-        r.disconnect();
-        a.disconnect();
-        i.disconnect();
-        if (n.state !== "closed") {
-          n.close();
+      if (!closed) {
+        closed = true;
+        engineVoice?.close();
+        soundEffects.close();
+        master.disconnect();
+        highpass.disconnect();
+        compressor.disconnect();
+        if (context.state !== "closed") {
+          context.close();
         }
       }
     },

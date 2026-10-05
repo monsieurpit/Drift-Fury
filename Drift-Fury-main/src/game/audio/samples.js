@@ -2,64 +2,65 @@ const RALLY_SAMPLE = "/assets/rally-CluzLmHH.wav";
 const RALLY_IDLE_SAMPLE = "/assets/rally-idle-DrsA-2QN.flac";
 const SPORT_V8_SAMPLE = "/assets/sport-v8-crmbDbLb.flac";
 const RACE_ENGINE_SAMPLE = "/assets/race-engine-CId9iOvn.flac";
-function prepareEngineSample(e, t, n, r = false) {
-  const i = t.sampleRate;
-  const a = new Float32Array(t.length);
-  for (let e = 0; e < t.numberOfChannels; e++) {
-    const n = t.getChannelData(e);
-    for (let e = 0; e < a.length; e++) {
-      a[e] += n[e] / t.numberOfChannels;
+function prepareEngineSample(context, buffer, range, favorLoud = false) {
+  const sampleRate = buffer.sampleRate;
+  const mono = new Float32Array(buffer.length);
+  for (let e = 0; e < buffer.numberOfChannels; e++) {
+    const n = buffer.getChannelData(e);
+    for (let e = 0; e < mono.length; e++) {
+      mono[e] += n[e] / buffer.numberOfChannels;
     }
   }
-  const o = Math.floor(n[0] * i);
-  const s = Math.min(a.length, Math.floor(n[1] * i));
-  const c = Math.min(Math.floor(i * 1.2), s - o);
-  const l = Math.floor(i * 0.18);
-  let u = o;
-  let d = -Infinity;
-  for (let e = o; e + c <= s; e += l) {
-    const t = Array.from(
+  const rangeStart = Math.floor(range[0] * sampleRate);
+  const rangeEnd = Math.min(mono.length, Math.floor(range[1] * sampleRate));
+  const loopLength = Math.min(Math.floor(sampleRate * 1.2), rangeEnd - rangeStart);
+  const searchStep = Math.floor(sampleRate * 0.18);
+  let bestStart = rangeStart;
+  let bestScore = -Infinity;
+  for (let e = rangeStart; e + loopLength <= rangeEnd; e += searchStep) {
+    const segmentLevels = Array.from(
       {
         length: 6,
       },
       (t, n) => {
         let r = 0;
         let i = 0;
-        for (let t = e + Math.floor((c * n) / 6); t < e + (c * (n + 1)) / 6; t += 8) {
-          r += a[t] ** 2;
+        for (let t = e + Math.floor((loopLength * n) / 6); t < e + (loopLength * (n + 1)) / 6; t += 8) {
+          r += mono[t] ** 2;
           i++;
         }
         return Math.sqrt(r / Math.max(1, i));
       },
     );
-    const n = t.reduce((e, t) => e + t, 0) / 6;
-    if (n < 0.003) {
+    const meanLevel = segmentLevels.reduce((e, t) => e + t, 0) / 6;
+    if (meanLevel < 0.003) {
       continue;
     }
-    const i = t.reduce((e, t) => e + (t - n) ** 2, 0) / 6 / n ** 2;
-    const o = (r ? n : Math.sqrt(n)) / (1 + i * 12);
-    if (o > d) {
-      d = o;
-      u = e;
+    const unevenness = segmentLevels.reduce((e, t) => e + (t - meanLevel) ** 2, 0) / 6 / meanLevel ** 2;
+    const score = (favorLoud ? meanLevel : Math.sqrt(meanLevel)) / (1 + unevenness * 12);
+    if (score > bestScore) {
+      bestScore = score;
+      bestStart = e;
     }
   }
-  const f = Math.min(Math.floor(i * 0.06), Math.floor(c / 5));
-  const p = c - f;
-  const m = e.createBuffer(1, p, i);
-  const h = m.getChannelData(0);
-  let g = 0;
-  let _ = 0;
-  for (let e = 0; e < p; e++) {
-    const t = e < f ? Math.sin(((e / f) * Math.PI) / 2) ** 2 : 1;
-    h[e] = a[u + e] * t + (e < f ? a[u + p + e] * (1 - t) : 0);
-    g += h[e] ** 2;
-    _ = Math.max(_, Math.abs(h[e]));
+  const crossfade = Math.min(Math.floor(sampleRate * 0.06), Math.floor(loopLength / 5));
+  const length = loopLength - crossfade;
+  const loop = context.createBuffer(1, length, sampleRate);
+  const loopData = loop.getChannelData(0);
+  let energy = 0;
+  let peak = 0;
+  for (let e = 0; e < length; e++) {
+    const fade = e < crossfade ? Math.sin(((e / crossfade) * Math.PI) / 2) ** 2 : 1;
+    loopData[e] =
+      mono[bestStart + e] * fade + (e < crossfade ? mono[bestStart + length + e] * (1 - fade) : 0);
+    energy += loopData[e] ** 2;
+    peak = Math.max(peak, Math.abs(loopData[e]));
   }
-  const v = Math.min(0.38 / Math.max(0.001, Math.sqrt(g / p)), 1.3 / Math.max(0.001, _));
-  for (let e = 0; e < p; e++) {
-    h[e] *= v;
+  const normalize = Math.min(0.38 / Math.max(0.001, Math.sqrt(energy / length)), 1.3 / Math.max(0.001, peak));
+  for (let e = 0; e < length; e++) {
+    loopData[e] *= normalize;
   }
-  return m;
+  return loop;
 }
 const ENGINE_SAMPLE_LAYERS = {
   V6: [
@@ -92,25 +93,25 @@ const ENGINE_SAMPLE_LAYERS = {
   ],
 };
 const sampleCache = new Map();
-export async function loadEngineSamples(e, t) {
-  if (sampleCache.has(t)) {
-    return sampleCache.get(t);
+export async function loadEngineSamples(context, engineId) {
+  if (sampleCache.has(engineId)) {
+    return sampleCache.get(engineId);
   }
-  const n = ENGINE_SAMPLE_LAYERS[t] || ENGINE_SAMPLE_LAYERS.V6;
-  const r = new Map(
+  const layers = ENGINE_SAMPLE_LAYERS[engineId] || ENGINE_SAMPLE_LAYERS.V6;
+  const decoded = new Map(
     await Promise.all(
-      [...new Set(n.map(([e]) => e))].map(async (t) => {
-        const n = await fetch(t);
-        if (!n.ok) {
+      [...new Set(layers.map(([e]) => e))].map(async (url) => {
+        const response = await fetch(url);
+        if (!response.ok) {
           throw Error("Impossible de charger le son moteur.");
         }
-        return [t, await e.decodeAudioData(await n.arrayBuffer())];
+        return [url, await context.decodeAudioData(await response.arrayBuffer())];
       }),
     ),
   );
-  const i = n.map(([t, n], i) => prepareEngineSample(e, r.get(t), n, i >= 3));
-  sampleCache.set(t, i);
-  return i;
+  const prepared = layers.map(([t, n], i) => prepareEngineSample(context, decoded.get(t), n, i >= 3));
+  sampleCache.set(engineId, prepared);
+  return prepared;
 }
 const ENGINE_TONE = {
   V6: {
@@ -139,60 +140,65 @@ const ENGINE_TONE = {
   },
 };
 const SAMPLE_RPM_POINTS = [950, 1700, 2800, 4400, 6200];
-export function createSampleEngine(e, t, n, r) {
-  const i = ENGINE_TONE[r] || ENGINE_TONE.V6;
-  const a = e.createBiquadFilter();
-  a.type = "lowshelf";
-  a.frequency.value = 140;
-  a.gain.value = i.bass;
-  const o = e.createBiquadFilter();
-  o.type = "highshelf";
-  o.frequency.value = 2200;
-  o.gain.value = i.brightness;
-  const s = e.createBiquadFilter();
-  s.type = "lowpass";
-  s.Q.value = 0.6;
-  a.connect(o);
-  o.connect(s);
-  s.connect(t);
-  const c = n.map((t, n) => {
-    const r = e.createBufferSource();
-    r.buffer = t;
-    r.loop = true;
-    const o = e.createGain();
-    o.gain.value = 0;
-    r.connect(o);
-    o.connect(a);
-    r.start(0, (n * 0.071) % t.duration);
+export function createSampleEngine(context, output, buffers, engineId) {
+  const tone = ENGINE_TONE[engineId] || ENGINE_TONE.V6;
+  const bassShelf = context.createBiquadFilter();
+  bassShelf.type = "lowshelf";
+  bassShelf.frequency.value = 140;
+  bassShelf.gain.value = tone.bass;
+  const trebleShelf = context.createBiquadFilter();
+  trebleShelf.type = "highshelf";
+  trebleShelf.frequency.value = 2200;
+  trebleShelf.gain.value = tone.brightness;
+  const lowpass = context.createBiquadFilter();
+  lowpass.type = "lowpass";
+  lowpass.Q.value = 0.6;
+  bassShelf.connect(trebleShelf);
+  trebleShelf.connect(lowpass);
+  lowpass.connect(output);
+  const voices = buffers.map((buffer, index) => {
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    const gain = context.createGain();
+    gain.gain.value = 0;
+    source.connect(gain);
+    gain.connect(bassShelf);
+    source.start(0, (index * 0.071) % buffer.duration);
     return {
-      source: r,
-      gain: o,
-      baseRpm: SAMPLE_RPM_POINTS[n] || 4000,
-      pitch: i.pitch[n] || 1,
+      source,
+      gain,
+      baseRpm: SAMPLE_RPM_POINTS[index] || 4000,
+      pitch: tone.pitch[index] || 1,
     };
   });
   return {
-    update(t, n, r = {}) {
-      const a = e.currentTime;
-      c.length;
-      const o = c.map((e, n) => {
-        const r = SAMPLE_RPM_POINTS[n] || 4000;
-        const i = Math.abs(t - r);
-        return Math.max(0, 1 - i / (n === 0 ? 1200 : 1100));
+    update(rpm, load, state = {}) {
+      const now = context.currentTime;
+      voices.length;
+      const weights = voices.map((voice, index) => {
+        const baseRpm = SAMPLE_RPM_POINTS[index] || 4000;
+        const distance = Math.abs(rpm - baseRpm);
+        return Math.max(0, 1 - distance / (index === 0 ? 1200 : 1100));
       });
-      const l = o.reduce((e, t) => e + t, 0) || 1;
-      const u = 0.6 + n * 0.4 + (r.shifting && r.shiftDirection < 0 ? 0.2 : 0);
-      const d = r.shifting ? 0.4 : 1;
-      const f = t > (r.redline || 8000) * 0.985 ? 0.65 + 0.35 * Math.max(0, Math.sin(a * 90)) : 1;
-      c.forEach((e, n) => {
-        e.source.playbackRate.setTargetAtTime(
-          Math.max(0.75, Math.min(1.5, (t / e.baseRpm) * e.pitch)),
-          a,
+      const weightSum = weights.reduce((e, t) => e + t, 0) || 1;
+      const level = 0.6 + load * 0.4 + (state.shifting && state.shiftDirection < 0 ? 0.2 : 0);
+      const shiftCut = state.shifting ? 0.4 : 1;
+      const limiter =
+        rpm > (state.redline || 8000) * 0.985 ? 0.65 + 0.35 * Math.max(0, Math.sin(now * 90)) : 1;
+      voices.forEach((voice, index) => {
+        voice.source.playbackRate.setTargetAtTime(
+          Math.max(0.75, Math.min(1.5, (rpm / voice.baseRpm) * voice.pitch)),
+          now,
           0.04,
         );
-        e.gain.gain.setTargetAtTime((o[n] / l) * u * d * f * (r.fuel === 0 ? 0 : 1), a, 0.035);
+        voice.gain.gain.setTargetAtTime(
+          (weights[index] / weightSum) * level * shiftCut * limiter * (state.fuel === 0 ? 0 : 1),
+          now,
+          0.035,
+        );
       });
-      s.frequency.setTargetAtTime(1000 + i.cutoff * (0.25 + n * 0.75) + t * 0.22, a, 0.045);
+      lowpass.frequency.setTargetAtTime(1000 + tone.cutoff * (0.25 + load * 0.75) + rpm * 0.22, now, 0.045);
     },
     startEngine() {
       const profiles = {
@@ -225,11 +231,11 @@ export function createSampleEngine(e, t, n, r) {
           shape: "sawtooth",
         },
       };
-      const profile = profiles[r] || profiles.V6;
-      const now = e.currentTime;
-      const crank = e.createOscillator();
-      const crankFilter = e.createBiquadFilter();
-      const crankGain = e.createGain();
+      const profile = profiles[engineId] || profiles.V6;
+      const now = context.currentTime;
+      const crank = context.createOscillator();
+      const crankFilter = context.createBiquadFilter();
+      const crankGain = context.createGain();
       crank.type = profile.shape;
       crank.frequency.setValueAtTime(profile.starter, now);
       crank.frequency.linearRampToValueAtTime(profile.starter * 1.22, now + 0.52);
@@ -241,7 +247,7 @@ export function createSampleEngine(e, t, n, r) {
       crankGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
       crank.connect(crankFilter);
       crankFilter.connect(crankGain);
-      crankGain.connect(t);
+      crankGain.connect(output);
       crank.onended = () => {
         crank.disconnect();
         crankFilter.disconnect();
@@ -249,9 +255,9 @@ export function createSampleEngine(e, t, n, r) {
       };
       crank.start(now);
       crank.stop(now + 0.72);
-      const catchEngine = e.createOscillator();
-      const catchFilter = e.createBiquadFilter();
-      const catchGain = e.createGain();
+      const catchEngine = context.createOscillator();
+      const catchFilter = context.createBiquadFilter();
+      const catchGain = context.createGain();
       catchEngine.type = profile.shape;
       catchEngine.frequency.setValueAtTime(profile.catch * 0.72, now + 0.48);
       catchEngine.frequency.linearRampToValueAtTime(profile.catch * 1.55, now + 0.72);
@@ -266,7 +272,7 @@ export function createSampleEngine(e, t, n, r) {
       catchGain.gain.exponentialRampToValueAtTime(0.001, now + 1.16);
       catchEngine.connect(catchFilter);
       catchFilter.connect(catchGain);
-      catchGain.connect(t);
+      catchGain.connect(output);
       catchEngine.onended = () => {
         catchEngine.disconnect();
         catchFilter.disconnect();
@@ -276,10 +282,10 @@ export function createSampleEngine(e, t, n, r) {
       catchEngine.stop(now + 1.18);
     },
     close() {
-      c.forEach(({ source }) => source.stop());
-      a.disconnect();
-      o.disconnect();
-      s.disconnect();
+      voices.forEach(({ source }) => source.stop());
+      bassShelf.disconnect();
+      trebleShelf.disconnect();
+      lowpass.disconnect();
     },
   };
 }
