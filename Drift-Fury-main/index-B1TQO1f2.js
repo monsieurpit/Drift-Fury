@@ -45360,6 +45360,194 @@ function Iw(e, t=new Set) {
         e.add(i)
     }
 }
+/* traffic and police cars never animate their parts, so each look is built and batched once, then cloned */
+const dfcTrafficTemplates = new Map;
+function dfcTrafficCar(color, shape, police = !1) {
+    const key = (police ? `police` : `traffic`) + `|` + color + `|` + shape;
+    let template = dfcTrafficTemplates.get(key);
+    if (!template) {
+        template = Vw(color, shape, police);
+        template.userData = {};
+        dfcBatchStatic(template, new Set, 1 / 0);
+        dfcTrafficTemplates.set(key, template)
+    }
+    const car = template.clone();
+    car.userData = { sharedTemplate: !0 };
+    return car
+}
+/* compile every shader the session can need before the first frame, so nothing stalls mid-drive */
+function dfcWarmUp(renderer, scene, camera, extraColors = []) {
+    for (const color of [...CT, ...extraColors]) dfcTrafficCar(color, `coupe`);
+    dfcTrafficCar(`#ffffff`, `coupe`, !0);
+    try {
+        renderer.compile(scene, camera);
+        for (const template of dfcTrafficTemplates.values()) renderer.compile(template, camera, scene)
+    } catch (error) {}
+}
+/* the player car keeps its moving parts (wheels, door, lamps) separate; everything else is batched */
+function dfcBatchCar(car) {
+    const data = car.userData;
+    const skip = new Set([...data.wheels, ...data.brakeLights, ...data.headlights, ...(data.headlightBeams || [])]);
+    data.accessDoor && skip.add(data.accessDoor);
+    dfcBatchStatic(car, new Set, 1 / 0, skip);
+    data.wheels.forEach(wheel => dfcBatchStatic(wheel, new Set, 1 / 0));
+    data.accessDoor && dfcBatchStatic(data.accessDoor, new Set, 1 / 0);
+    return car
+}
+/* ---- static batching: merge never-moving meshes that share an identical material into one draw per area ---- */
+function dfcMaterialKey(material, ids) {
+    const parts = [];
+    for (const key of Object.keys(material).sort()) {
+        if (key === `uuid` || key === `name` || key === `version` || key === `userData` || key === `_listeners`) continue;
+        const value = material[key];
+        let token;
+        if (value === null || value === void 0 || typeof value === `number` || typeof value === `string` || typeof value === `boolean`)
+            token = String(value);
+        else if (value.isColor) token = `c` + value.getHexString();
+        else if (value.isTexture) token = `t` + value.uuid;
+        else if (value.isVector2 || value.isVector3 || value.isEuler) token = `v` + value.toArray().join(`,`);
+        else if (key === `defines`) token = JSON.stringify(value);
+        else {
+            if (!ids.has(value)) ids.set(value, ids.size);
+            token = `o` + ids.get(value)
+        }
+        parts.push(key + `=` + token)
+    }
+    return parts.join(`|`)
+}
+function dfcBatchStatic(root, keepMaterials = new Set, cellSize = 48, skip = new Set) {
+    root.updateMatrixWorld(!0);
+    const canonical = new Map, objectIds = new Map, groups = new Map, removed = new Set;
+    const baseBeforeRender = Q.prototype.onBeforeRender;
+    const canonicalMaterial = material => {
+        if (keepMaterials.has(material)) return material;
+        const key = dfcMaterialKey(material, objectIds);
+        let hit = canonical.get(key);
+        hit || canonical.set(key, hit = material);
+        return hit
+    };
+    const sphere = new Rg, rootInverse = root.matrixWorld.clone().invert(), relative = new qg;
+    const eligible = object => {
+        if (object.name || !object.isMesh || object.type !== `Mesh` || object.isInstancedMesh || object.isSkinnedMesh) return !1;
+        if (!object.frustumCulled || object.layers.mask !== 1 || object.onBeforeRender !== baseBeforeRender || object.morphTargetInfluences) return !1;
+        const geometry = object.geometry;
+        if (!geometry.isBufferGeometry || !geometry.attributes.position || Object.keys(geometry.morphAttributes).length) return !1;
+        if (geometry.drawRange.start !== 0 || geometry.drawRange.count !== 1 / 0) return !1;
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        if (materials.some(material => !material || material.transparent)) return !1;
+        if (Array.isArray(object.material) && !geometry.groups.length) return !1;
+        for (const name of Object.keys(geometry.attributes)) {
+            const attribute = geometry.attributes[name];
+            if (attribute.isInterleavedBufferAttribute || !(attribute.array instanceof Float32Array) || attribute.normalized) return !1;
+            if (name !== `position` && name !== `normal` && name !== `uv` && name !== `uv1` && name !== `uv2` && name !== `color`) return !1
+        }
+        const positions = geometry.attributes.position.array;
+        for (let index = 0; index < positions.length; index++) if (!Number.isFinite(positions[index])) return !1;
+        return !0
+    };
+    const visit = (object, visible) => {
+        if (skip.has(object)) return;
+        visible = visible && object.visible;
+        for (const child of object.children) visit(child, visible);
+        if (!visible || !eligible(object)) return;
+        const geometry = object.geometry, names = Object.keys(geometry.attributes).sort();
+        const matrix = relative.multiplyMatrices(rootInverse, object.matrixWorld).clone();
+        geometry.boundingSphere || geometry.computeBoundingSphere();
+        sphere.copy(geometry.boundingSphere).applyMatrix4(matrix);
+        const signature = names.map(name => name + geometry.attributes[name].itemSize).join(`,`);
+        const total = geometry.index ? geometry.index.count : geometry.attributes.position.count;
+        const pieces = Array.isArray(object.material)
+            ? geometry.groups.map(group => ({ material: object.material[group.materialIndex], start: group.start, count: Math.min(group.count, total - group.start) }))
+            : [{ material: object.material, start: 0, count: total }];
+        for (const piece of pieces) {
+            if (!piece.material || piece.count <= 0) continue;
+            const material = canonicalMaterial(piece.material);
+            const key = [material.uuid, signature, object.castShadow ? 1 : 0, object.receiveShadow ? 1 : 0, object.renderOrder,
+                Math.floor(sphere.center.x / cellSize), Math.floor(sphere.center.z / cellSize)].join(`/`);
+            let group = groups.get(key);
+            group || groups.set(key, group = { material, names, cast: object.castShadow, receive: object.receiveShadow, renderOrder: object.renderOrder, items: [], objects: new Set, vertices: 0, indices: 0 });
+            group.items.push({ object, matrix, start: piece.start, count: piece.count });
+            group.objects.add(object);
+            group.vertices += geometry.attributes.position.count;
+            group.indices += piece.count
+        }
+    };
+    visit(root, !0);
+    const normalMatrix = new Uh, vector = new Z;
+    let merged = 0, batches = 0;
+    for (const group of groups.values()) {
+        if (group.items.length < 2) {
+            const { object } = group.items[0];
+            Array.isArray(object.material) || (object.material = group.material);
+            continue
+        }
+        const arrays = {};
+        for (const name of group.names) arrays[name] = new Float32Array(group.vertices * group.items[0].object.geometry.attributes[name].itemSize);
+        const indices = group.vertices > 65535 ? new Uint32Array(group.indices) : new Uint16Array(group.indices);
+        let vertexOffset = 0, indexOffset = 0;
+        for (const { object, matrix, start, count: pieceCount } of group.items) {
+            const geometry = object.geometry, count = geometry.attributes.position.count;
+            normalMatrix.getNormalMatrix(matrix);
+            for (const name of group.names) {
+                const source = geometry.attributes[name], size = source.itemSize, target = arrays[name];
+                if (name === `position` || name === `normal`) {
+                    for (let index = 0; index < count; index++) {
+                        vector.fromBufferAttribute(source, index);
+                        name === `position` ? vector.applyMatrix4(matrix) : vector.applyMatrix3(normalMatrix).normalize();
+                        target[(vertexOffset + index) * 3] = vector.x;
+                        target[(vertexOffset + index) * 3 + 1] = vector.y;
+                        target[(vertexOffset + index) * 3 + 2] = vector.z
+                    }
+                } else target.set(source.array.subarray(0, count * size), vertexOffset * size)
+            }
+            const flip = matrix.determinant() < 0, source = geometry.index ? geometry.index.array : null;
+            const at = index => source ? source[index] : index;
+            for (let index = start; index + 2 < start + pieceCount; index += 3) {
+                indices[indexOffset++] = at(index) + vertexOffset;
+                indices[indexOffset++] = at(flip ? index + 2 : index + 1) + vertexOffset;
+                indices[indexOffset++] = at(flip ? index + 1 : index + 2) + vertexOffset
+            }
+            vertexOffset += count
+        }
+        const geometry = new rv;
+        for (const name of group.names) geometry.setAttribute(name, new K_(arrays[name], group.items[0].object.geometry.attributes[name].itemSize));
+        geometry.setIndex(new K_(indexOffset === indices.length ? indices : indices.slice(0, indexOffset), 1));
+        geometry.computeBoundingSphere();
+        geometry.computeBoundingBox();
+        const mesh = new Q(geometry, group.material);
+        mesh.castShadow = group.cast;
+        mesh.receiveShadow = group.receive;
+        mesh.renderOrder = group.renderOrder;
+        mesh.matrixAutoUpdate = !1;
+        mesh.updateMatrix();
+        root.add(mesh);
+        group.objects.forEach(object => removed.add(object));
+        merged += group.items.length;
+        batches++
+    }
+    // a multi-material mesh only goes away when every one of its pieces was merged
+    for (const group of groups.values())
+        if (group.items.length < 2) group.objects.forEach(object => removed.delete(object));
+    removed.forEach(object => object.parent && object.parent.remove(object));
+    for (const group of groups.values())
+        if (group.items.length >= 2)
+            for (const object of group.objects)
+                if (!removed.has(object) && Array.isArray(object.material)) {
+                    // partially merged multi-material mesh: hide the pieces now drawn by a batch
+                    const merged = new Set(group.items.filter(item => item.object === object).map(item => item.start));
+                    object.geometry = object.geometry.clone();
+                    object.geometry.groups = object.geometry.groups.filter(entry => !merged.has(entry.start) || object.material[entry.materialIndex] === void 0)
+                }
+    const prune = object => {
+        for (const child of [...object.children]) prune(child);
+        if (object !== root && !object.children.length && object.type === `Group`) object.parent.remove(object)
+    };
+    prune(root);
+    const geometries = new Set;
+    root.traverse(object => object.geometry && geometries.add(object.geometry));
+    removed.forEach(object => geometries.has(object.geometry) || object.geometry.dispose());
+    return { merged, batches }
+}
 function Lw(e, t, n, r=.05) {
     let i = new wb(e,{
         depth: t,
@@ -48325,7 +48513,7 @@ function $w(e) {
             join.position.set(localX + moduleLength / 2 - .02, .32, 0);
             barrier.add(join);
             if (index === 0 || index === moduleCount - 1) {
-                const lamp = new Q(new Vy(.13,.13,.12,12),closureLamp);
+                const lamp = new Q(new By(.13,.13,.12,12),closureLamp);
                 lamp.position.set(localX, 1.14, 0);
                 barrier.add(lamp)
             }
@@ -50140,6 +50328,7 @@ function UT(e) {
     }
     )
       , o = 0
+      , s = 0
       , trailCursor = 0
       , activeTrail = null
       , wasDrifting = !1
@@ -50287,12 +50476,7 @@ function UT(e) {
                         particle.vx = Math.sin(e.heading) * (.25 + e.speed * .035) + (Math.random() - .5) * .45;
                         particle.vy = .38 + Math.random() * .48;
                         particle.vz = Math.cos(e.heading) * (.25 + e.speed * .035) + (Math.random() - .5) * .45;
-                        particle.mesh.material.opacity = .25 + Math.random() * .12;
-                        const f = i[c++ % i.length];
-                        f.position.set(x, y + .14, z);
-                        f.rotation.set(-Math.PI / 2, 0, e.heading);
-                        f.material.opacity = .5;
-                        f.visible = !0
+                        particle.mesh.material.opacity = .25 + Math.random() * .12
                     }
                 }
             }
@@ -51120,7 +51304,9 @@ function oE(e, t=!1) {
     n.background = new z_(t ? `#070b14` : `#0d1520`),
     n.fog = new Iv(t ? `#223a4d` : `#35506b`, t ? 130 : 74, t ? 1050 : 980);
     let r = new Nw({
-        antialias: !0,
+        // every frame goes through the composer, whose render targets are multisampled; the canvas only
+        // receives a fullscreen copy, so a multisampled default framebuffer would cost bandwidth for nothing
+        antialias: !1,
         alpha: !1,
         powerPreference: `high-performance`
     });
@@ -51328,6 +51514,7 @@ function oE(e, t=!1) {
         }
     }
 }
+function __cv(w, h, fn) { const c = document.createElement(`canvas`); c.width = w; c.height = h; fn(c.getContext(`2d`), w, h); const t = new ly(c); t.anisotropy = 8; return t; }
 /* ---------- people: articulated humanoids (face -Z at rotation 0, like the cars) ---------- */
 function __makePerson(col) {
     const cop = col === `#1f2f4d`, g = new cy, L = {};
@@ -51445,8 +51632,11 @@ function lE(e, t, n, r, i, a=!1) {
     let o = oE(e, !0)
       , {scene: s, renderer: c, camera: l, sun: u, touchDevice: d, composer: f} = o
       , {solids: p, lampPositions: m, signals} = $w(s)
+      , staticBatch = dfcBatchStatic(s, new Set(signals.flatMap(signal => signal.lenses)), 96)
       , h = ET(t, n, p, a)
       , g = [];
+    // ?dfdebug exposes the live session for profiling tools
+    const debugSession = /[?&]dfdebug\b/.test(location.search) ? (window.__dfDbg = { scene: s, renderer: c, composer: f, camera: l, sun: u, staticBatch, get state() { return h.state } }) : null;
     let signalClock = 0;
     const signalStates = [-1, -1];
     function updateTrafficLights(dt) {
@@ -51502,11 +51692,11 @@ function lE(e, t, n, r, i, a=!1) {
     }
     y(0, 70);
     let interaction = null;
-    let b = Vw(t.color, t.shape, !1, !0);
+    let b = dfcBatchCar(Vw(t.color, t.shape, !1, !0));
     s.add(b);
     let x = h.state.playerVeh.spec
       , S = h.state.police.map( () => {
-        let e = Vw(`#ffffff`, `coupe`, !0);
+        let e = dfcTrafficCar(`#ffffff`, `coupe`, !0);
         return s.add(e),
         e
     }
@@ -51529,7 +51719,7 @@ function lE(e, t, n, r, i, a=!1) {
             e.material?.dispose()
         }
         ),
-        b = Vw(e.color, e.shape, e.kind === `police`, !0),
+        b = dfcBatchCar(Vw(e.color, e.shape, e.kind === `police`, !0)),
         s.add(b),
         x = e.spec
     }
@@ -51540,7 +51730,7 @@ function lE(e, t, n, r, i, a=!1) {
             t.add(n.id);
             let e = T.get(n.id);
             if (!e) {
-                let t = n.kind === `police` ? Vw(`#ffffff`, `coupe`, !0) : Vw(n.color, n.shape || `coupe`);
+                let t = n.kind === `police` ? dfcTrafficCar(`#ffffff`, `coupe`, !0) : dfcTrafficCar(n.color, n.shape || `coupe`);
                 s.add(t),
                 e = {
                     car: t
@@ -51554,7 +51744,7 @@ function lE(e, t, n, r, i, a=!1) {
         }
         for (let[e,n] of T)
             t.has(e) || (s.remove(n.car),
-            n.car.traverse(e => {
+            n.car.userData.sharedTemplate || n.car.traverse(e => {
                 e.geometry?.dispose(),
                 e.material?.dispose()
             }
@@ -51645,7 +51835,12 @@ function lE(e, t, n, r, i, a=!1) {
       , I = 1
       , L = 0
       , R = 0
-      , shadowFrameInterval = d ? 2 : 1;
+      , shadowFrameInterval = d ? 2 : 1
+      , slowWindows = 0
+      , fastWindows = 0
+      , fastWindowsNeeded = 4
+      , lastRaise = -1 / 0
+      , skipWindow = !1;
     O.ready.catch( () => {}
     );
     let z = e => {
@@ -51679,15 +51874,29 @@ function lE(e, t, n, r, i, a=!1) {
         j = requestAnimationFrame(ae);
         let n = (t - M) / 1e3
           , a = Math.min(n, .04);
+        // a frame longer than a second means the tab was hidden, not that the game is slow
         if (M = t,
-        L += n,
-        R++,
+        n < 1 && (L += n,
+        R++),
         L > 1) {
             let t = L / R
               , n = I;
             shadowFrameInterval = d ? 2 : t > 1 / 32 ? 3 : t > 1 / 48 ? 2 : 1;
-            t > 1 / 45 ? n = Math.max(.6, I - .1) : t < 1 / 57 && (n = Math.min(1, I + .05)),
+            // resizing reallocates every post-processing target, so only react to sustained trends and
+            // back off when a resolution increase did not hold
+            if (skipWindow)
+                skipWindow = !1;
+            else {
+                slowWindows = t > 1 / 45 ? slowWindows + 1 : 0;
+                fastWindows = t < 1 / 57 ? fastWindows + 1 : 0;
+                slowWindows >= 2 ? (n = Math.max(.6, I - .1),
+                performance.now() - lastRaise < 8e3 && (fastWindowsNeeded = Math.min(32, fastWindowsNeeded * 2))) : fastWindows >= fastWindowsNeeded && (n = Math.min(1, I + .05),
+                lastRaise = performance.now())
+            }
             n !== I && (I = n,
+            slowWindows = 0,
+            fastWindows = 0,
+            skipWindow = !0,
             c.setPixelRatio(F * I),
             f.setPixelRatio(F * I),
             f.setSize(e.clientWidth, e.clientHeight)),
@@ -51751,8 +51960,8 @@ function lE(e, t, n, r, i, a=!1) {
                 e.visible = !r.onFoot,
                 r.onFoot || (e.position.set(r.x, Uw(r.x, r.z) + .1, r.z),
                 e.rotation.y = r.heading);
-                let i = e.getObjectByName(`blue`)
-                  , a = e.getObjectByName(`red`);
+                let i = e.userData.blueLight === void 0 ? e.userData.blueLight = e.getObjectByName(`blue`) || null : e.userData.blueLight
+                  , a = e.userData.redLight === void 0 ? e.userData.redLight = e.getObjectByName(`red`) || null : e.userData.redLight;
                 i && (i.visible = !r.onFoot && Math.sin(t * .018) > 0),
                 a && (a.visible = !r.onFoot && Math.sin(t * .018) <= 0)
             }
@@ -51843,6 +52052,8 @@ function lE(e, t, n, r, i, a=!1) {
         }
         f.render()
     }
+    dfcWarmUp(c, s, l, [t.color]);
+    debugSession && (debugSession.fx = k);
     return j = requestAnimationFrame(ae),
     {
         setCar(e) {
@@ -51853,7 +52064,7 @@ function lE(e, t, n, r, i, a=!1) {
                 e.material?.dispose()
             }
             ),
-            b = Vw(e.color, e.shape, !1, !0),
+            b = dfcBatchCar(Vw(e.color, e.shape, !1, !0)),
             s.add(b),
             x = `player|${e.color}|${e.shape}`
         },
