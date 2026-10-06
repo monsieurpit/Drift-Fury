@@ -26,7 +26,9 @@ export function buildBuildings(world) {
   };
   const windowGlowColors = ["#ffe9c0", "#cfe8ff", "#ffd9a0", "#e8e0ff"];
   const wallColors = ["#3a4250", "#42454d", "#383c44", "#454050", "#3e4855"];
-  const facadeKinds = ["glass", "classic", "classic", "glass"];
+  // Glass towers, classic plastered or brick blocks, offices with ribbon windows, and brick walk-ups with tall
+  // narrow windows under stone lintels.
+  const facadeKinds = ["glass", "classic", "office", "brick", "classic", "glass", "brick", "office"];
   {
     /* ===== DRIFT FURY: city blocks v2 =====
        Every block is split into two lots that sit strictly inside the sidewalks,
@@ -98,6 +100,8 @@ export function buildBuildings(world) {
         return hit;
       }
       const glass = kind === "glass";
+      const office = kind === "office";
+      const brick = kind === "brick";
       const rnd = createRandom(
         key.length * 7919 + wall.charCodeAt(2) * 31 + glow.charCodeAt(3) * 17 + (glass ? 5 : 11),
       );
@@ -132,9 +136,9 @@ export function buildBuildings(world) {
       }
       for (let row = 0; row < 4; row++) {
         for (let col = 0; col < 4; col++) {
-          const ix = glass ? 5 : 11;
-          const it = glass ? 7 : 12;
-          const ib = glass ? 13 : 16;
+          const ix = glass ? 5 : office ? 1.5 : brick ? 19 : 11;
+          const it = glass ? 7 : office ? 10 : brick ? 9 : 12;
+          const ib = glass ? 13 : office ? 21 : brick ? 13 : 16;
           const x0 = col * 64 + ix;
           const y0 = row * 64 + it;
           const ww = 64 - ix * 2;
@@ -191,10 +195,24 @@ export function buildBuildings(world) {
           g2.fillRect(x0, y0, ww, 2);
           for (const ctx of [g2, ge]) {
             ctx.fillStyle = ctx === g2 ? "#10151b" : "#000";
-            ctx.fillRect(x0 + ww / 2 - 1, y0, 2, hh);
-            if (!glass) {
-              ctx.fillRect(x0, y0 + hh * 0.42, ww, 2);
+            if (office) {
+              // Ribbon glazing: slim mullions every metre or so.
+              for (const f of [0.25, 0.5, 0.75]) ctx.fillRect(x0 + ww * f - 1, y0, 2, hh);
+            } else {
+              ctx.fillRect(x0 + ww / 2 - 1, y0, 2, hh);
             }
+            if (!glass && !office) {
+              ctx.fillRect(x0, y0 + hh * (brick ? 0.3 : 0.42), ww, 2);
+            }
+          }
+          if (brick) {
+            // Stone lintel over the window and a sill under it.
+            g2.fillStyle = "#b9ad97";
+            g2.fillRect(x0 - 4, y0 - 7, ww + 8, 5);
+            g2.fillRect(x0 - 3, y0 + hh + 2, ww + 6, 3);
+            gm.fillStyle = "#000";
+            gm.fillRect(x0 - 4, y0 - 7, ww + 8, 5);
+            gm.fillRect(x0 - 3, y0 + hh + 2, ww + 6, 3);
           }
           g2.fillStyle = "rgba(255,255,255,0.16)";
           g2.fillRect(x0 - 3, y0 + hh + 2, ww + 6, 2.5);
@@ -208,10 +226,11 @@ export function buildBuildings(world) {
       }
       hit = {
         glass,
+        kind,
         map: textureOf(mapCv),
         glow: textureOf(glowCv),
         mask: textureOf(maskCv),
-        normal: normalMapFromHeight(mapCv, glass ? 1.1 : 1.9),
+        normal: normalMapFromHeight(mapCv, glass || office ? 1.1 : 1.9),
       };
       facadeCache.set(key, hit);
       return hit;
@@ -225,7 +244,7 @@ export function buildBuildings(world) {
       concrete: { set: scannedSet("concrete_wall_003", [0.3, 0.3, 0.28]), metres: 3, keep: 0 },
     };
     const srgbToLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
-    function applyWallScan(material, mask, key, glass) {
+    function applyWallScan(material, mask, key, glass, facadeKind) {
       const wallHex = wallColors.find((color) => key.includes(color)) || "#3e4855";
       const v = parseInt(wallHex.slice(1), 16);
       const wallLinear = new Vector3(
@@ -234,7 +253,12 @@ export function buildBuildings(world) {
         srgbToLinear((v & 255) / 255),
       );
       // Same layout for a wall colour always gets the same masonry.
-      const kind = glass ? "concrete" : wallColors.indexOf(wallHex) % 2 === 0 ? "brick" : "plaster";
+      const kind =
+        glass || facadeKind === "office"
+          ? "concrete"
+          : facadeKind === "brick" || wallColors.indexOf(wallHex) % 2 === 0
+            ? "brick"
+            : "plaster";
       const scan = wallScans[kind];
       // Facade UVs run ~12 m per unit across and ~14.4 m up (see the repeat counts below).
       const uniforms = {
@@ -305,17 +329,17 @@ vec2 wallUv;`,
       hit = new MeshPhysicalMaterial({
         map: cp(fv.map),
         normalMap: cp(fv.normal),
-        normalScale: new Vector2(fv.glass ? 0.14 : 0.32, fv.glass ? 0.14 : 0.32),
+        normalScale: new Vector2(fv.glass ? 0.14 : fv.kind === "office" ? 0.2 : 0.32, fv.glass ? 0.14 : fv.kind === "office" ? 0.2 : 0.32),
         emissiveMap: cp(fv.glow),
         emissive: "#ffffff",
         emissiveIntensity: 1.15,
-        roughness: fv.glass ? 0.22 : 0.8,
-        metalness: fv.glass ? 0.3 : 0.05,
-        clearcoat: fv.glass ? 0.85 : 0.14,
+        roughness: fv.glass ? 0.22 : fv.kind === "office" ? 0.4 : 0.8,
+        metalness: fv.glass ? 0.3 : fv.kind === "office" ? 0.15 : 0.05,
+        clearcoat: fv.glass ? 0.85 : fv.kind === "office" ? 0.6 : 0.14,
         clearcoatRoughness: 0.22,
         envMapIntensity: fv.glass ? 1.2 : 0.25,
       });
-      applyWallScan(hit, cp(fv.mask), key, fv.glass);
+      applyWallScan(hit, cp(fv.mask), key, fv.glass, fv.kind);
       facadeMatCache.set(mk, hit);
       return hit;
     }

@@ -4,6 +4,7 @@ import { createEffects } from "../effects/effects.js";
 import { createBlood } from "../effects/blood.js";
 import { createCrowd } from "../people/crowd.js";
 import { createPedestrians } from "../people/pedestrians.js";
+import { buildSolidGrid } from "../simulation/collisions.js";
 import { animatePerson, createPerson } from "../people/person.js";
 import { createRenderer, gamePixelRatio } from "../render/renderer.js";
 import {
@@ -415,6 +416,33 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     count: pedestrianCount,
   });
   if (debugSession) debugSession.pedestrians = pedestrians;
+  // The player's low beams shine from above the car (see carModel.js), which throws a broad pool down the
+  // road but also floods a wall right in front of the car far brighter than real headlights would (they
+  // sit at bumper height and aim down). With a wall close ahead the beams are turned down smoothly.
+  const wallGrid = buildSolidGrid(solids.filter((solid) => solid.w > 0.6 || solid.d > 0.6));
+  const wallBuffer = [];
+  let beamScale = 1;
+  function updateHeadlights(state, dt) {
+    let clear = 14;
+    if (!state.onFoot) {
+      const forwardX = -Math.sin(state.heading);
+      const forwardZ = -Math.cos(state.heading);
+      for (let ahead = 1.5; ahead <= 14; ahead += 1) {
+        const x = state.x + forwardX * ahead;
+        const z = state.z + forwardZ * ahead;
+        if (wallGrid.near(x, z, 3, wallBuffer).some((w) => Math.abs(x - w.x) < w.w && Math.abs(z - w.z) < w.d)) {
+          clear = ahead;
+          break;
+        }
+      }
+    }
+    const target = 0.25 + 0.75 * Math.min(1, Math.max(0, (clear - 2) / 12));
+    beamScale += (target - beamScale) * (1 - Math.exp(-6 * dt));
+    for (const beam of playerCar.userData.headlightBeams || []) {
+      beam.userData.baseIntensity ??= beam.intensity;
+      beam.intensity = beam.userData.baseIntensity * beamScale;
+    }
+  }
   const pedestrianCars = [];
   const cameraRight = new Vector3();
   const impactPoint = new Vector3();
@@ -927,6 +955,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       updateLamps(state.x, state.z, camera);
       effects.update(state, dt, camera);
       updatePedestrians(state, dt);
+      updateHeadlights(state, dt);
       audio.update(state.rpm, state.pedal, controls.current.muted, state.drifting, state);
       if (wasOnFoot && !state.onFoot) {
         audio.startEngine();
