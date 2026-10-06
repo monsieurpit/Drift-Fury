@@ -590,11 +590,10 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         };
       }
       // The moon follows the player, including up the mountain, and shines from where the moon is drawn
-      // in the sky. Its 180 m shadow box is centred ahead of the player along the view, so it covers what
-      // is on screen instead of the city behind the camera.
-      camera.getWorldDirection(shadowAhead);
-      shadowAhead.y = 0;
-      if (shadowAhead.lengthSq() > 1e-6) shadowAhead.normalize().multiplyScalar(45);
+      // in the sky. Its 180 m shadow box is centred 30 m ahead of the car (not of the camera: turning the
+      // view must not move the shadows).
+      const aheadHeading = state.onFoot ? footCameraYaw : state.heading;
+      shadowAhead.set(-Math.sin(aheadHeading) * 30, 0, -Math.cos(aheadHeading) * 30);
       shadowCenter.set(state.x + shadowAhead.x, state.y || 0, state.z + shadowAhead.z);
       shadowFrameCounter++;
       if (shadowFrameCounter >= shadowFrameInterval) {

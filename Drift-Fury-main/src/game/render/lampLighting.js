@@ -6,7 +6,7 @@
 // long streaky highlights in the wet asphalt, falling off with distance like real luminaires.
 import { Color, Frustum, Matrix4, Sphere, Vector3, Vector4 } from "three";
 
-export const LAMP_COUNT = 24;
+export const LAMP_COUNT = 32;
 const LAMP_RANGE = 28; // metres: beyond this a lamp adds nothing
 
 const DECLARATIONS = /* glsl */ `
@@ -55,7 +55,7 @@ export function createLampLighting(positions, { intensity = 450, color = "#ffcf9
   const viewProjection = new Matrix4();
   const reach = new Sphere(new Vector3(), LAMP_RANGE);
   const nearest = []; // candidate lamps around the player (several times what the shader takes)
-  const inView = []; // this frame's candidates that can light something on screen, with their distance
+  const ranked = []; // this frame's candidates with their distance from the camera
   const point = new Vector3();
   const distances = new Float32Array(positions.length);
   let lastX = Infinity;
@@ -84,39 +84,41 @@ export function createLampLighting(positions, { intensity = 450, color = "#ffcf9
       }
       const order = positions.map((_, index) => index).sort((a, b) => distances[a] - distances[b]);
       nearest.length = 0;
-      nearest.push(...order.slice(0, LAMP_COUNT * 4));
+      nearest.push(...order.slice(0, LAMP_COUNT * 3));
     },
     /**
      * Picks this frame's lamps and moves them into view space (call once per frame, before rendering).
-     * Of the lamps around the player, those whose light can reach something on screen are ranked by
-     * distance from the camera and the nearest LAMP_COUNT go to the shader, so the light pools run on down
-     * the street ahead instead of being spent on lamps behind the camera. The farthest of them fade out
-     * with distance toward the first lamp left out, so lamps entering or leaving the set never pop.
+     * The LAMP_COUNT lamps nearest the camera light the scene, whichever way it looks, so turning the view
+     * never changes the lighting; the farthest of them fade out toward the first lamp left out, so lamps
+     * joining or leaving the set as the camera moves never pop. Of those, only the ones whose light can
+     * reach something on screen go to the shader (the others could not change a pixel), so each pixel
+     * loops over just those.
      */
     updateView(camera) {
       viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       frustum.setFromProjectionMatrix(viewProjection);
       const eye = camera.position;
-      inView.length = 0;
+      ranked.length = 0;
       for (const index of nearest) {
         const p = positions[index];
         reach.center.set(p.x, p.y, p.z);
-        if (!frustum.intersectsSphere(reach)) continue;
-        inView.push({ index, distance: reach.center.distanceTo(eye) });
+        ranked.push({ index, distance: reach.center.distanceTo(eye) });
       }
-      inView.sort((a, b) => a.distance - b.distance);
-      const count = Math.min(LAMP_COUNT, inView.length);
-      // Distance of the first lamp that did not make it: the fade reaches zero there.
-      const cutoff = inView.length > LAMP_COUNT ? inView[LAMP_COUNT].distance : Infinity;
+      ranked.sort((a, b) => a.distance - b.distance);
+      const chosen = Math.min(LAMP_COUNT, ranked.length);
+      // Distance of the first lamp left out: the fade reaches zero there. (With nothing left out there is
+      // nothing to fade toward; Infinity / Infinity would be NaN, and one NaN light blacks out the frame.)
+      const cutoff = ranked.length > LAMP_COUNT ? ranked[LAMP_COUNT].distance : Infinity;
       const fadeLength = Math.max(12, cutoff * 0.3);
-      for (let slot = 0; slot < count; slot++) {
-        const { index, distance } = inView[slot];
+      let count = 0;
+      for (let rank = 0; rank < chosen; rank++) {
+        const { index, distance } = ranked[rank];
         const p = positions[index];
-        // (All the lamps in view fit: nothing to fade toward. Infinity / Infinity would be NaN, and one NaN
-        // light turns the whole frame black through the bloom.)
+        reach.center.set(p.x, p.y, p.z);
+        if (!frustum.intersectsSphere(reach)) continue;
         const fade = cutoff === Infinity ? 1 : Math.min(1, Math.max(0, (cutoff - distance) / fadeLength));
         point.set(p.x, p.y, p.z).applyMatrix4(camera.matrixWorldInverse);
-        uniforms.streetLamps.value[slot].set(
+        uniforms.streetLamps.value[count++].set(
           point.x,
           point.y,
           point.z,

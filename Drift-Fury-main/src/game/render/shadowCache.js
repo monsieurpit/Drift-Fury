@@ -7,7 +7,12 @@
 // target. Each frame the cached static shadows are copied back (one framebuffer blit of colour and depth)
 // and only the things that move (the player's car, police and traffic cars, people) are drawn on top,
 // depth-tested against the static ones. The shadow map ends up exactly what a full render would give.
-import { WebGLRenderTarget, NearestFilter } from "three";
+import { NearestFilter, Vector3, WebGLRenderTarget } from "three";
+
+const worldUp = new Vector3(0, 1, 0);
+const lightX = new Vector3();
+const lightY = new Vector3();
+const lightZ = new Vector3();
 
 /**
  * `staticRoots`: the scene's children that never move (the world, built before the session adds cars and
@@ -107,11 +112,25 @@ export function createShadowCache(renderer, scene, camera, sun, staticRoots, dir
     /** Aims the light at (x, y, z), snapped to the grid, and has the next render refresh the shadows. */
     update(x, y, z) {
       // Aim the light at the centre of the grid cell, so the box (and the cache) only changes cell to cell.
-      const cx = Math.round(x / grid) * grid;
+      let cx = Math.round(x / grid) * grid;
       const cy = Math.round(y / 4) * 4;
-      const cz = Math.round(z / grid) * grid;
-      sun.position.set(cx + direction.x * 127, cy + direction.y * 127, cz + direction.z * 127);
-      sun.target.position.set(cx, cy, cz);
+      let cz = Math.round(z / grid) * grid;
+      // Then onto the shadow map's texel grid (in the light's view), so that when the box does move, the
+      // shadows shift by whole texels and their edges stay put instead of shimmering.
+      const shadowCamera = sun.shadow.camera;
+      const texel = (shadowCamera.right - shadowCamera.left) / sun.shadow.mapSize.x;
+      lightZ.set(direction.x, direction.y, direction.z).normalize();
+      lightX.crossVectors(worldUp, lightZ).normalize();
+      lightY.crossVectors(lightZ, lightX);
+      const u = cx * lightX.x + cy * lightX.y + cz * lightX.z;
+      const v = cx * lightY.x + cy * lightY.y + cz * lightY.z;
+      const du = Math.round(u / texel) * texel - u;
+      const dv = Math.round(v / texel) * texel - v;
+      cx += lightX.x * du + lightY.x * dv;
+      cz += lightX.z * du + lightY.z * dv;
+      const cyAligned = cy + lightX.y * du + lightY.y * dv;
+      sun.position.set(cx + direction.x * 127, cyAligned + direction.y * 127, cz + direction.z * 127);
+      sun.target.position.set(cx, cyAligned, cz);
       sun.updateMatrixWorld();
       sun.target.updateMatrixWorld();
       key = `${cx}|${cy}|${cz}`;
