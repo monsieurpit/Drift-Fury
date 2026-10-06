@@ -18,7 +18,7 @@ import { MOON_DIRECTION } from "../world/sky.js";
 export function startGameSession(container, car, engine, controls, callbacks, noPolice = false) {
   const view = createRenderer(container, true);
   const { scene, renderer, camera, sun, touchDevice, composer } = view;
-  const { solids, lampPositions, signals, update: updateWorld } = buildWorld(scene);
+  const { solids, lampPositions, signals, update: updateWorld, updateLamps } = buildWorld(scene);
   // Cars sit on the ground: pitch and roll follow the terrain under their wheels (flat in the city).
   const sitOnGround = (object, x, z, heading, extraRoll = 0) => {
     const forwardX = -Math.sin(heading);
@@ -598,6 +598,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
       updateTrafficLights(dt);
       updateWorld(state.elapsed);
       inCityEnvironment(state.x, state.z);
+      updateLamps(state.x, state.z);
       composer.grading?.update(state.elapsed);
       const driving = !state.onFoot;
       const targetFov = driving ? 55 + speedFactor * 12 : 45;

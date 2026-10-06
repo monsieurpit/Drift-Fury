@@ -10,6 +10,7 @@ import { buildHighway } from "./highway.js";
 import { buildMountainRoad, buildMountainScenery, buildMountainTerrain, updateMountain } from "./mountain.js";
 import { buildRoadClosure } from "./roadClosure.js";
 import { buildSky } from "./sky.js";
+import { createLampLighting } from "../render/lampLighting.js";
 /**
  * Builds the whole map into `scene`: city grid, gas stations, highway and the mountain.
  * Each part lives in its own module and shares materials and helpers through the `world` object;
@@ -34,10 +35,17 @@ export function buildWorld(scene) {
   buildRoadClosure(world);
   buildMountainScenery(world);
   const updateSky = buildSky(world);
+  // Every street lamp lights the city's ground in its shaders (see lampLighting.js).
+  const lampLighting = createLampLighting(world.lampPositions);
+  for (const material of [world.roadMaterial, world.sidewalkMaterial, world.lotMaterial]) {
+    if (material) lampLighting.patch(material);
+  }
   return {
     solids: world.solids,
     lampPositions: world.lampPositions,
     signals: world.signals,
+    /** Picks the street lamps nearest to (x, z) for the ground lighting; call as the player moves. */
+    updateLamps: (x, z) => lampLighting.update(x, z),
     /** Per-frame animation of world details (summit beacon, sky); `time` in seconds. */
     update: (time) => {
       updateMountain(world, time);

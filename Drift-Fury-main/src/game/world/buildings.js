@@ -62,6 +62,7 @@ export function buildBuildings(world) {
       color: "#8f969c",
     });
     lotMat.userData.tile = 4;
+    world.lotMaterial = lotMat;
     const tankMat = new MeshStandardMaterial({
       color: "#5a4a3a",
       roughness: 0.85,
