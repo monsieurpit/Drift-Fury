@@ -133,6 +133,7 @@ export function GamePage() {
           {paused && !result && (
             <PauseMenu
               onResume={() => setPaused(false)}
+              onQuality={(value) => controls.current.setQuality?.(value)}
               onEnd={() =>
                 finishSession({
                   ...hud,

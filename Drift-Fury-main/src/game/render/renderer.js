@@ -17,8 +17,29 @@ import {
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
 import { createGradingPass } from "./gradingPass.js";
-function createComposer(renderer, scene, camera, width, height, bloomStrength) {
+import { QUALITY_PRESETS, resolveQuality } from "./quality.js";
+/**
+ * Ambient occlusion for the game view (soft contact shadows where surfaces meet). Alpha-tested foliage
+ * cards are left out of its depth/normal pre-pass: drawn without their alpha they would read as solid
+ * quads and darken the air around every tree.
+ */
+class GameAOPass extends GTAOPass {
+  overrideVisibility() {
+    super.overrideVisibility();
+    this.scene.traverse((object) => {
+      const materials = Array.isArray(object.material)
+        ? object.material
+        : object.material
+          ? [object.material]
+          : [];
+      if (materials.some((material) => material.alphaTest > 0 || material.transparent))
+        object.visible = false;
+    });
+  }
+}
+function createComposer(renderer, scene, camera, width, height, bloomStrength, inGame) {
   const composer = new EffectComposer(renderer);
   if (renderer.capabilities.isWebGL2) {
     composer.renderTarget1.samples = Math.min(4, renderer.capabilities.maxSamples);
@@ -27,6 +48,27 @@ function createComposer(renderer, scene, camera, width, height, bloomStrength) {
   composer.setPixelRatio(renderer.getPixelRatio());
   composer.setSize(width, height);
   composer.addPass(new RenderPass(scene, camera));
+  if (inGame) {
+    composer.ao = new GameAOPass(scene, camera, width, height);
+    composer.ao.updateGtaoMaterial({
+      radius: 1.4,
+      distanceExponent: 1.4,
+      thickness: 1.5,
+      scale: 1,
+      samples: 12,
+    });
+    composer.ao.updatePdMaterial({
+      lumaPhi: 10,
+      depthPhi: 2,
+      normalPhi: 3,
+      radius: 6,
+      rings: 2,
+      samples: 12,
+    });
+    composer.ao.blendIntensity = 0.9;
+    composer.ao.enabled = false;
+    composer.addPass(composer.ao);
+  }
   composer.addPass(new UnrealBloomPass(new Vector2(width, height), bloomStrength, 0.4, 0.92));
   const vignette = new ShaderPass(VignetteShader);
   vignette.uniforms.offset.value = 0.95;
@@ -43,14 +85,17 @@ function createComposer(renderer, scene, camera, width, height, bloomStrength) {
  * large high-DPI window (a Retina iMac or a Mac on a 4K/5K display) does not render 10+ million pixels, every
  * one of them through the multisampled post-processing chain.
  */
-export function gamePixelRatio(width, height, touchDevice = false) {
-  const budget = touchDevice ? 1.6e6 : 2.4e6;
-  const cap = touchDevice ? 1.2 : 1.8;
+export function gamePixelRatio(width, height, touchDevice = false, quality = resolveQuality()) {
+  const budget = Math.min(QUALITY_PRESETS[quality].pixelBudget, touchDevice ? 1.6 : Infinity) * 1e6;
+  const cap = touchDevice ? 1.2 : quality === "ultra" ? 2 : 1.8;
   const fit = Math.sqrt(budget / Math.max(1, width * height));
   return Math.max(0.75, Math.min(window.devicePixelRatio || 1, cap, fit));
 }
 export function createRenderer(container, inGame = false) {
-  const lowPower = !!(navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+  let quality = resolveQuality();
+  const lowPower = inGame
+    ? !QUALITY_PRESETS[quality].shadows
+    : !!(navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
   const scene = new Scene();
   scene.background = new Color(inGame ? "#070b14" : "#0d1520");
   scene.fog = new Fog(inGame ? "#223a4d" : "#35506b", inGame ? 130 : 74, inGame ? 1050 : 980);
@@ -65,7 +110,7 @@ export function createRenderer(container, inGame = false) {
     renderer.outputColorSpace = "srgb";
   } catch (e) {}
   const touchDevice = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
-  if (lowPower) {
+  if (lowPower && !inGame) {
     renderer.shadowMap.enabled = false;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
   } else {
@@ -95,7 +140,7 @@ export function createRenderer(container, inGame = false) {
   sun.position.set(-42, 88, -30);
   if ((inGame || !touchDevice) && !lowPower) {
     sun.castShadow = true;
-    const shadowSize = touchDevice ? 1024 : inGame ? 2048 : 3072;
+    const shadowSize = touchDevice ? 1024 : inGame ? QUALITY_PRESETS[quality].shadowMapSize : 3072;
     sun.shadow.mapSize.set(shadowSize, shadowSize);
     sun.shadow.camera.near = 12;
     sun.shadow.camera.far = 340;
@@ -255,7 +300,31 @@ export function createRenderer(container, inGame = false) {
     container.clientWidth,
     container.clientHeight,
     inGame ? 0.75 : 0.5,
+    inGame,
   );
+  /** Applies a quality preset live (from the pause menu or the frame-time monitor). */
+  const applyQuality = (level) => {
+    quality = level;
+    const preset = QUALITY_PRESETS[level];
+    if (composer.ao) composer.ao.enabled = preset.ao;
+    composer.grading.enabled = preset.grading;
+    const samples = renderer.capabilities.isWebGL2
+      ? Math.min(preset.msaa, renderer.capabilities.maxSamples)
+      : 0;
+    for (const target of [composer.renderTarget1, composer.renderTarget2]) {
+      if (target.samples !== samples) {
+        target.samples = samples;
+        target.dispose();
+      }
+    }
+    if (sun.castShadow && sun.shadow.mapSize.x !== preset.shadowMapSize) {
+      sun.shadow.mapSize.set(preset.shadowMapSize, preset.shadowMapSize);
+      sun.shadow.map?.dispose();
+      sun.shadow.map = null;
+    }
+    renderer.shadowMap.needsUpdate = true;
+  };
+  if (inGame) applyQuality(quality);
   const resizeObserver = new ResizeObserver(() => {
     const width = container.clientWidth;
     const height = container.clientHeight;
@@ -274,6 +343,10 @@ export function createRenderer(container, inGame = false) {
     sun,
     touchDevice,
     composer,
+    applyQuality,
+    get quality() {
+      return quality;
+    },
     dispose() {
       resizeObserver.disconnect();
       scene.traverse((e) => {

@@ -3,6 +3,7 @@ import { createAudio } from "../audio/createAudio.js";
 import { createEffects } from "../effects/effects.js";
 import { animatePerson, createPerson } from "../people/person.js";
 import { createRenderer, gamePixelRatio } from "../render/renderer.js";
+import { QUALITY_LEVELS, resolveQuality, storeQuality, storedQuality } from "../render/quality.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
 import { warmUpSession } from "../render/warmUp.js";
 import { captureCityEnvironment } from "../render/reflectionProbe.js";
@@ -296,8 +297,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
   renderer.shadowMap.autoUpdate = false;
   renderer.shadowMap.needsUpdate = true;
   let shadowFrameCounter = 0;
-  const basePixelRatio = renderer.getPixelRatio();
-  const lowPowerDevice = !!(navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+  let qualityChoice = storedQuality();
   let resolutionScale = 1;
   let windowTime = 0;
   let windowFrames = 0;
@@ -367,7 +367,15 @@ export function startGameSession(container, car, engine, controls, callbacks, no
         slowWindows = averageFrame > 1 / 45 ? slowWindows + 1 : 0;
         fastWindows = averageFrame < 1 / 57 ? fastWindows + 1 : 0;
         if (slowWindows >= 2) {
-          nextScale = Math.max(0.6, resolutionScale - 0.1);
+          const level = QUALITY_LEVELS.indexOf(view.quality);
+          if (qualityChoice === "auto" && resolutionScale <= 0.8 && level > 0) {
+            // Sustained slow frames in auto mode: drop the costliest effects before blurring the image
+            // further, and give some resolution back.
+            view.applyQuality(QUALITY_LEVELS[level - 1]);
+            nextScale = Math.min(1, resolutionScale + 0.1);
+          } else {
+            nextScale = Math.max(0.6, resolutionScale - 0.1);
+          }
           if (performance.now() - lastRaise < 8000) {
             fastWindowsNeeded = Math.min(32, fastWindowsNeeded * 2);
           }
@@ -377,9 +385,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
         }
       }
       // The base ratio follows the window size (entering fullscreen raises the pixel count).
-      const base = lowPowerDevice
-        ? basePixelRatio
-        : gamePixelRatio(container.clientWidth, container.clientHeight, touchDevice);
+      const base = gamePixelRatio(container.clientWidth, container.clientHeight, touchDevice, view.quality);
       if (nextScale !== resolutionScale || Math.abs(base * nextScale - renderer.getPixelRatio()) > 0.02) {
         if (nextScale !== resolutionScale) {
           slowWindows = 0;
@@ -670,7 +676,21 @@ export function startGameSession(container, car, engine, controls, callbacks, no
     debugSession.fx = effects;
   }
   frameId = requestAnimationFrame(frame);
-  return {
+  const session = {
+    /** Graphics quality from the pause menu: "auto" or a preset name. */
+    setQuality(choice) {
+      qualityChoice = choice;
+      storeQuality(choice);
+      view.applyQuality(resolveQuality(choice));
+      resolutionScale = 1;
+      skipWindow = true;
+      windowTime = 0;
+      windowFrames = 0;
+      const ratio = gamePixelRatio(container.clientWidth, container.clientHeight, touchDevice, view.quality);
+      renderer.setPixelRatio(ratio);
+      composer.setPixelRatio(ratio);
+      composer.setSize(container.clientWidth, container.clientHeight);
+    },
     setCar(e) {
       game.setCar(e);
       scene.remove(playerCar);
@@ -700,4 +720,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
       view.dispose();
     },
   };
+  // The pause menu reaches the live session through the shared controls ref.
+  controls.current.setQuality = (choice) => session.setQuality(choice);
+  return session;
 }
