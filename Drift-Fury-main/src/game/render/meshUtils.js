@@ -1,4 +1,4 @@
-import { CanvasTexture, ExtrudeGeometry, Mesh } from "three";
+import { CanvasTexture, Color, ExtrudeGeometry, InstancedMesh, Matrix4, Mesh } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 /**
  * Merges the direct child meshes of `group` that share a material into one mesh per material
@@ -64,4 +64,37 @@ export function canvasTexture(width, height, draw) {
   const texture = new CanvasTexture(canvas);
   texture.anisotropy = 8;
   return texture;
+}
+
+/**
+ * Splits a filled InstancedMesh into one InstancedMesh per `cellSize` square of the map (by instance
+ * position), so the renderer can cull what is off-screen or outside the shadow camera. One mesh for a
+ * whole city's worth of instances is always drawn in full, in every pass.
+ */
+export function splitInstancedMesh(mesh, cellSize) {
+  const matrix = new Matrix4();
+  const color = new Color();
+  const cells = new Map();
+  for (let i = 0; i < mesh.count; i++) {
+    mesh.getMatrixAt(i, matrix);
+    const key = Math.floor(matrix.elements[12] / cellSize) + "," + Math.floor(matrix.elements[14] / cellSize);
+    if (!cells.has(key)) cells.set(key, []);
+    cells.get(key).push(i);
+  }
+  return [...cells.values()].map((indices) => {
+    const part = new InstancedMesh(mesh.geometry, mesh.material, indices.length);
+    indices.forEach((source, target) => {
+      mesh.getMatrixAt(source, matrix);
+      part.setMatrixAt(target, matrix);
+      if (mesh.instanceColor) {
+        mesh.getColorAt(source, color);
+        part.setColorAt(target, color);
+      }
+    });
+    part.castShadow = mesh.castShadow;
+    part.receiveShadow = mesh.receiveShadow;
+    part.name = mesh.name;
+    part.computeBoundingSphere();
+    return part;
+  });
 }

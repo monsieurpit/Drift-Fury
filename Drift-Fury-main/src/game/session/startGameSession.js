@@ -340,6 +340,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
   const lookTarget = new Vector3();
   const cameraTarget = new Vector3();
   const shakeOffset = new Vector3();
+  const shadowAhead = new Vector3();
   function frame(time) {
     frameId = requestAnimationFrame(frame);
     const frameSeconds = (time - lastFrameTime) / 1000;
@@ -443,14 +444,20 @@ export function startGameSession(container, car, engine, controls, callbacks, no
           door: null,
         };
       }
-      // The moon follows the player (its shadow box covers 240 m around them), including up the mountain,
-      // and shines from where the moon is drawn in the sky.
+      // The moon follows the player, including up the mountain, and shines from where the moon is drawn
+      // in the sky. Its 180 m shadow box is centred ahead of the player along the view, so it covers what
+      // is on screen instead of the city behind the camera.
+      camera.getWorldDirection(shadowAhead);
+      shadowAhead.y = 0;
+      if (shadowAhead.lengthSq() > 1e-6) shadowAhead.normalize().multiplyScalar(45);
+      const shadowX = state.x + shadowAhead.x;
+      const shadowZ = state.z + shadowAhead.z;
       sun.position.set(
-        state.x + MOON_DIRECTION.x * 127,
+        shadowX + MOON_DIRECTION.x * 127,
         (state.y || 0) + MOON_DIRECTION.y * 127,
-        state.z + MOON_DIRECTION.z * 127,
+        shadowZ + MOON_DIRECTION.z * 127,
       );
-      sun.target.position.set(state.x, state.y || 0, state.z);
+      sun.target.position.set(shadowX, state.y || 0, shadowZ);
       sun.target.updateMatrixWorld();
       shadowFrameCounter++;
       if (shadowFrameCounter >= shadowFrameInterval) {

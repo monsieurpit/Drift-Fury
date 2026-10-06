@@ -8,6 +8,7 @@ import {
   InstancedMesh,
 } from "three";
 import { createRandom } from "../util/random.js";
+import { splitInstancedMesh } from "../render/meshUtils.js";
 /** Trees along the sidewalks, with trunk colliders. */
 export function buildStreetTrees(world) {
   const {
@@ -188,8 +189,9 @@ export function buildStreetTrees(world) {
     branches.instanceMatrix.needsUpdate = true;
     crowns.count = ci;
     crowns.instanceMatrix.needsUpdate = true;
-    scene.add(trunks);
-    scene.add(branches);
-    scene.add(crowns);
+    // One mesh per block-sized cell, so trees off-screen or outside the shadow camera are skipped.
+    for (const mesh of [trunks, branches, crowns]) {
+      for (const part of splitInstancedMesh(mesh, 60)) scene.add(part);
+    }
   }
 }

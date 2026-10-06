@@ -95,10 +95,12 @@ export function createRenderer(container, inGame = false) {
     sun.shadow.mapSize.set(shadowSize, shadowSize);
     sun.shadow.camera.near = 12;
     sun.shadow.camera.far = 340;
-    sun.shadow.camera.left = -120;
-    sun.shadow.camera.right = 120;
-    sun.shadow.camera.top = 120;
-    sun.shadow.camera.bottom = -120;
+    // In game the box is centred ahead of the player (see the session loop), so ±90 m covers the view.
+    const extent = inGame ? 90 : 120;
+    sun.shadow.camera.left = -extent;
+    sun.shadow.camera.right = extent;
+    sun.shadow.camera.top = extent;
+    sun.shadow.camera.bottom = -extent;
     sun.shadow.bias = -0.00017;
     sun.shadow.normalBias = 0.045;
     sun.shadow.radius = 3;
