@@ -12,6 +12,7 @@ import { buildRoadClosure } from "./roadClosure.js";
 import { buildSky } from "./sky.js";
 import { createLampLighting } from "../render/lampLighting.js";
 import { LIGHT_LAMP, createClusteredLights } from "../render/clusteredLights.js";
+import { t } from "../../i18n.js";
 /**
  * Builds the whole map into `scene`: city grid, gas stations, highway and the mountain.
  * Each part lives in its own module and shares materials and helpers through the `world` object;
@@ -36,25 +37,25 @@ export function* buildWorldInSteps(scene) {
     scene,
   };
   const parts = [
-    ["Matériaux", createWorldContext],
-    ["Terrain", buildGround],
-    ["Montagne", buildMountainTerrain],
-    ["Routes", buildRoads],
-    ["Feux et panneaux", buildTrafficControl],
-    ["Lampadaires", buildStreetLights],
-    ["Bâtiments et commerces", buildBuildings],
-    ["Arbres", buildStreetTrees],
-    ["Stations-service", buildGasStations],
-    ["Autoroute", buildHighway],
-    ["Route de montagne", buildMountainRoad],
-    ["Barrages", buildRoadClosure],
-    ["Forêt et rochers", buildMountainScenery],
+    [t("stage.materials"), createWorldContext],
+    [t("stage.terrain"), buildGround],
+    [t("stage.mountain"), buildMountainTerrain],
+    [t("stage.roads"), buildRoads],
+    [t("stage.signals"), buildTrafficControl],
+    [t("stage.lamps"), buildStreetLights],
+    [t("stage.buildings"), buildBuildings],
+    [t("stage.trees"), buildStreetTrees],
+    [t("stage.stations"), buildGasStations],
+    [t("stage.highway"), buildHighway],
+    [t("stage.mountainRoad"), buildMountainRoad],
+    [t("stage.closures"), buildRoadClosure],
+    [t("stage.forest"), buildMountainScenery],
   ];
   for (let index = 0; index < parts.length; index++) {
     yield { label: parts[index][0], progress: index / (parts.length + 1) };
     parts[index][1](world);
   }
-  yield { label: "Ciel", progress: parts.length / (parts.length + 1) };
+  yield { label: t("stage.sky"), progress: parts.length / (parts.length + 1) };
   const updateSky = buildSky(world);
   // Every street lamp lights the city's ground in its shaders (see lampLighting.js).
   const lampLighting = createLampLighting(world.lampPositions);

@@ -1,6 +1,7 @@
 import { XIcon, CheckIcon, LockKeyholeIcon, ArrowUpRightIcon, CoinsIcon } from "lucide-react";
 import { CARS } from "../data/cars.js";
 import { ENGINES } from "../data/engines.js";
+import { t, formatNumber } from "../../i18n.js";
 export function PickerModal({ type, progress, onSelect, onClose, station = false }) {
   const isCars = type === "cars";
   const owned = isCars ? progress.cars : progress.engines;
@@ -11,21 +12,21 @@ export function PickerModal({ type, progress, onSelect, onClose, station = false
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
       role="dialog"
       aria-modal="true"
-      aria-label={isCars ? "Garage" : "Atelier moteur"}
+      aria-label={isCars ? t("picker.garage") : t("picker.engineShop")}
     >
       <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-[#171c1f] shadow-2xl">
         <div className="flex items-center justify-between border-b border-white/10 p-6">
           <div>
             <p className="eyebrow text-[#c6dc77]">
-              {station ? "STATION-SERVICE • ÉCHANGE RAPIDE" : "NIGHTSHIFT / GARAGE"}
+              {station ? t("picker.stationSwap") : "NIGHTSHIFT / " + t("picker.garage").toUpperCase()}
             </p>
             <h2 className="race-title mt-2 text-4xl">
-              {isCars ? "CHOISISSEZ VOTRE VOITURE." : "CHOISISSEZ VOTRE MOTEUR."}
+              {isCars ? t("picker.chooseCar") : t("picker.chooseEngine")}
             </h2>
           </div>
           <button
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t("picker.close")}
             className="rounded-lg p-2 text-[#929b9d] hover:bg-white/5"
           >
             <XIcon size={22} />
@@ -43,7 +44,7 @@ export function PickerModal({ type, progress, onSelect, onClose, station = false
                 >
                   <div className="flex items-center justify-between">
                     <span className="eyebrow !text-[8px]">
-                      {isCars ? item.tag : `${item.hp} CH • ${item.torque} NM`}
+                      {isCars ? item.tag : `${item.hp} ${t("loadout.hp")} • ${item.torque} NM`}
                     </span>
                     {isSelected ? (
                       <CheckIcon size={17} className="text-[#c6dc77]" />
@@ -74,10 +75,10 @@ export function PickerModal({ type, progress, onSelect, onClose, station = false
                   >
                     <span>
                       {isSelected
-                        ? "Équipé"
+                        ? t("picker.equipped")
                         : isOwned
-                          ? "Équiper"
-                          : `Débloquer • ${item.price.toLocaleString("fr-FR")} CR`}
+                          ? t("picker.equip")
+                          : t("picker.unlock", { price: formatNumber(item.price) })}
                     </span>
                     {isSelected ? <CheckIcon size={14} /> : <ArrowUpRightIcon size={16} />}
                   </button>
@@ -88,13 +89,11 @@ export function PickerModal({ type, progress, onSelect, onClose, station = false
         </div>
         <div className="flex items-center justify-between border-t border-white/10 px-6 py-4 text-[10px] text-[#859194]">
           <span>
-            {station
-              ? "Le véhicule est remplacé, votre session continue."
-              : "Gagnez des crédits en driftant et en survivant aux poursuites."}
+            {station ? t("picker.stationNote") : t("picker.earnNote")}
           </span>
           <span className="ml-3 flex shrink-0 items-center gap-2 text-[#c6dc77]">
             <CoinsIcon size={14} />
-            {progress.credits.toLocaleString("fr-FR")}
+            {formatNumber(progress.credits)}
             {" CR"}
           </span>
         </div>

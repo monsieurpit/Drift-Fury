@@ -1,6 +1,7 @@
 import { VolumeXIcon, Volume2Icon, PauseIcon, StarIcon, FuelIcon, ShieldIcon } from "lucide-react";
 import { GearIndicator } from "./GearIndicator.jsx";
 import { Minimap } from "./Minimap.jsx";
+import { t, formatNumber } from "../../i18n.js";
 export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-10 p-4 sm:p-6">
@@ -8,16 +9,16 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
         <div className="hud-glass px-4 py-3">
           <div className="eyebrow !text-[#c6dc77]">
             {"NIGHTSHIFT / "}
-            {hud.zone}
+            {t(`zone.${hud.zone}`)}
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="race-title text-4xl">{Math.floor(hud.score).toLocaleString("fr-FR")}</span>
-            <span className="text-[9px] text-[#879b9c]">PTS DRIFT</span>
+            <span className="race-title text-4xl">{formatNumber(Math.floor(hud.score))}</span>
+            <span className="text-[9px] text-[#879b9c]">{t("hud.driftPts")}</span>
           </div>
         </div>
         <div className="flex flex-col items-end gap-3">
           <div className="pointer-events-auto flex gap-2">
-            <button onClick={onMute} className="hud-glass p-3" aria-label="Activer ou couper le son">
+            <button onClick={onMute} className="hud-glass p-3" aria-label={t("sound.toggle")}>
               {muted ? <VolumeXIcon size={17} /> : <Volume2Icon size={17} />}
             </button>
             <button onClick={onPause} className="hud-glass p-3" aria-label="Pause">
@@ -37,9 +38,7 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
             </div>
             {hud.escape > 0 && hud.wanted > 0.15 && (
               <p className="mt-2 text-[9px] text-[#c6dc77]">
-                {"ÉVASION DANS "}
-                {Math.ceil(5 - hud.escape)}
-                {" S"}
+                {t("hud.escapeIn", { n: Math.ceil(5 - hud.escape) })}
               </p>
             )}
           </div>
@@ -51,21 +50,19 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
           className="hud-glass absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 px-5 py-4 text-center text-xs text-primary-foreground"
         >
           <span className="mb-3 block h-5 w-5 animate-spin rounded-full border-2 border-game-accent/25 border-t-game-accent mx-auto" />
-          Chargement du son moteur…
+          {t("hud.audioLoading")}
         </div>
       )}
       {hud.drifting && (
         <div className="absolute left-1/2 top-[28%] -translate-x-1/2 text-center">
           <span className="race-title text-6xl italic text-[#c6dc77] drop-shadow-lg">DRIFT ×{hud.combo}</span>
-          <p className="mt-2 text-[10px] font-bold tracking-[.3em] text-white">GARDEZ L'ANGLE.</p>
+          <p className="mt-2 text-[10px] font-bold tracking-[.3em] text-white">{t("hud.holdAngle")}</p>
         </div>
       )}
       {hud.arrest > 0 && (
         <div className="absolute left-1/2 top-36 w-60 -translate-x-1/2 rounded-lg bg-[#301c1dee] p-3 text-center">
           <div className="text-[10px] font-bold tracking-widest text-[#ff827a]">
-            {"PRISON DANS "}
-            {Math.ceil(5 - (hud.arrestTimer || 0))}
-            {" S"}
+            {t("hud.jailIn", { n: Math.ceil(5 - (hud.arrestTimer || 0)) })}
           </div>
           <div className="game-meter mt-2">
             <div
@@ -84,31 +81,31 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
         >
           <div className="flex items-center justify-center gap-2 text-xs font-semibold text-[#c6dc77]">
             <FuelIcon size={16} />
-            {"RAVITAILLEMENT • "}
+            {t("hud.refuel")}
             {Math.round(hud.fuel)}%
           </div>
           <p className="mt-2 text-[10px] text-white">
             <kbd className="race-key">E</kbd>
-            {" Changer de voiture"}
+            {t("hud.changeCar")}
           </p>
         </button>
       )}
       {hud.onFoot && (
         <div className="absolute left-1/2 top-24 -translate-x-1/2 rounded-lg bg-[#18251eee] px-4 py-2 text-xs text-[#c6dc77] border border-[#c6dc77]/30">
-          {"À PIED • Approchez-vous d'un véhicule et appuyez sur "}
+          {t("hud.onFoot")}
           <kbd className="race-key">F</kbd>
         </div>
       )}
       {hud.onFoot && (hud.shop >= 0 || hud.store >= 0) && (
         <div className="absolute left-1/2 top-36 -translate-x-1/2 rounded-lg border border-[#c6dc77]/30 bg-[#18251eee] px-4 py-2 text-center text-xs text-[#e8eddf]">
           {hud.store >= 0
-            ? "NORTHLINE DÉPANNEUR • Bienvenue, entrez !"
-            : "DÉPANNEUR OUVERT • Traversez la porte pour entrer"}
+            ? t("hud.storeInside")
+            : t("hud.storeOpen")}
         </div>
       )}
       {hud.fuel === 0 && (
         <div className="absolute left-1/2 top-24 -translate-x-1/2 rounded-lg bg-[#421e15e6] px-4 py-2 text-xs text-[#ffd0a9]">
-          PANNE SÈCHE • Rejoignez une station
+          {t("hud.outOfFuel")}
         </div>
       )}
       <div className="absolute bottom-6 left-6">
@@ -141,7 +138,7 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
             {hud.rpm}
             {" RPM"}
           </span>
-          <span>PROPULSION</span>
+          <span>{t("drive.rwd")}</span>
         </div>
         <div className="mt-4 flex items-center gap-2">
           <FuelIcon size={13} className={hud.fuel < 20 ? "text-[#ed8974]" : "text-[#a5b6ac]"} />

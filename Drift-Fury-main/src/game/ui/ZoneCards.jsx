@@ -1,24 +1,25 @@
 import { Building2Icon, RouteIcon, MountainIcon } from "lucide-react";
+import { t } from "../../i18n.js";
 const ZONES = [
   {
-    name: "Centre-ville",
-    subtitle: "VIRAGES SERRÉS",
+    name: t("zone.city"),
+    subtitle: t("zone.city.sub"),
     icon: Building2Icon,
     number: "01",
     className: "bg-[#233035]",
     lines: "M-10 80 L150 80 M-10 43 L150 43 M32 -10 L32 140 M76 -10 L76 140 M115 -10 L115 140",
   },
   {
-    name: "Autoroute A9",
-    subtitle: "VITESSE PURE",
+    name: t("zone.highway"),
+    subtitle: t("zone.highway.sub"),
     icon: RouteIcon,
     number: "02",
     className: "bg-[#32372b]",
     lines: "M-10 115 L150 -15 M10 135 L170 5 M-30 95 L130 -35",
   },
   {
-    name: "Montagne Kuro",
-    subtitle: "LE PARADIS DU DRIFT",
+    name: t("zone.mountain"),
+    subtitle: t("zone.mountain.sub"),
     icon: MountainIcon,
     number: "03",
     className: "bg-[#302e32]",
@@ -29,8 +30,8 @@ export function ZoneCards() {
   return (
     <section className="mt-7">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="eyebrow">Un monde. Trois terrains de jeu.</h3>
-        <span className="text-[9px] text-[#626e70]">TOUT EST CONNECTÉ</span>
+        <h3 className="eyebrow">{t("zones.title")}</h3>
+        <span className="text-[9px] text-[#626e70]">{t("zones.connected")}</span>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {ZONES.map((e) => (

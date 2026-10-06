@@ -1,5 +1,6 @@
 import React from "react";
 import { ArrowLeftIcon, ArrowRightIcon, ArrowDownIcon, ArrowUpIcon } from "lucide-react";
+import { t } from "../../i18n.js";
 export function TouchControls({ controls }) {
   const pressCounts = React.useRef({});
   const setPressed = (key, pressed) => {
@@ -32,7 +33,7 @@ export function TouchControls({ controls }) {
         <div
           className="touch-button"
           role="button"
-          aria-label="Tourner à gauche"
+          aria-label={t("touch.left")}
           {...bindButton("ArrowLeft")}
         >
           <ArrowLeftIcon />
@@ -40,7 +41,7 @@ export function TouchControls({ controls }) {
         <div
           className="touch-button"
           role="button"
-          aria-label="Tourner à droite"
+          aria-label={t("touch.right")}
           {...bindButton("ArrowRight")}
         >
           <ArrowRightIcon />
@@ -53,18 +54,18 @@ export function TouchControls({ controls }) {
         <div
           className="touch-button !w-14 text-[9px] font-bold"
           role="button"
-          aria-label="Sortir ou entrer dans un véhicule"
+          aria-label={t("touch.foot")}
           {...bindButton("KeyF")}
         >
-          PIED
+          {t("touch.footLabel")}
         </div>
-        <div className="touch-button" role="button" aria-label="Freiner" {...bindButton("ArrowDown")}>
+        <div className="touch-button" role="button" aria-label={t("touch.brake")} {...bindButton("ArrowDown")}>
           <ArrowDownIcon />
         </div>
         <div
           className="touch-button !border-[#c6dc77]/60 !bg-[#c6dc77]/25"
           role="button"
-          aria-label="Accélérer"
+          aria-label={t("touch.accelerate")}
           {...bindButton("ArrowUp")}
         >
           <ArrowUpIcon />

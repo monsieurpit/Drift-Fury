@@ -1,10 +1,11 @@
 import { FUEL_STATIONS } from "../data/stations.js";
+import { t } from "../../i18n.js";
 export function Minimap({ hud }) {
   const mapX = (e) => ((e + 180) / 395) * 140 + 10;
   const mapZ = (e) => ((e + 530) / 730) * 145 + 8;
   return (
     <div className="hud-glass hidden w-[165px] p-3 sm:block">
-      <div className="mb-2 text-[9px] font-semibold uppercase tracking-widest text-[#a0b0b0]">{hud.zone}</div>
+      <div className="mb-2 text-[9px] font-semibold uppercase tracking-widest text-[#a0b0b0]">{t(`zone.${hud.zone}`)}</div>
       <svg viewBox="0 0 160 165" className="h-[160px] w-full">
         <rect width="160" height="165" rx="6" fill="#1d2d2d" />
         <path
@@ -40,8 +41,8 @@ export function Minimap({ hud }) {
         </g>
       </svg>
       <div className="mt-2 flex justify-between text-[7px] tracking-wider text-[#93a39b]">
-        <span>■ STATION</span>
-        <span className="text-[#88b7ef]">● POLICE</span>
+        <span>■ {t("hud.station")}</span>
+        <span className="text-[#88b7ef]">● {t("hud.police")}</span>
       </div>
     </div>
   );

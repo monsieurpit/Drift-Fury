@@ -657,11 +657,11 @@ export function createGame(car, engine, solids, noPolice = false) {
       }
       state.arrest = (state.arrestTimer / 5) * 100;
       state.speed = Math.round(speed * 3.6);
-      state.zone = state.z < -160 ? "Montagne Kuro" : state.x > 130 ? "Autoroute A9" : "Centre-ville";
+      state.zone = state.z < -160 ? "mountain" : state.x > 130 ? "highway" : "city";
       state.y = terrainHeight(state.x, state.z);
       if (state.health <= 0 || state.arrest >= 100) {
         state.ended = true;
-        state.reason = state.health <= 0 ? "Véhicule détruit" : "Vous êtes arrêté";
+        state.reason = state.health <= 0 ? "destroyed" : "arrested";
       }
       return state;
     },

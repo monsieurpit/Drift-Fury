@@ -1,26 +1,19 @@
 import React from "react";
+import { t } from "../../i18n.js";
 
 // The loading steps of a session, in order, with the progress at which each one starts (see
 // startGameSession.js, which reports progress from 0 to 1 as it goes).
 const STEPS = [
-  ["Ville et montagne", 0],
-  ["Véhicules et police", 0.42],
-  ["Textures photoréalistes", 0.48],
-  ["Reflets et éclairage", 0.76],
-  ["Shaders", 0.8],
-  ["Son du moteur", 0.88],
-  ["Préchauffage du rendu", 0.9],
+  [t("loading.step.world"), 0],
+  [t("loading.step.vehicles"), 0.42],
+  [t("loading.step.textures"), 0.48],
+  [t("loading.step.lighting"), 0.76],
+  [t("loading.step.shaders"), 0.8],
+  [t("loading.step.sound"), 0.88],
+  [t("loading.step.warmup"), 0.9],
 ];
 
-const TIPS = [
-  "ESPACE en virage pour déclencher un drift. Gardez l'angle pour faire monter le combo.",
-  "F pour sortir de la voiture ou y remonter.",
-  "E à une station-service pour changer de voiture.",
-  "Clic droit et glisser pour tourner la caméra, molette pour zoomer.",
-  "La police bloque les carrefours devant vous : changez de rue avant d'y arriver.",
-  "Hors de vue pendant cinq secondes, la police perd votre trace.",
-  "La route de montagne mène au belvédère du sommet.",
-];
+const TIPS = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => t(`tip.${n}`));
 
 /** Full-screen loading screen shown while a session loads; fades out when `done`. */
 export function LoadingScreen({ progress = 0, label = "", done = false, error = null }) {
@@ -47,16 +40,16 @@ export function LoadingScreen({ progress = 0, label = "", done = false, error = 
     >
       <div className="flex items-center gap-2">
         <span className="loading-screen__dot" />
-        <span className="eyebrow !text-[#b3c578]">SESSION LIBRE / CHARGEMENT</span>
+        <span className="eyebrow !text-[#b3c578]">{t("loading.eyebrow")}</span>
       </div>
 
       <div className="loading-screen__body">
         <h1 className="race-title loading-screen__title">
-          {"PRÉPARATION DE "}
-          <span className="text-[#c6dc77]">LA NUIT.</span>
+          {t("loading.title1")}
+          <span className="text-[#c6dc77]">{t("loading.title2")}</span>
         </h1>
         <div className="loading-screen__status">
-          <p className="loading-screen__label">{error ? "Erreur de chargement" : label}</p>
+          <p className="loading-screen__label">{error ? t("loading.error") : label}</p>
           <p className="race-title loading-screen__percent">
             {percent}
             <small>%</small>
@@ -81,13 +74,13 @@ export function LoadingScreen({ progress = 0, label = "", done = false, error = 
         </ol>
         {error && (
           <p className="loading-screen__error">
-            Le jeu n'a pas pu démarrer ({String(error.message || error)}). Rechargez la page pour réessayer.
+            {t("loading.failed", { message: String(error.message || error) })}
           </p>
         )}
       </div>
 
       <div className="loading-screen__tip">
-        <p className="eyebrow !text-[8px]">Astuce</p>
+        <p className="eyebrow !text-[8px]">{t("loading.tip")}</p>
         <p>{TIPS[tip]}</p>
       </div>
     </div>

@@ -1,14 +1,15 @@
+import { t } from "../../i18n.js";
 // Graphics quality presets. The choice is stored per browser; "auto" picks a preset from the device and is
 // then adjusted by the session's frame-time monitor (it steps the preset down when frames stay slow).
 
 export const QUALITY_LEVELS = ["low", "medium", "high", "ultra"];
 
 export const QUALITY_LABELS = {
-  auto: "AUTO",
-  low: "BASSE",
-  medium: "MOYENNE",
-  high: "HAUTE",
-  ultra: "ULTRA",
+  auto: t("quality.auto"),
+  low: t("quality.low"),
+  medium: t("quality.medium"),
+  high: t("quality.high"),
+  ultra: t("quality.ultra"),
 };
 
 /** What each preset turns on. Pixel budgets are in megapixels (see gamePixelRatio). */
@@ -104,11 +105,11 @@ const BROKEN_KEY = "drift-fury-broken-features-v2";
 
 /** Suspects, in the order the watchdog tries them, with how the pause menu names them. */
 export const FEATURE_LABELS = {
-  taa: "Anticrénelage temporel TAA (remplacé par MSAA ou SMAA)",
-  msaa: "Anticrénelage MSAA (remplacé par SMAA)",
-  ao: "Occlusion ambiante",
-  grading: "Étalonnage des couleurs",
-  shadows: "Ombres",
+  taa: t("feature.taa"),
+  msaa: t("feature.msaa"),
+  ao: t("feature.ao"),
+  grading: t("feature.grading"),
+  shadows: t("feature.shadows"),
 };
 
 /** The set of features marked broken on this device. */

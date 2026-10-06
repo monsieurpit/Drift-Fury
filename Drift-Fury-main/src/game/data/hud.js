@@ -16,7 +16,7 @@ export const INITIAL_HUD = {
   drifting: false,
   onFoot: false,
   station: -1,
-  zone: "Centre-ville",
+  zone: "city",
   x: 0,
   z: 0,
   heading: 0,

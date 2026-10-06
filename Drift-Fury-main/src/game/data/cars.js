@@ -1,3 +1,4 @@
+import { t } from "../../i18n.js";
 export const CARS = [
   {
     id: "sakura",
@@ -7,7 +8,7 @@ export const CARS = [
     price: 0,
     grip: 1,
     shape: "porsche",
-    description: "Coupé à moteur arrière. Équilibre et précision légendaires.",
+    description: t("car.sakura"),
   },
   {
     id: "outlaw",
@@ -17,7 +18,7 @@ export const CARS = [
     price: 0,
     grip: 0.86,
     shape: "muscle",
-    description: "Muscle car V8. Long capot, caractère brut, couple massif.",
+    description: t("car.outlaw"),
   },
   {
     id: "spectre",
@@ -27,7 +28,7 @@ export const CARS = [
     price: 0,
     grip: 1.12,
     shape: "super",
-    description: "Supercar à moteur central. V12 hurlant, ligne pure.",
+    description: t("car.spectre"),
   },
   {
     id: "titan",
@@ -38,6 +39,6 @@ export const CARS = [
     grip: 1.05,
     shape: "hyper",
     awd: true,
-    description: "Hypercar W16. Puissance radicale, aérodynamique extrême.",
+    description: t("car.titan"),
   },
 ];

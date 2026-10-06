@@ -35,6 +35,7 @@ import { terrainHeight } from "../world/terrain.js";
 import { loadStreetProps, placeStreetProps } from "../world/streetProps.js";
 import { ROAD_XS, ROAD_ZS } from "../data/roadGrid.js";
 import { MOON_DIRECTION } from "../world/sky.js";
+import { t } from "../../i18n.js";
 const CANCELLED = Symbol("cancelled");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -99,7 +100,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       throw CANCELLED;
     }
   };
-  await stage(0.01, "Moteur graphique");
+  await stage(0.01, t("stage.graphics"));
   const view = createRenderer(container, true);
   cleanup.push(() => view.dispose());
   // Safety net for devices that cannot cope with a quality level (phones and tablets above all): if the
@@ -158,8 +159,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     object.rotation.set(Math.atan2(front - back, 2.8), heading, Math.atan2(right - left, 1.6) + extraRoll);
   };
   // Photo-scanned 3D street props (streetProps.js), placed before the world is frozen and batched.
-  await stage(0.355, "Objets de rue");
-  const streetProps = await loadStreetProps((done) => loading.report(0.355 + 0.004 * done, "Objets de rue"));
+  await stage(0.355, t("stage.props"));
+  const streetProps = await loadStreetProps((done) => loading.report(0.355 + 0.004 * done, t("stage.props")));
   if (loading.cancelled()) {
     cleanup.forEach((dispose) => dispose());
     throw CANCELLED;
@@ -171,7 +172,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     lightByLamps,
     heightAt: terrainHeight,
   });
-  await stage(0.36, "Optimisation de la géométrie");
+  await stage(0.36, t("stage.geometry"));
   const staticBatch = batchStaticMeshes(scene, new Set(signals.flatMap((signal) => signal.lenses)), 96);
   // Everything in the scene so far is the world, which never moves: its shadows can be cached.
   const shadowCache = createShadowCache(
@@ -195,7 +196,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     // (three.js would still walk every descendant each frame: skip the whole subtree.)
     root.updateMatrixWorld = () => {};
   }
-  await stage(0.42, "Véhicules, police et circulation");
+  await stage(0.42, t("stage.vehicles"));
   const game = createGame(car, engine, solids, noPolice);
   // ?dfdebug exposes the live session for profiling tools
   const debugSession = /[?&]dfdebug\b/.test(location.search)
@@ -1042,7 +1043,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     for (;;) {
       const { loaded, total, ready } = scannedTextureProgress();
       if (ready) break;
-      await stage(0.48 + 0.2 * (loaded / Math.max(1, total)), `Textures photoréalistes ${loaded}/${total}`);
+      await stage(0.48 + 0.2 * (loaded / Math.max(1, total)), t("stage.textures", { done: loaded, total }));
       // A very slow connection: start anyway, the textures will appear when they arrive.
       if (Date.now() - waitStart > 30000) break;
       await sleep(80);
@@ -1068,11 +1069,11 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   for (const texture of textures) {
     if (texture.image && !texture.isRenderTargetTexture) renderer.initTexture(texture);
     if (++uploaded % 12 === 0)
-      await stage(0.68 + 0.07 * (uploaded / textures.size), "Envoi des textures au GPU");
+      await stage(0.68 + 0.07 * (uploaded / textures.size), t("stage.upload"));
   }
   // City reflections: captured once from the middle of the grid at street level, used as the scene's
   // environment while the player is in the city (the night sky's elsewhere).
-  await stage(0.76, "Reflets de la ville");
+  await stage(0.76, t("stage.reflections"));
   const skyEnvironment = scene.environment;
   clearLamps();
   let cityEnvironment = captureCityEnvironment(renderer, scene, CITY_REFLECTION_PROBE, [playerCar]);
@@ -1094,11 +1095,11 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   };
   // Every shader the session can need (the world, every traffic car look, police, effects), compiled in
   // parallel where the browser supports it.
-  await stage(0.8, "Compilation des shaders");
+  await stage(0.8, t("stage.shaders"));
   // Everything lit is lit by the world's lights too (clusteredLights.js); cars as they are set up.
   clusteredLights.patchAll(scene);
   await warmUpSession(renderer, scene, camera, [car.shape], (template) => carInstancer.prepare(template));
-  await stage(0.88, "Son du moteur");
+  await stage(0.88, t("stage.sound"));
   await Promise.race([audio.ready.catch(() => {}), sleep(15000)]);
   // A few full renders around the map, so the shadow, ambient occlusion and post-processing passes, the
   // mountain's chunks and every texture have all been drawn once before the session starts.
@@ -1110,7 +1111,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     [-60, 6, -20, 0, 1, -30],
   ];
   for (let index = 0; index < warmUpViews.length; index++) {
-    await stage(0.9 + 0.09 * (index / warmUpViews.length), "Préchauffage du rendu");
+    await stage(0.9 + 0.09 * (index / warmUpViews.length), t("stage.warmup"));
     const [x, y, z, lx, ly, lz] = warmUpViews[index];
     camera.position.set(x, y, z);
     camera.lookAt(lx, ly, lz);
@@ -1127,7 +1128,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   }
   composer.taa?.reset();
   camera.position.set(0, 9, 85);
-  await stage(1, "Prêt");
+  await stage(1, t("stage.ready"));
   if (debugSession) {
     debugSession.fx = effects;
     debugSession.ready = true;

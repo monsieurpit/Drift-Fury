@@ -3,6 +3,7 @@ import { CarPreview } from "./CarPreview.jsx";
 import { GarageHeader } from "./GarageHeader.jsx";
 import { LoadoutPanel } from "./LoadoutPanel.jsx";
 import { ZoneCards } from "./ZoneCards.jsx";
+import { t, formatNumber } from "../../i18n.js";
 export function GarageScreen({
   progress,
   car,
@@ -22,22 +23,22 @@ export function GarageScreen({
           <div>
             <div className="mb-3 flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-[#c6dc77]" />
-              <span className="eyebrow !text-[#b3c578]">LE GARAGE / SESSION LIBRE</span>
+              <span className="eyebrow !text-[#b3c578]">{t("garage.eyebrow")}</span>
             </div>
             <h1 className="race-title text-5xl md:text-[64px]">
-              {"LA NUIT VOUS "}
-              <span className="text-[#c6dc77]">APPARTIENT.</span>
+              {t("garage.title1")}
+              <span className="text-[#c6dc77]">{t("garage.title2")}</span>
             </h1>
             <p className="mt-3 text-[12px] leading-6 text-[#8f989b]">
-              Trouvez votre trajectoire. Faites monter le score. Semez la police.
+              {t("garage.subtitle")}
             </p>
           </div>
           <div className="hidden items-center gap-3 pb-1 md:flex">
             <TrophyIcon size={20} className="text-[#8b967c]" />
             <div>
-              <p className="eyebrow !text-[8px]">Meilleur drift</p>
+              <p className="eyebrow !text-[8px]">{t("garage.bestDrift")}</p>
               <p className="mt-1 text-sm font-semibold">
-                {Math.floor(progress.best).toLocaleString("fr-FR")}{" "}
+                {formatNumber(Math.floor(progress.best))}{" "}
                 <span className="text-[10px] font-normal text-[#748081]">PTS</span>
               </p>
             </div>
@@ -47,11 +48,11 @@ export function GarageScreen({
           <div className="relative min-h-[350px] overflow-hidden rounded-2xl border border-white/10 bg-[#171b1e] md:min-h-[430px]">
             <CarPreview car={car} />
             <div className="absolute left-6 top-6">
-              <p className="eyebrow !text-[9px]">SÉLECTION ACTUELLE</p>
+              <p className="eyebrow !text-[9px]">{t("garage.currentSelection")}</p>
               <h2 className="race-title mt-2 text-[40px]">{car.name.toUpperCase()}</h2>
               <span className="mt-3 inline-block rounded border border-white/15 bg-[#101315]/60 px-2 py-1 text-[9px] tracking-[.14em] text-[#aab4b5]">
                 {engine.id}
-                {" • PROPULSION"}
+                {" • " + t("drive.rwd")}
               </span>
             </div>
             <div className="absolute right-6 top-6 flex gap-1.5">
@@ -69,13 +70,13 @@ export function GarageScreen({
               <span className="text-[9px] tracking-[.12em] text-[#8e999b]">
                 {"01 / "}
                 {String(progress.cars.length).padStart(2, "0")}
-                {" VÉHICULES DÉBLOQUÉS"}
+                {t("garage.unlocked")}
               </span>
               <button
                 onClick={() => onGarage("cars")}
                 className="flex items-center gap-2 text-[10px] text-[#c6dc77]"
               >
-                OUVRIR LE GARAGE
+                {t("garage.openGarage")}
                 <ArrowUpRightIcon size={15} />
               </button>
             </div>
@@ -93,25 +94,25 @@ export function GarageScreen({
         <footer className="mt-7 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-5">
           <div className="flex flex-wrap items-center gap-4 text-[9px] text-[#818d90]">
             <span className="flex items-center gap-2">
-              <kbd className="race-key">Z Q S D</kbd>
-              {" / FLÈCHES • CONDUIRE"}
+              <kbd className="race-key">{t("garage.keysMove")}</kbd>
+              {t("garage.keysDrive")}
             </span>
             <span className="flex items-center gap-2">
-              <kbd className="race-key">ESPACE</kbd>
-              {" FREIN À MAIN"}
+              <kbd className="race-key">{t("garage.keySpace")}</kbd>
+              {t("garage.handbrake")}
             </span>
             <span className="flex items-center gap-2">
               <kbd className="race-key">E</kbd>
-              {" STATION"}
+              {t("garage.station")}
             </span>
             <span className="flex items-center gap-2">
               <kbd className="race-key">ESC</kbd>
-              {" PAUSE"}
+              {t("garage.pause")}
             </span>
           </div>
           <div className="flex items-center gap-2 text-[9px] text-[#7e8986]">
             <ShieldAlertIcon size={13} />
-            <span>LES RUES N'ONT PAS DE RÈGLES. LA POLICE, SI.</span>
+            <span>{t("garage.tagline")}</span>
           </div>
         </footer>
       </main>

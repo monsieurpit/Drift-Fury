@@ -1,4 +1,5 @@
 import { ArrowUpRightIcon, CoinsIcon, VolumeXIcon, Volume2Icon } from "lucide-react";
+import { t, formatNumber } from "../../i18n.js";
 export function GarageHeader({ progress, muted, onMute }) {
   return (
     <header className="flex h-20 items-center justify-between border-b border-white/10 px-5 md:px-10">
@@ -16,12 +17,12 @@ export function GarageHeader({ progress, muted, onMute }) {
       <div className="flex items-center gap-5">
         <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[.03] px-3 py-2 text-xs">
           <CoinsIcon size={15} className="text-[#c6dc77]" />
-          <b>{progress.credits.toLocaleString("fr-FR")}</b>
+          <b>{formatNumber(progress.credits)}</b>
           <span className="hidden text-[#798184] sm:inline">CR</span>
         </div>
         <button
           onClick={onMute}
-          aria-label={muted ? "Activer le son" : "Couper le son"}
+          aria-label={muted ? t("sound.on") : t("sound.off")}
           className="text-[#9aa2a4]"
         >
           {muted ? <VolumeXIcon size={19} /> : <Volume2Icon size={19} />}

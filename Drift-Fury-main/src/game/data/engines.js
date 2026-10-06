@@ -1,3 +1,4 @@
+import { t } from "../../i18n.js";
 export const GEARBOX = {
   ratios: [3.5, 2.4, 1.75, 1.32, 1.05, 0.86, 0.72],
   reverse: -3.2,
@@ -14,7 +15,7 @@ export const ENGINE_REDLINE = {
 export const ENGINES = [
   {
     id: "V6",
-    name: "V6 Twin Turbo",
+    name: t("engine.V6.name"),
     hp: 320,
     torque: 400,
     max: 52,
@@ -22,11 +23,11 @@ export const ENGINES = [
     consumption: 0.12,
     pitch: 95,
     price: 0,
-    description: "Aigu et nerveux. Réponse rapide, drift précis.",
+    description: t("engine.V6"),
   },
   {
     id: "V8",
-    name: "V8 Supercharged",
+    name: t("engine.V8.name"),
     hp: 510,
     torque: 680,
     max: 60,
@@ -34,11 +35,11 @@ export const ENGINES = [
     consumption: 0.18,
     pitch: 48,
     price: 0,
-    description: "Grave et grondant. Un couple massif dès les bas régimes.",
+    description: t("engine.V8"),
   },
   {
     id: "V12",
-    name: "V12 Atmosphérique",
+    name: t("engine.V12.name"),
     hp: 740,
     torque: 720,
     max: 79,
@@ -46,11 +47,11 @@ export const ENGINES = [
     consumption: 0.23,
     pitch: 145,
     price: 0,
-    description: "Un hurlement de supercar. La ligne droite est votre terrain.",
+    description: t("engine.V12"),
   },
   {
     id: "W16",
-    name: "W16 Quad Turbo",
+    name: t("engine.W16.name"),
     hp: 1200,
     torque: 1500,
     max: 87,
@@ -58,6 +59,6 @@ export const ENGINES = [
     consumption: 0.34,
     pitch: 36,
     price: 0,
-    description: "Rauque et monstrueux. Accélération brute, consommation extrême.",
+    description: t("engine.W16"),
   },
 ];

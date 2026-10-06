@@ -12,7 +12,8 @@ import { PauseMenu } from "../game/ui/PauseMenu.jsx";
 import { PickerModal } from "../game/ui/PickerModal.jsx";
 import { ResultScreen } from "../game/ui/ResultScreen.jsx";
 import { TouchControls } from "../game/ui/TouchControls.jsx";
-const QUALITY_NAMES = { low: "BASSE", medium: "MOYENNE", high: "HAUTE", ultra: "ULTRA" };
+import { t } from "../i18n.js";
+const QUALITY_NAMES = { low: t("quality.low"), medium: t("quality.medium"), high: t("quality.high"), ultra: t("quality.ultra") };
 
 /** Shown when the device ran out of graphics memory (or failed a shader) at the chosen quality. */
 function GraphicsFailure({ failure, onRestart }) {
@@ -22,21 +23,19 @@ function GraphicsFailure({ failure, onRestart }) {
     <div className="loading-screen subtle-grid" role="alert">
       <div className="flex items-center gap-2">
         <span className="loading-screen__dot" />
-        <span className="eyebrow !text-[#b3c578]">GRAPHISMES</span>
+        <span className="eyebrow !text-[#b3c578]">{t("failure.graphics")}</span>
       </div>
       <div className="loading-screen__body">
         <h1 className="race-title loading-screen__title">
-          {"TROP LOURD POUR "}
-          <span className="text-[#c6dc77]">CET APPAREIL.</span>
+          {t("failure.title1")}
+          <span className="text-[#c6dc77]">{t("failure.title2")}</span>
         </h1>
         <p className="mt-6 text-[12px] leading-6 text-[#c9cdc8]">
-          {failure.reason === "memory"
-            ? `Le mode ${from} a dépassé la mémoire graphique de cet appareil.`
-            : `Le mode ${from} n'est pas pris en charge par cet appareil.`}
-          {from === to ? " Le jeu redémarre." : ` Le jeu repasse en mode ${to} et redémarre.`}
+          {failure.reason === "memory" ? t("failure.memory", { from }) : t("failure.unsupported", { from })}
+          {from === to ? t("failure.restarting") : t("failure.stepDown", { to })}
         </p>
         <button onClick={onRestart} className="lime-button mt-6 px-5 py-4 text-[13px]">
-          REDÉMARRER MAINTENANT
+          {t("failure.restartNow")}
         </button>
       </div>
       <div />
@@ -93,7 +92,7 @@ export function GamePage() {
     };
     setHud(INITIAL_HUD);
     loadingRef.current = true;
-    setLoading({ progress: 0, label: "Démarrage", done: false, error: null });
+    setLoading({ progress: 0, label: t("stage.starting"), done: false, error: null });
     setResult(null);
     setPaused(false);
     setScreen("race");
@@ -186,9 +185,7 @@ export function GamePage() {
             <TouchControls controls={controls} />
           )}
           <div className="pointer-events-none absolute bottom-2 left-1/2 hidden -translate-x-1/2 text-[8px] tracking-widest text-white/50 xl:block">
-            {
-              "ZQSD / WASD / FLÈCHES • CONDUIRE \xA0 ESPACE • DRIFT \xA0 E • STATION \xA0 F • PIED/ENTRER \xA0 ESC • PAUSE"
-            }
+            {t("game.controls")}
           </div>
           {paused && !result && (
             <PauseMenu
@@ -198,7 +195,7 @@ export function GamePage() {
               onEnd={() =>
                 finishSession({
                   ...hud,
-                  reason: "Session terminée",
+                  reason: "ended",
                 })
               }
             />
