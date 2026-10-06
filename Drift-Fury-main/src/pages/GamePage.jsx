@@ -12,6 +12,38 @@ import { PauseMenu } from "../game/ui/PauseMenu.jsx";
 import { PickerModal } from "../game/ui/PickerModal.jsx";
 import { ResultScreen } from "../game/ui/ResultScreen.jsx";
 import { TouchControls } from "../game/ui/TouchControls.jsx";
+const QUALITY_NAMES = { low: "BASSE", medium: "MOYENNE", high: "HAUTE", ultra: "ULTRA" };
+
+/** Shown when the device ran out of graphics memory (or failed a shader) at the chosen quality. */
+function GraphicsFailure({ failure, onRestart }) {
+  const from = QUALITY_NAMES[failure.from] || failure.from;
+  const to = QUALITY_NAMES[failure.to] || failure.to;
+  return (
+    <div className="loading-screen subtle-grid" role="alert">
+      <div className="flex items-center gap-2">
+        <span className="loading-screen__dot" />
+        <span className="eyebrow !text-[#b3c578]">GRAPHISMES</span>
+      </div>
+      <div className="loading-screen__body">
+        <h1 className="race-title loading-screen__title">
+          {"TROP LOURD POUR "}
+          <span className="text-[#c6dc77]">CET APPAREIL.</span>
+        </h1>
+        <p className="mt-6 text-[12px] leading-6 text-[#c9cdc8]">
+          {failure.reason === "memory"
+            ? `Le mode ${from} a dépassé la mémoire graphique de cet appareil.`
+            : `Le mode ${from} n'est pas pris en charge par cet appareil.`}
+          {from === to ? " Le jeu redémarre." : ` Le jeu repasse en mode ${to} et redémarre.`}
+        </p>
+        <button onClick={onRestart} className="lime-button mt-6 px-5 py-4 text-[13px]">
+          REDÉMARRER MAINTENANT
+        </button>
+      </div>
+      <div />
+    </div>
+  );
+}
+
 export function GamePage() {
   const [progress, setProgress] = React.useState(loadProgress);
   const [screen, setScreen] = React.useState("lobby");
@@ -24,6 +56,13 @@ export function GamePage() {
   // Session loading: { progress, label, done, error } while the loading screen is up.
   const [loading, setLoading] = React.useState(null);
   const loadingRef = React.useRef(false);
+  // Set when the device could not cope with the graphics quality (see startGameSession.js).
+  const [graphicsFailure, setGraphicsFailure] = React.useState(null);
+  React.useEffect(() => {
+    if (!graphicsFailure) return;
+    const timer = setTimeout(() => window.location.reload(), 5000);
+    return () => clearTimeout(timer);
+  }, [graphicsFailure]);
   const controls = React.useRef({
     keys: {},
     paused: false,
@@ -126,6 +165,10 @@ export function GamePage() {
               loadingRef.current = false;
               setLoading((value) => (value ? { ...value, progress: 1, done: true } : value));
             }}
+            onGraphicsFailure={(failure) => {
+              controls.current.paused = true;
+              setGraphicsFailure(failure);
+            }}
             onLoadError={(error) => setLoading((value) => (value ? { ...value, error } : value))}
             noPolice={noPolice}
           />
@@ -161,6 +204,9 @@ export function GamePage() {
           )}{" "}
           {result && <ResultScreen result={result} onReturn={returnToLobby} />}
           {loading && <LoadingScreen {...loading} />}
+          {graphicsFailure && (
+            <GraphicsFailure failure={graphicsFailure} onRestart={() => window.location.reload()} />
+          )}
         </div>
       )}
       {picker && (

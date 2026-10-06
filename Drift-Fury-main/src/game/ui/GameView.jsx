@@ -11,6 +11,7 @@ export function GameView({
   onLoading,
   onReady,
   onLoadError,
+  onGraphicsFailure,
   noPolice,
 }) {
   const containerRef = React.useRef(null);
@@ -23,6 +24,7 @@ export function GameView({
     onLoading,
     onReady,
     onLoadError,
+    onGraphicsFailure,
   });
   callbacksRef.current = {
     onHud,
@@ -32,6 +34,7 @@ export function GameView({
     onLoading,
     onReady,
     onLoadError,
+    onGraphicsFailure,
   };
   React.useEffect(() => {
     sessionRef.current = startGameSession(

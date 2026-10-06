@@ -27,7 +27,7 @@ import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
 import { createGradingPass } from "./gradingPass.js";
-import { QUALITY_PRESETS, resolveQuality } from "./quality.js";
+import { QUALITY_PRESETS, aoBlockedOnDevice, resolveQuality } from "./quality.js";
 /**
  * Ambient occlusion for the game view (soft contact shadows where surfaces meet). Alpha-tested foliage
  * cards are left out of its depth/normal pre-pass: drawn without their alpha they would read as solid
@@ -373,7 +373,7 @@ export function createRenderer(container, inGame = false) {
   const applyQuality = (level) => {
     quality = level;
     const preset = QUALITY_PRESETS[level];
-    if (composer.ao) composer.ao.enabled = preset.ao;
+    if (composer.ao) composer.ao.enabled = preset.ao && !aoBlockedOnDevice();
     composer.grading.enabled = preset.grading;
     const samples = renderer.capabilities.isWebGL2
       ? Math.min(preset.msaa, renderer.capabilities.maxSamples)

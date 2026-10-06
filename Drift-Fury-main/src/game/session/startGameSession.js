@@ -3,7 +3,13 @@ import { createAudio } from "../audio/createAudio.js";
 import { createEffects } from "../effects/effects.js";
 import { animatePerson, createPerson } from "../people/person.js";
 import { createRenderer, gamePixelRatio } from "../render/renderer.js";
-import { QUALITY_LEVELS, resolveQuality, storeQuality, storedQuality } from "../render/quality.js";
+import {
+  QUALITY_LEVELS,
+  blockAoOnDevice,
+  resolveQuality,
+  storeQuality,
+  storedQuality,
+} from "../render/quality.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
 import { warmUpSession } from "../render/warmUp.js";
 import { captureCityEnvironment } from "../render/reflectionProbe.js";
@@ -87,6 +93,32 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   await stage(0.01, "Moteur graphique");
   const view = createRenderer(container, true);
   cleanup.push(() => view.dispose());
+  // Safety net for devices that cannot cope with a quality level (phones and tablets above all): if the
+  // browser takes the graphics context away (out of graphics memory) or a shader fails to compile, the
+  // screen would just stay black. Instead, step down one quality level, remember it, and restart.
+  let graphicsFailed = false;
+  const graphicsFailure = (reason) => {
+    if (graphicsFailed) return;
+    graphicsFailed = true;
+    const level = QUALITY_LEVELS.indexOf(view.quality);
+    const lower = QUALITY_LEVELS[Math.max(0, level - 1)];
+    storeQuality(lower);
+    callbacks.current.onGraphicsFailure?.({ reason, from: view.quality, to: lower });
+  };
+  const onContextLost = (event) => {
+    event.preventDefault();
+    graphicsFailure("memory");
+  };
+  view.renderer.domElement.addEventListener("webglcontextlost", onContextLost);
+  view.renderer.debug.onShaderError = (gl, program, vertexShader, fragmentShader) => {
+    console.error(
+      "Shader error:",
+      gl.getProgramInfoLog(program),
+      gl.getShaderInfoLog(vertexShader),
+      gl.getShaderInfoLog(fragmentShader),
+    );
+    graphicsFailure("shader");
+  };
   const { scene, renderer, camera, sun, touchDevice, composer } = view;
   const worldSteps = buildWorldInSteps(scene);
   let worldStep = worldSteps.next();
@@ -752,6 +784,45 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       }
     }
     composer.render();
+    checkForBlackScreen();
+  }
+  // Black-screen watchdog: a short while after the session starts or the quality changes, look at the
+  // finished image. A night city always has lit windows and lamps; an image with no light at all means an
+  // effect silently failed on this GPU. Ambient occlusion is the usual suspect (it multiplies the image):
+  // turn it off for this device and look again; if it is still black, step the quality down.
+  let blackCheckFrames = 45;
+  const blackRow = new Uint8Array(4 * 4096);
+  function checkForBlackScreen() {
+    if (blackCheckFrames <= 0 || --blackCheckFrames > 0) return;
+    const gl = renderer.getContext();
+    // A lost context reads back as black: that is not an effect failing (handled above).
+    if (graphicsFailed || gl.isContextLost()) return;
+    renderer.setRenderTarget(null);
+    const width = Math.min(gl.drawingBufferWidth, 4096);
+    let brightest = 0;
+    for (const fraction of [0.3, 0.5, 0.7]) {
+      gl.readPixels(
+        0,
+        Math.floor(gl.drawingBufferHeight * fraction),
+        width,
+        1,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        blackRow,
+      );
+      for (let i = 0; i < width * 4; i += 4) {
+        brightest = Math.max(brightest, blackRow[i], blackRow[i + 1], blackRow[i + 2]);
+      }
+    }
+    if (brightest > 4) return;
+    if (composer.ao?.enabled) {
+      console.warn("Black frame with ambient occlusion on: turning it off on this device.");
+      blockAoOnDevice();
+      composer.ao.enabled = false;
+      blackCheckFrames = 30;
+    } else {
+      graphicsFailure("shader");
+    }
   }
   // Photo-scanned textures (downloaded in the background since the world started building).
   if (scannedTexturesRequested()) {
@@ -857,6 +928,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       view.applyQuality(resolveQuality(choice));
       resolutionScale = 1;
       skipWindow = true;
+      blackCheckFrames = 45;
       windowTime = 0;
       windowFrames = 0;
       const ratio = gamePixelRatio(container.clientWidth, container.clientHeight, touchDevice, view.quality);

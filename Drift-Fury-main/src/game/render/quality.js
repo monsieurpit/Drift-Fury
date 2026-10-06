@@ -96,3 +96,22 @@ export function detectQuality() {
 export function resolveQuality(choice = storedQuality()) {
   return choice === "auto" ? detectQuality() : choice;
 }
+
+const NO_AO_KEY = "drift-fury-no-ao";
+
+/** Whether ambient occlusion was found not to work on this device (it rendered a black screen). */
+export function aoBlockedOnDevice() {
+  try {
+    return localStorage.getItem(NO_AO_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function blockAoOnDevice() {
+  try {
+    localStorage.setItem(NO_AO_KEY, "1");
+  } catch {
+    /* ignore */
+  }
+}
