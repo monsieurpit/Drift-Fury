@@ -57,6 +57,7 @@ export function buildTrafficControl(world) {
       }
     }
   });
+  const lensMaterials = [];
   function addTrafficSignal(x, z, facing, axis) {
     const pole = new Group();
     pole.position.set(x, 0, z);
@@ -87,6 +88,20 @@ export function buildTrafficControl(world) {
     backplate.position.set(0, 5.35, 0.115);
     pole.add(backplate);
     const shades = ["#f02e2a", "#e8a528", "#2cae50"];
+    // Every signal on an axis shows the same light, so they share their three lens materials: the lenses
+    // of a whole axis batch into a few draw calls instead of three per signal head.
+    lensMaterials[axis] ||= shades.map(
+      (shade) =>
+        new MeshStandardMaterial({
+          color: shade,
+          map: ledTexture,
+          emissive: shade,
+          emissiveMap: ledTexture,
+          emissiveIntensity: 0.025,
+          roughness: 0.18,
+          metalness: 0.04,
+        }),
+    );
     const lenses = [];
     for (let light = 0; light < 3; light++) {
       const y = 5.77 - light * 0.42;
@@ -95,15 +110,7 @@ export function buildTrafficControl(world) {
       bezel.position.set(0, y, 0.473);
       pole.add(bezel);
       // LED array lens: the glow comes from a grid of LEDs behind a clear cover.
-      const material = new MeshStandardMaterial({
-        color: shades[light],
-        map: ledTexture,
-        emissive: shades[light],
-        emissiveMap: ledTexture,
-        emissiveIntensity: 0.025,
-        roughness: 0.18,
-        metalness: 0.04,
-      });
+      const material = lensMaterials[axis][light];
       const lens = new Mesh(new CylinderGeometry(0.135, 0.135, 0.048, 24), material);
       lens.rotation.x = Math.PI / 2;
       lens.position.set(0, y, 0.505);

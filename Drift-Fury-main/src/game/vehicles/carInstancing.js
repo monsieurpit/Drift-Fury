@@ -25,10 +25,12 @@ export function createCarInstancer(scene) {
       }
       const mesh = new InstancedMesh(part.geometry, part.material, look.capacity);
       mesh.count = 0;
+      mesh.visible = false; // until it holds a car
       mesh.frustumCulled = false; // culled per car below
       mesh.castShadow = part.castShadow;
       mesh.receiveShadow = part.receiveShadow;
       mesh.renderOrder = part.renderOrder;
+      mesh.layers.mask = part.layers;
       mesh.name = part.name ? `car-${part.name}` : "";
       mesh.userData.carInstances = true;
       part.mesh = mesh;
@@ -51,6 +53,7 @@ export function createCarInstancer(scene) {
         castShadow: object.castShadow,
         receiveShadow: object.receiveShadow,
         renderOrder: object.renderOrder,
+        layers: object.layers.mask,
         name: object.name,
         light: LIGHT_NAMES.has(object.name) ? object.name : null,
         proxy: object.name === "car-shadow-proxy",
@@ -111,7 +114,11 @@ export function createCarInstancer(scene) {
             part.mesh.setMatrixAt(part.mesh.count++, matrix);
           }
         }
-        for (const part of look.parts) part.mesh.instanceMatrix.needsUpdate = true;
+        for (const part of look.parts) {
+          part.mesh.instanceMatrix.needsUpdate = true;
+          // An empty instanced mesh still costs a full draw call in every pass: skip it.
+          part.mesh.visible = part.mesh.count > 0;
+        }
       }
     },
   };

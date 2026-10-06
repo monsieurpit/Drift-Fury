@@ -1,6 +1,7 @@
 import { Box3, BoxGeometry, CylinderGeometry, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
+import { SHADOW_ONLY_LAYER } from "../render/shadowCache.js";
 import { buildCar } from "./carModel.js";
 /* traffic and police cars never animate their parts, so each look is built and batched once, then cloned */
 export const trafficTemplates = new Map();
@@ -70,6 +71,9 @@ function shadowProxy(template) {
   proxy.name = "car-shadow-proxy";
   proxy.castShadow = true;
   proxy.receiveShadow = false;
+  // Only for the shadow map: on its own layer, so the main and ambient-occlusion passes don't spend a
+  // draw call on an invisible box (the shadow cache draws this layer, see shadowCache.js).
+  proxy.layers.set(SHADOW_ONLY_LAYER);
   return proxy;
 }
 

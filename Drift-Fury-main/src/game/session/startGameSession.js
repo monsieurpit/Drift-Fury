@@ -163,6 +163,18 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     MOON_DIRECTION,
   );
   cleanup.push(() => shadowCache.dispose());
+  // The world never moves: compute its transforms once and take it out of the per-frame matrix update
+  // (which otherwise walks ~2000 objects every frame). Lights stay live (the moon follows the player).
+  for (const root of scene.children) {
+    if (root.isLight || root === sun.target) continue;
+    root.updateMatrixWorld(true);
+    root.traverse((object) => {
+      if (!object.isLight) object.matrixAutoUpdate = false;
+    });
+    root.matrixWorldAutoUpdate = false;
+    // (three.js would still walk every descendant each frame: skip the whole subtree.)
+    root.updateMatrixWorld = () => {};
+  }
   await stage(0.42, "Véhicules, police et circulation");
   const game = createGame(car, engine, solids, noPolice);
   const lampLights = [];
@@ -637,6 +649,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           state.drifting ? Math.sin(state.elapsed * 7) * 0.015 : 0,
         );
         playerCar.userData.wheels.forEach((e) => (e.rotation.x -= state.speed * 0.01 * dt));
+        playerCar.userData.updateWheels?.();
         const braking = state.brake > 0 || (state.speed > 5 && state.throttle === 0);
         // Tail lights are on at night; braking makes them flare.
         playerCar.userData.brakeLights.forEach((t) => (t.material.emissiveIntensity = braking ? 2.6 : 0.6));

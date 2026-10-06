@@ -99,6 +99,7 @@ export function createDriftSmoke(scene, { maxPuffs = 160, patch } = {}) {
   mesh.frustumCulled = false;
   mesh.renderOrder = 5;
   mesh.count = 0;
+  mesh.visible = false;
   scene.add(mesh);
 
   const puffs = Array.from({ length: maxPuffs }, () => ({
@@ -154,6 +155,7 @@ export function createDriftSmoke(scene, { maxPuffs = 160, patch } = {}) {
         live++;
       }
       mesh.count = live;
+      mesh.visible = live > 0; // no draw call while there is no smoke
       mesh.instanceMatrix.needsUpdate = true;
       alpha.needsUpdate = true;
       rotation.needsUpdate = true;

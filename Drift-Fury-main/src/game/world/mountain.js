@@ -946,7 +946,7 @@ function chunkedInstances(
   entries,
   geometry,
   material,
-  { chunkSize = 128, castShadow = true, name } = {},
+  { chunkSize = 128, castShadow = true, name, maxDistance = Infinity } = {},
 ) {
   const chunks = new Map();
   for (const entry of entries) {
@@ -956,7 +956,25 @@ function chunkedInstances(
   }
   const origin = { x: 0, y: 0, z: 0 };
   for (const list of chunks.values()) {
-    scene.add(instancedMesh(list, geometry, material, origin, { castShadow, name }));
+    if (maxDistance === Infinity) {
+      scene.add(instancedMesh(list, geometry, material, origin, { castShadow, name }));
+      continue;
+    }
+    // Small things (grass tufts) are smaller than a pixel beyond maxDistance: the chunk is not drawn
+    // from farther than that (an LOD whose far level is empty), rather than drawing thousands of
+    // sub-pixel blades every frame.
+    const centre = { x: 0, y: 0, z: 0 };
+    for (const entry of list) {
+      centre.x += entry.x / list.length;
+      centre.y += entry.y / list.length;
+      centre.z += entry.z / list.length;
+    }
+    const lod = new LOD();
+    lod.name = name;
+    lod.position.set(centre.x, centre.y, centre.z);
+    lod.addLevel(instancedMesh(list, geometry, material, centre, { castShadow, name }), 0);
+    lod.addLevel(new Object3D(), maxDistance + chunkSize * 0.7);
+    scene.add(lod);
   }
 }
 
@@ -1070,6 +1088,7 @@ function buildGrassTufts(world, random) {
     name: "mountain-grass",
     castShadow: false,
     chunkSize: 128,
+    maxDistance: 160,
   });
 }
 

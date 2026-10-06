@@ -7,7 +7,13 @@
 // target. Each frame the cached static shadows are copied back (one framebuffer blit of colour and depth)
 // and only the things that move (the player's car, police and traffic cars, people) are drawn on top,
 // depth-tested against the static ones. The shadow map ends up exactly what a full render would give.
-import { NearestFilter, Vector3, WebGLRenderTarget } from "three";
+import { Camera, NearestFilter, Vector3, WebGLRenderTarget } from "three";
+
+/** Layer of objects drawn only into the shadow map (the cars' simple shadow casters). */
+export const SHADOW_ONLY_LAYER = 1;
+// The shadow map decides what to draw from the camera it is given: this one sees every layer.
+const shadowView = new Camera();
+shadowView.layers.enableAll();
 
 const worldUp = new Vector3(0, 1, 0);
 const lightX = new Vector3();
@@ -67,7 +73,7 @@ export function createShadowCache(renderer, scene, camera, sun, staticRoots, dir
     const level0 = renderer.getActiveMipmapLevel();
     const renderInto = (root) => {
       shadowMap.needsUpdate = true;
-      renderOriginal.call(this, lights, root, viewCamera);
+      renderOriginal.call(this, lights, root, shadowView);
     };
     const map = sun.shadow.map;
     const moving = [];
