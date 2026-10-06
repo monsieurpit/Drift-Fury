@@ -199,3 +199,44 @@ export function buildLatheGeometry(prof, seg) {
   }
   return createGeometry(pos, nor, idx);
 }
+
+/**
+ * Lathe like buildLatheGeometry, with texture coordinates: u runs once around (the seam column is
+ * duplicated so it doesn't smear), v runs along the profile by arc length, remapped by `remapV` if given.
+ */
+export function buildLatheGeometryUV(prof, seg, remapV = (v) => v) {
+  const nz = prof.length;
+  const arc = [0];
+  for (let i = 1; i < nz; i++) {
+    arc.push(arc[i - 1] + Math.hypot(prof[i][0] - prof[i - 1][0], prof[i][1] - prof[i - 1][1]));
+  }
+  const total = arc[nz - 1] || 1;
+  const ring = buildLatheGeometry(prof, seg);
+  const ringPos = ring.attributes.position.array;
+  const ringNor = ring.attributes.normal.array;
+  const cols = seg + 1;
+  const pos = [];
+  const nor = [];
+  const uv = [];
+  for (let i = 0; i < nz; i++) {
+    for (let j = 0; j < cols; j++) {
+      const a = (i * seg + (j % seg)) * 3;
+      pos.push(ringPos[a], ringPos[a + 1], ringPos[a + 2]);
+      nor.push(ringNor[a], ringNor[a + 1], ringNor[a + 2]);
+      uv.push(j / seg, remapV(arc[i] / total, i));
+    }
+  }
+  const idx = [];
+  for (let i = 0; i < nz - 1; i++) {
+    for (let j = 0; j < seg; j++) {
+      const A = i * cols + j;
+      const B = A + 1;
+      const C = A + cols;
+      const D = C + 1;
+      idx.push(A, B, C, B, D, C);
+    }
+  }
+  const geometry = createGeometry(pos, nor, idx);
+  geometry.setAttribute("uv", new BufferAttribute(new Float32Array(uv), 2));
+  return geometry;
+}
