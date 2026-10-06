@@ -44,7 +44,7 @@ float noise2(vec2 p) {
 float fbm2(vec2 p) {
   float sum = 0.0;
   float amplitude = 0.5;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 4; i++) {
     sum += noise2(p) * amplitude;
     p = mat2(1.6, 1.2, -1.2, 1.6) * p;
     amplitude *= 0.5;
@@ -61,13 +61,13 @@ float noise3(vec3 p) {
 }
 
 // One layer of stars: at most one star per cell of a 3D grid cut by the sphere of radius 'scale'.
-vec3 stars(vec3 d, float scale, float density, float brightness) {
+vec3 stars(vec3 d, vec3 footprint, float scale, float density, float brightness) {
   vec3 p = d * scale;
   vec3 cell = floor(p);
   float h = hash13(cell);
   if (h > density) return vec3(0.0);
   vec3 star = cell + 0.35 + 0.3 * vec3(hash13(cell + 7.1), hash13(cell + 13.7), hash13(cell + 21.3));
-  float pixel = max(fwidth(p.x) + fwidth(p.y), 0.02);
+  float pixel = max((footprint.x + footprint.y) * scale, 0.02);
   float dist = length(p - star);
   // Gaussian a little over a pixel wide whatever the resolution, so stars never shimmer or vanish.
   float sigma = max(pixel * 0.55, 0.04);
@@ -82,22 +82,24 @@ vec3 stars(vec3 d, float scale, float density, float brightness) {
 
 void main() {
   vec3 d = normalize(vDirection);
+  // Pixel footprint, taken before any branch (derivatives are undefined inside non-uniform branches).
+  vec3 footprint = fwidth(d);
   float h = d.y;
   float up = max(h, 0.0);
 
-  // Base gradient: fog colour at the horizon (distant terrain fades straight into the sky), deep blue-black
-  // overhead, a little darker below the horizon.
+  // Base gradient: fog colour at and below the horizon (distant terrain, and anything past the far plane,
+  // fades straight into the sky), deep blue-black overhead.
   vec3 sky = mix(uHorizon, uZenith, pow(smoothstep(-0.02, 0.55, h), 0.5));
-  sky *= h < 0.0 ? mix(1.0, 0.7, smoothstep(0.0, -0.2, h)) : 1.0;
+  float aboveHorizon = smoothstep(-0.03, 0.01, h);
   // Moonlit sky: scattered moonlight turns the whole sky a deep blue, brighter toward the moon.
-  sky += vec3(0.0035, 0.0072, 0.016) * (0.55 + 0.45 * max(dot(d, uMoon), 0.0)) * (0.5 + 0.5 * smoothstep(-0.05, 0.4, h));
+  sky += vec3(0.0035, 0.0072, 0.016) * (0.55 + 0.45 * max(dot(d, uMoon), 0.0)) * (0.5 + 0.5 * smoothstep(-0.05, 0.4, h)) * aboveHorizon;
   // Airglow: a faint green-tinted band about 10 degrees up.
-  sky += vec3(0.0016, 0.0032, 0.0022) * exp(-pow((h - 0.16) / 0.1, 2.0));
+  sky += vec3(0.0016, 0.0032, 0.0022) * exp(-pow((h - 0.16) / 0.1, 2.0)) * aboveHorizon;
   // Light pollution: warm sodium glow over the city (toward +z), hugging the horizon.
   vec2 flat2 = normalize(d.xz + 1e-5);
   float toCity = pow(clamp(flat2.y * 0.5 + 0.5, 0.0, 1.0), 2.5);
   float cityGlow = toCity * exp(-up * 9.0);
-  sky += uCityGlow * cityGlow;
+  sky += uCityGlow * cityGlow * aboveHorizon;
 
   // Moon: disk with maria and limb darkening, a tight aureole and a wide halo.
   float mu = dot(d, uMoon);
@@ -107,22 +109,33 @@ void main() {
   vec3 moonUp = cross(moonSide, uMoon);
   vec2 disk = vec2(dot(d, moonSide), dot(d, moonUp)) / moonRadius;
   float onDisk = 1.0 - smoothstep(0.9, 1.0, moonAngle / moonRadius);
-  float maria = fbm2(disk * 2.2 + 4.0);
-  float limb = sqrt(max(0.0, 1.0 - dot(disk, disk)));
-  vec3 moonColor = vec3(1.0, 0.97, 0.9) * (0.75 + 0.25 * limb) * mix(1.0, 0.68, smoothstep(0.45, 0.7, maria)) * 2.4;
+  vec3 moonColor = vec3(0.0);
+  if (onDisk > 0.0) {
+    float maria = fbm2(disk * 2.2 + 4.0);
+    float limb = sqrt(max(0.0, 1.0 - dot(disk, disk)));
+    moonColor = vec3(1.0, 0.97, 0.9) * (0.75 + 0.25 * limb) * mix(1.0, 0.68, smoothstep(0.45, 0.7, maria)) * 2.4;
+  }
   float aureole = 0.0004 / max(1.0 - mu, 0.0004);
   float halo = exp(-moonAngle * 9.0) * 0.022 + exp(-moonAngle * 2.4) * 0.006;
   vec3 moonLight = vec3(0.62, 0.72, 0.9) * (min(aureole, 0.25) + halo);
 
   // Stars and Milky Way fade out toward the horizon (thicker air, haze, light pollution).
   float clearSky = smoothstep(0.0, 0.3, h) * (1.0 - 0.75 * cityGlow) * (1.0 - smoothstep(0.85, 0.99, mu));
-  vec3 galacticNormal = normalize(vec3(0.35, 0.42, 0.84));
-  float band = exp(-pow(dot(d, galacticNormal) / 0.2, 2.0));
-  float clouds3 = noise3(d * 5.0) * 0.6 + noise3(d * 11.0) * 0.4;
-  float dust = smoothstep(0.45, 0.7, noise3(d * 8.0 + 3.0)) * exp(-pow(dot(d, galacticNormal) / 0.05, 2.0));
-  vec3 milkyWay = vec3(0.009, 0.0095, 0.011) * band * (0.4 + clouds3) * (1.0 - dust * 0.8);
-  vec3 starLight = stars(d, 150.0, 0.035 + band * 0.07, 0.22) + stars(d, 60.0, 0.03, 0.45);
-  sky += (starLight * (1.0 - dust * 0.7) + milkyWay) * clearSky;
+  if (clearSky > 0.001) {
+    vec3 galacticNormal = normalize(vec3(0.35, 0.42, 0.84));
+    float galactic = dot(d, galacticNormal);
+    float band = exp(-pow(galactic / 0.2, 2.0));
+    vec3 milkyWay = vec3(0.0);
+    float dust = 0.0;
+    if (band > 0.01) {
+      float clouds3 = noise3(d * 5.0) * 0.6 + noise3(d * 11.0) * 0.4;
+      float lane = exp(-pow(galactic / 0.05, 2.0));
+      if (lane > 0.01) dust = smoothstep(0.45, 0.7, noise3(d * 8.0 + 3.0)) * lane;
+      milkyWay = vec3(0.009, 0.0095, 0.011) * band * (0.4 + clouds3) * (1.0 - dust * 0.8);
+    }
+    vec3 starLight = stars(d, footprint, 150.0, 0.035 + band * 0.07, 0.22) + stars(d, footprint, 60.0, 0.03, 0.45);
+    sky += (starLight * (1.0 - dust * 0.7) + milkyWay) * clearSky;
+  }
 
   // Clouds: a thin layer projected onto a plane, drifting slowly. Lit silver near the moon, a faint
   // orange underside over the city, otherwise dark shapes that hide the stars.

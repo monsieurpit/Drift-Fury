@@ -35,6 +35,17 @@ function bake(size, shade, normalStrength) {
     }
   }
   colorContext.putImageData(colorImage, 0, 0);
+  // Average colour in linear space: what the texture mip-averages to far away, used instead of sampling it.
+  const average = [0, 0, 0];
+  const toLinear = (value) => {
+    const c = value / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  for (let i = 0; i < size * size; i++) {
+    for (let channel = 0; channel < 3; channel++)
+      average[channel] += toLinear(colorImage.data[i * 4 + channel]);
+  }
+  for (let channel = 0; channel < 3; channel++) average[channel] /= size * size;
 
   const normal = document.createElement("canvas");
   normal.width = normal.height = size;
@@ -54,7 +65,7 @@ function bake(size, shade, normalStrength) {
     }
   }
   normalContext.putImageData(normalImage, 0, 0);
-  return { map: makeTexture(color, true), normalMap: makeTexture(normal, false) };
+  return { map: makeTexture(color, true), normalMap: makeTexture(normal, false), average };
 }
 
 // Tileable fractal noise: the period scales with frequency so every octave wraps on the texture edge.

@@ -95,9 +95,13 @@ function naturalHeight(x, z) {
   // The A9 highway runs along the east edge (x = 175): the range tapers down over a wide margin so big
   // peaks become foothills instead of ending in a wall.
   height *= smoothstep(160, 120, x);
-  // Distant hills east of the highway.
+  // Distant hills east of the highway. They rise gradually north of the city edge like the rest of the
+  // range; at full height right at the edge of the terrain they ended in a cliff with nothing beneath.
   if (x > 215)
-    height += smoothstep(215, 330, x) * (25 + 90 * ridged(x / 180, z / 180, { seed: 11, octaves: 4 }));
+    height +=
+      smoothstep(215, 330, x) *
+      smoothstep(0, 260, north) *
+      (25 + 90 * ridged(x / 180, z / 180, { seed: 11, octaves: 4 }));
   return height;
 }
 

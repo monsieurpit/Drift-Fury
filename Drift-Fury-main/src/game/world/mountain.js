@@ -2,6 +2,8 @@
 // delineators, summit lookout) and its scenery (pine forest and boulders).
 import {
   BoxGeometry,
+  Box3,
+  Sphere,
   DataTexture,
   RGBAFormat,
   LinearFilter,
@@ -19,6 +21,7 @@ import {
   InstancedMesh,
   LOD,
   Mesh,
+  MeshLambertMaterial,
   MeshStandardMaterial,
   Object3D,
   SphereGeometry,
@@ -131,17 +134,70 @@ export function buildMountainTerrain(world) {
   const { scene } = world;
   const material = createTerrainMaterial();
   world.terrainMaterial = material;
-  const near = new Mesh(terrainGrid(NEAR, { edgeStep: FAR.step }), material);
-  near.name = "mountain-terrain";
-  near.receiveShadow = true;
-  near.castShadow = true;
-  scene.add(near);
+  // The terrain only receives shadows: as a caster it doubled its triangle cost every frame for shadows the
+  // slope lighting already conveys.
+  for (const tile of splitIntoTiles(terrainGrid(NEAR, { edgeStep: FAR.step }), 2, 3)) {
+    const near = new Mesh(tile, material);
+    near.name = "mountain-terrain";
+    near.receiveShadow = true;
+    scene.add(near);
+  }
   const insideNear = (x0, z0, x1, z1) =>
     x0 >= NEAR.minX && x1 <= NEAR.maxX && z0 >= NEAR.minZ && z1 <= NEAR.maxZ;
-  const far = new Mesh(terrainGrid(FAR, { skipCell: insideNear }), material);
-  far.name = "mountain-backdrop";
-  far.receiveShadow = true;
-  scene.add(far);
+  for (const tile of splitIntoTiles(terrainGrid(FAR, { skipCell: insideNear }), 4, 4)) {
+    const far = new Mesh(tile, material);
+    far.name = "mountain-backdrop";
+    far.receiveShadow = true;
+    scene.add(far);
+  }
+  // Underlay: open ground out to the horizon in every direction, a little below the map, so no view (the
+  // highway looking east, the city's outskirts) ever looks past the edge of the world into the void.
+  // It is only ever seen far away, so it is a flat meadow colour (what the grass averages to at range),
+  // and it is drawn after the other opaque geometry so the depth test discards the parts hidden beneath.
+  const meadow = new Color().setRGB(...getTerrainTextures().grass.average).multiplyScalar(0.95);
+  const underlay = new Mesh(
+    new PlaneGeometry(6000, 6000).rotateX(-Math.PI / 2),
+    new MeshLambertMaterial({ color: meadow }),
+  );
+  underlay.name = "world-underlay";
+  underlay.position.set(0, -1.2, -400);
+  underlay.renderOrder = 10;
+  scene.add(underlay);
+}
+
+/**
+ * Splits an indexed grid into `columns` x `rows` tiles by triangle centre. Tiles share the vertex buffers
+ * (uploaded once) and get their own index and bounding sphere, so off-screen tiles are culled.
+ */
+function splitIntoTiles(geometry, columns, rows) {
+  geometry.computeBoundingBox();
+  const { min, max } = geometry.boundingBox;
+  const position = geometry.attributes.position;
+  const index = geometry.index.array;
+  const buckets = Array.from({ length: columns * rows }, () => []);
+  for (let i = 0; i < index.length; i += 3) {
+    const a = index[i];
+    const b = index[i + 1];
+    const c = index[i + 2];
+    const x = (position.getX(a) + position.getX(b) + position.getX(c)) / 3;
+    const z = (position.getZ(a) + position.getZ(b) + position.getZ(c)) / 3;
+    const column = Math.min(columns - 1, Math.floor(((x - min.x) / (max.x - min.x)) * columns));
+    const row = Math.min(rows - 1, Math.floor(((z - min.z) / (max.z - min.z)) * rows));
+    buckets[row * columns + column].push(a, b, c);
+  }
+  const point = new Vector3();
+  return buckets
+    .filter((bucket) => bucket.length)
+    .map((bucket) => {
+      const tile = new BufferGeometry();
+      for (const name of Object.keys(geometry.attributes)) tile.setAttribute(name, geometry.attributes[name]);
+      tile.setIndex(bucket);
+      const box = new Box3();
+      for (const vertex of bucket) box.expandByPoint(point.fromBufferAttribute(position, vertex));
+      tile.boundingBox = box;
+      tile.boundingSphere = box.getBoundingSphere(new Sphere());
+      return tile;
+    });
 }
 
 // ------------------------------------------------------------------ road
@@ -769,17 +825,87 @@ function boulderGeometry(seed) {
   return geometry;
 }
 
+const instanceDummy = new Object3D();
+
+/** One InstancedMesh for `list` (entries: x, y, z, yaw, tilts, scales, colour), positioned relative to `origin`. */
+function instancedMesh(list, geometry, material, origin, { castShadow = true, name } = {}) {
+  const mesh = new InstancedMesh(geometry, material, list.length);
+  list.forEach((entry, index) => {
+    instanceDummy.position.set(entry.x - origin.x, entry.y - origin.y, entry.z - origin.z);
+    instanceDummy.rotation.set(entry.tiltX || 0, entry.yaw || 0, entry.tiltZ || 0);
+    instanceDummy.scale.set(entry.sx ?? entry.scale, entry.sy ?? entry.scale, entry.sz ?? entry.scale);
+    instanceDummy.updateMatrix();
+    mesh.setMatrixAt(index, instanceDummy.matrix);
+    if (entry.color) mesh.setColorAt(index, entry.color);
+  });
+  mesh.computeBoundingSphere();
+  mesh.castShadow = castShadow;
+  mesh.receiveShadow = true;
+  mesh.name = name;
+  return mesh;
+}
+
 /**
- * Chunked instancing: each area of the map gets its own InstancedMesh so off-screen chunks are culled.
- * With `lod: { geometry, material, distance }` each chunk becomes a LOD that swaps to the lighter geometry
- * once the camera is more than `distance` metres from the chunk centre.
+ * Near forest, one LOD per 96 m chunk: branch-card crowns up close, solid crowns in the middle distance and
+ * the ~20-triangle cone (one mesh for the whole chunk) far away, which is what most of the forest is from
+ * the city, the highway and the road. Only the first two levels cast shadows.
  */
+function buildForest(scene, variants, materials, farGeometry) {
+  const chunks = new Map();
+  variants.forEach((variant, variantIndex) => {
+    for (const tree of variant.trees) {
+      const key = Math.floor(tree.x / 96) + "," + Math.floor(tree.z / 96);
+      if (!chunks.has(key))
+        chunks.set(
+          key,
+          variants.map(() => []),
+        );
+      chunks.get(key)[variantIndex].push(tree);
+    }
+  });
+  for (const perVariant of chunks.values()) {
+    const all = perVariant.flat();
+    const center = { x: 0, y: 0, z: 0 };
+    for (const tree of all) {
+      center.x += tree.x / all.length;
+      center.y += tree.y / all.length;
+      center.z += tree.z / all.length;
+    }
+    const detailed = new Group();
+    const solid = new Group();
+    perVariant.forEach((trees, variantIndex) => {
+      if (!trees.length) return;
+      const variant = variants[variantIndex];
+      detailed.add(
+        instancedMesh(trees, variant.geometry, [materials.foliage, materials.cards], center, {
+          name: "mountain-pines",
+        }),
+      );
+      solid.add(instancedMesh(trees, variant.simple, materials.foliage, center, { name: "mountain-pines" }));
+    });
+    const levels = new LOD();
+    levels.name = "mountain-pines-lod";
+    levels.position.set(center.x, center.y, center.z);
+    levels.addLevel(detailed, 0);
+    levels.addLevel(solid, 75);
+    levels.addLevel(
+      instancedMesh(all, farGeometry, materials.foliage, center, {
+        castShadow: false,
+        name: "mountain-pines",
+      }),
+      190,
+    );
+    scene.add(levels);
+  }
+}
+
+/** Chunked instancing: each area of the map gets its own InstancedMesh so off-screen chunks are culled. */
 function chunkedInstances(
   scene,
   entries,
   geometry,
   material,
-  { chunkSize = 128, castShadow = true, name, lod = null } = {},
+  { chunkSize = 128, castShadow = true, name } = {},
 ) {
   const chunks = new Map();
   for (const entry of entries) {
@@ -787,40 +913,9 @@ function chunkedInstances(
     if (!chunks.has(key)) chunks.set(key, []);
     chunks.get(key).push(entry);
   }
-  const dummy = new Object3D();
-  const instances = (list, meshGeometry, meshMaterial, origin) => {
-    const mesh = new InstancedMesh(meshGeometry, meshMaterial, list.length);
-    list.forEach((entry, index) => {
-      dummy.position.set(entry.x - origin.x, entry.y - origin.y, entry.z - origin.z);
-      dummy.rotation.set(entry.tiltX || 0, entry.yaw || 0, entry.tiltZ || 0);
-      dummy.scale.set(entry.sx ?? entry.scale, entry.sy ?? entry.scale, entry.sz ?? entry.scale);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(index, dummy.matrix);
-      if (entry.color) mesh.setColorAt(index, entry.color);
-    });
-    mesh.computeBoundingSphere();
-    mesh.castShadow = castShadow;
-    mesh.receiveShadow = true;
-    mesh.name = name;
-    return mesh;
-  };
+  const origin = { x: 0, y: 0, z: 0 };
   for (const list of chunks.values()) {
-    if (!lod) {
-      scene.add(instances(list, geometry, material, { x: 0, y: 0, z: 0 }));
-      continue;
-    }
-    const center = { x: 0, y: 0, z: 0 };
-    for (const entry of list) {
-      center.x += entry.x / list.length;
-      center.y += entry.y / list.length;
-      center.z += entry.z / list.length;
-    }
-    const levels = new LOD();
-    levels.position.set(center.x, center.y, center.z);
-    levels.addLevel(instances(list, geometry, material, center), 0);
-    levels.addLevel(instances(list, lod.geometry, lod.material, center), lod.distance);
-    levels.name = name + "-lod";
-    scene.add(levels);
+    scene.add(instancedMesh(list, geometry, material, origin, { castShadow, name }));
   }
 }
 
@@ -933,7 +1028,7 @@ function buildGrassTufts(world, random) {
   chunkedInstances(scene, tufts, grassTuftGeometry(), material, {
     name: "mountain-grass",
     castShadow: false,
-    chunkSize: 64,
+    chunkSize: 128,
   });
 }
 
@@ -995,19 +1090,13 @@ export function buildMountainScenery(world) {
   plant(NEAR.minX, NEAR.maxX, NEAR.minZ, NEAR.maxZ, 5.5, true);
   const foliage = createFoliageMaterial();
   const branchCards = createBranchCardMaterial();
-  for (const variant of variants) {
-    // Branch-card crowns near the camera, the solid crown (a fraction of the triangles) further away.
-    chunkedInstances(scene, variant.trees, variant.geometry, [foliage, branchCards], {
-      name: "mountain-pines",
-      chunkSize: 64,
-      lod: { geometry: variant.simple, material: foliage, distance: 120 },
-    });
-  }
+  const farPine = farPineGeometry();
+  buildForest(scene, variants, { foliage, cards: branchCards }, farPine);
   // Backdrop forest: the same placement rules, a much lighter model and no shadows.
   for (const variant of variants) variant.trees = [];
   plant(-900, 700, -1500, -100, 13, false);
   const distantTrees = variants.flatMap((variant) => variant.trees);
-  chunkedInstances(scene, distantTrees, farPineGeometry(), foliage, {
+  chunkedInstances(scene, distantTrees, farPine, foliage, {
     name: "mountain-pines-distant",
     castShadow: false,
     chunkSize: 256,
@@ -1043,7 +1132,10 @@ export function buildMountainScenery(world) {
     if (size > 0.9 && road < 40) addSolid(x, z, size * 0.75, size * 0.75);
   }
   for (const shape of shapes) {
-    chunkedInstances(scene, shape.rocks, shape.geometry, rockMaterial, { name: "mountain-boulders" });
+    chunkedInstances(scene, shape.rocks, shape.geometry, rockMaterial, {
+      name: "mountain-boulders",
+      chunkSize: 256,
+    });
   }
   buildGrassTufts(world, random);
 }

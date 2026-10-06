@@ -31,14 +31,14 @@ export function createWorldContext(world) {
     roughness: 0.5,
     metalness: 0,
     emissive: "#e4e2d6",
-    emissiveIntensity: 0.05,
+    emissiveIntensity: 0.12,
   });
   const yellowPaint = new MeshStandardMaterial({
     color: "#d9b43c",
     roughness: 0.5,
     metalness: 0,
     emissive: "#d9b43c",
-    emissiveIntensity: 0.05,
+    emissiveIntensity: 0.12,
   });
   const poleMetal = new MeshStandardMaterial({
     color: "#2a3036",

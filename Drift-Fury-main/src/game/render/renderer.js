@@ -34,6 +34,17 @@ function createComposer(renderer, scene, camera, width, height, bloomStrength) {
   composer.addPass(new OutputPass());
   return composer;
 }
+/**
+ * Device pixel ratio to render the game at: as sharp as the screen allows, but within a pixel budget so a
+ * large high-DPI window (a Retina iMac or a Mac on a 4K/5K display) does not render 10+ million pixels, every
+ * one of them through the multisampled post-processing chain.
+ */
+export function gamePixelRatio(width, height, touchDevice = false) {
+  const budget = touchDevice ? 1.6e6 : 2.4e6;
+  const cap = touchDevice ? 1.2 : 1.8;
+  const fit = Math.sqrt(budget / Math.max(1, width * height));
+  return Math.max(0.75, Math.min(window.devicePixelRatio || 1, cap, fit));
+}
 export function createRenderer(container, inGame = false) {
   const lowPower = !!(navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
   const scene = new Scene();
@@ -54,7 +65,11 @@ export function createRenderer(container, inGame = false) {
     renderer.shadowMap.enabled = false;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
   } else {
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, touchDevice ? 1.2 : inGame ? 1.8 : 2.2));
+    renderer.setPixelRatio(
+      inGame
+        ? gamePixelRatio(container.clientWidth, container.clientHeight, touchDevice)
+        : Math.min(window.devicePixelRatio, touchDevice ? 1.2 : 2.2),
+    );
   }
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.toneMapping = 4;

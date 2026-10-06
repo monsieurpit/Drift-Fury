@@ -69,15 +69,19 @@ vec3 foliageWeights(vec3 n) { vec3 w = pow(abs(n), vec3(4.0)); return w / (w.x +
 const COLOR = /* glsl */ `
 #include <color_fragment>
 {
-  vec3 p = vFoliagePosition / 1.4;
-  vec3 w = foliageWeights(normalize(vFoliageNormal));
-  foliageMask = texture2D(foliageNeedles, p.zy).r * w.x + texture2D(foliageNeedles, p.xz).r * w.y + texture2D(foliageNeedles, p.xy).r * w.z;
+  // Needle detail only where it can be seen; past ~120 m it averages to the mid-grey of the mask.
+  foliageMask = 0.45;
+  if (length(vViewPosition) < 120.0) {
+    vec3 p = vFoliagePosition / 1.4;
+    vec3 w = foliageWeights(normalize(vFoliageNormal));
+    foliageMask = texture2D(foliageNeedles, p.zy).r * w.x + texture2D(foliageNeedles, p.xz).r * w.y + texture2D(foliageNeedles, p.xy).r * w.z;
+  }
   diffuseColor.rgb *= mix(0.45, 1.55, foliageMask);
 }
 `;
 
 const NORMAL = /* glsl */ `
-{
+if (length(vViewPosition) < 120.0) {
   vec3 n = normalize(vFoliageNormal);
   vec3 p = vFoliagePosition / 1.4;
   vec3 w = foliageWeights(n);

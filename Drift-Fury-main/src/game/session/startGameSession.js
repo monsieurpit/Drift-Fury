@@ -2,7 +2,7 @@ import { PointLight, Vector3 } from "three";
 import { createAudio } from "../audio/createAudio.js";
 import { createEffects } from "../effects/effects.js";
 import { animatePerson, createPerson } from "../people/person.js";
-import { createRenderer } from "../render/renderer.js";
+import { createRenderer, gamePixelRatio } from "../render/renderer.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
 import { warmUpSession } from "../render/warmUp.js";
 import { createGame } from "../simulation/game.js";
@@ -295,6 +295,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
   renderer.shadowMap.needsUpdate = true;
   let shadowFrameCounter = 0;
   const basePixelRatio = renderer.getPixelRatio();
+  const lowPowerDevice = !!(navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
   let resolutionScale = 1;
   let windowTime = 0;
   let windowFrames = 0;
@@ -371,13 +372,19 @@ export function startGameSession(container, car, engine, controls, callbacks, no
           lastRaise = performance.now();
         }
       }
-      if (nextScale !== resolutionScale) {
+      // The base ratio follows the window size (entering fullscreen raises the pixel count).
+      const base = lowPowerDevice
+        ? basePixelRatio
+        : gamePixelRatio(container.clientWidth, container.clientHeight, touchDevice);
+      if (nextScale !== resolutionScale || Math.abs(base * nextScale - renderer.getPixelRatio()) > 0.02) {
+        if (nextScale !== resolutionScale) {
+          slowWindows = 0;
+          fastWindows = 0;
+          skipWindow = true;
+        }
         resolutionScale = nextScale;
-        slowWindows = 0;
-        fastWindows = 0;
-        skipWindow = true;
-        renderer.setPixelRatio(basePixelRatio * resolutionScale);
-        composer.setPixelRatio(basePixelRatio * resolutionScale);
+        renderer.setPixelRatio(base * resolutionScale);
+        composer.setPixelRatio(base * resolutionScale);
         composer.setSize(container.clientWidth, container.clientHeight);
       }
       windowTime = 0;
