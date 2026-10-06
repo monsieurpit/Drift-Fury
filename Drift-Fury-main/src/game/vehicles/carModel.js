@@ -652,29 +652,76 @@ export function buildCar(
   addMesh(ribbonAcross(spec, 0.55, 5, 7, 0.01, 0.002, 1, halfLength), lineMat, false, false);
   addMesh(ribbonAcross(spec, 0.55, 5, 7, 0.01, 0.002, -1, halfLength), lineMat, false, false);
 
-  /* headlights */
+  /* lamp units: a group on the body surface, local x across, y up, z out along the surface normal */
+  const lampUnit = (S, off = 0) => {
+    const unit = new Group();
+    car.add(unit);
+    unit.position.set(S.x + S.nx * off, S.y + S.ny * off, S.z - halfLength + S.nz * off);
+    unit.lookAt(unit.position.x + S.nx, unit.position.y + S.ny, unit.position.z + S.nz);
+    return unit;
+  };
+  const part = (unit, geo, mat, x, y, z, sx = 1, sy = 1, sz = 1) => {
+    const m = new Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.scale.set(sx, sy, sz);
+    m.receiveShadow = true;
+    unit.add(m);
+    return m;
+  };
+  const reflectorMat = new MeshStandardMaterial({
+    color: "#2b3036",
+    metalness: 1,
+    roughness: 0.22,
+    envMapIntensity: 1.4,
+  });
+  const drlMat = new MeshBasicMaterial({ color: "#eaf5ff" });
+  const ringGeo = new TorusGeometry(1, 0.13, 8, 28);
+  // Arc of a unit ring, turned to start at `start` before the mesh's scale squashes it to the lamp's shape
+  // (rotating the squashed mesh instead would swing its long axis upright).
+  const arcGeo = (arc, start = 0) => new TorusGeometry(1, 0.05, 6, 32, arc).rotateZ(start);
+
+  /* headlights: dark chrome reflector bowl, a lit low-beam projector and an unlit high-beam projector in
+     chrome rings, an LED daytime-running strip curving along the top and bottom, all under a clear lens */
   for (const sd of [-1, 1]) {
     const S = surfacePoint(spec, lamp.hz, lamp.hs, sd);
-    const lens = place(unitSph, lensMat, S, 0.004);
-    lens.scale.set(lamp.hw, lamp.hh, 0.04);
-    const core = place(unitSph, lampMat, S, -0.004);
-    core.scale.set(lamp.hw * 0.8, lamp.hh * 0.55, 0.03);
-    heads.push(core);
-    const drl = place(
-      new BoxGeometry(lamp.hw * 1.5, 0.012, 0.012),
-      new MeshBasicMaterial({
-        color: "#e8f4ff",
-      }),
-      S,
-      0.018,
+    const unit = lampUnit(S);
+    part(unit, unitSph, reflectorMat, 0, 0, -0.006, lamp.hw * 0.96, lamp.hh * 0.9, 0.022);
+    const r = Math.min(lamp.hh * 0.5, lamp.hw * 0.26);
+    for (const [x, lit] of [
+      [-lamp.hw * 0.4, true],
+      [lamp.hw * 0.25, false],
+    ]) {
+      const projector = part(unit, unitSph, lit ? lampMat : chrome, x, -lamp.hh * 0.05, 0.004, r, r, 0.012);
+      if (lit) heads.push(projector);
+      part(unit, ringGeo, chrome, x, -lamp.hh * 0.05, 0.006, r * 1.12, r * 1.12, r * 1.12);
+    }
+    // LED strip: an arc along the upper edge of the lamp, flattened to its shape.
+    part(
+      unit,
+      arcGeo(Math.PI * 0.82, Math.PI * 0.09),
+      drlMat,
+      0,
+      -lamp.hh * 0.15,
+      0.01,
+      lamp.hw * 0.86,
+      lamp.hh * 0.9,
+      0.12,
     );
-    drl.translateY(-lamp.hh * 0.7);
+    part(unit, unitSph, lensMat, 0, 0, 0.004, lamp.hw, lamp.hh, 0.04);
     // front indicator
     const ind = surfacePoint(spec, lamp.hz + 0.06, lamp.hs - 1.7, sd);
     const lens2 = place(unitSph, amber, ind, 0.002);
     lens2.scale.set(0.07, 0.022, 0.02);
   }
-  /* tail lights */
+  /* tail lights: smoked outer lens over an LED "C" and a light bar that glow at night and flare when braking */
+  const smokedLens = new MeshPhysicalMaterial({
+    color: "#2a0606",
+    roughness: 0.08,
+    metalness: 0,
+    clearcoat: 1,
+    clearcoatRoughness: 0.03,
+    envMapIntensity: 1.2,
+  });
   for (const sd of [-1, 1]) {
     const S = surfacePoint(spec, lamp.tz, lamp.ts, sd);
     const m = new MeshStandardMaterial({
@@ -683,9 +730,32 @@ export function buildCar(
       emissiveIntensity: 0.6, // running lights on at night
       roughness: 0.3,
     });
-    const tl = place(unitSph, m, S, -0.004);
-    tl.scale.set(lamp.tw, lamp.th, 0.03);
-    brake.push(tl);
+    const unit = lampUnit(S);
+    part(unit, unitSph, smokedLens, 0, 0, -0.006, lamp.tw, lamp.th, 0.026);
+    // LED "C", open toward the middle of the car.
+    const c = part(
+      unit,
+      arcGeo(Math.PI * 1.55, sd > 0 ? Math.PI * 1.22 : Math.PI * 0.22),
+      m,
+      0,
+      0,
+      0.012,
+      lamp.tw * 0.78,
+      lamp.th * 0.72,
+      0.12,
+    );
+    const bar = part(
+      unit,
+      new BoxGeometry(1, 1, 1),
+      m,
+      0,
+      0,
+      0.012,
+      lamp.tw * 1.1,
+      Math.max(0.006, lamp.th * 0.12),
+      0.006,
+    );
+    brake.push(c, bar);
   }
   {
     const bar = new MeshStandardMaterial({
