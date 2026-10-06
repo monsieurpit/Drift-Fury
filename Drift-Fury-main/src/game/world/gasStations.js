@@ -1,3 +1,4 @@
+import { scannedSet } from "./scannedTextures.js";
 import {
   MeshStandardMaterial,
   BoxGeometry,
@@ -64,43 +65,18 @@ export function buildGasStations(world) {
     roughness: 0.4,
     metalness: 0.56,
   });
-  const stationTileTexture = (() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = 512;
-    const context = canvas.getContext("2d");
-    const tileSize = 64;
-    for (let row = 0; row < 8; row++) {
-      for (let column = 0; column < 8; column++) {
-        const shade = 89 + ((row * 17 + column * 11) % 13);
-        context.fillStyle = `rgb(${shade},${shade + 2},${shade - 2})`;
-        context.fillRect(column * tileSize + 2, row * tileSize + 2, tileSize - 4, tileSize - 4);
-      }
-    }
-    context.strokeStyle = "rgba(15,19,20,.75)";
-    context.lineWidth = 3;
-    for (let line = 0; line <= 8; line++) {
-      context.beginPath();
-      context.moveTo(line * tileSize, 0);
-      context.lineTo(line * tileSize, 512);
-      context.stroke();
-      context.beginPath();
-      context.moveTo(0, line * tileSize);
-      context.lineTo(512, line * tileSize);
-      context.stroke();
-    }
-    const texture = new CanvasTexture(canvas);
-    texture.colorSpace = "srgb";
-    return texture;
-  })();
+  // Dépanneur floor: photo-scanned ceramic floor tiles (Poly Haven "floor_tiles_06", CC0, ~3 m per tile).
+  const floorScan = scannedSet("floor_tiles_06", [0.5, 0.5, 0.48]);
   const stationFloor = new MeshStandardMaterial({
-    color: "#b5b6ad",
-    map: stationTileTexture,
-    bumpMap: stationTileTexture,
-    bumpScale: 0.028,
-    roughness: 0.68,
-    metalness: 0.025,
+    color: "#e2e2dc",
+    map: floorScan.map,
+    normalMap: floorScan.normalMap,
+    roughnessMap: floorScan.armMap,
+    aoMap: floorScan.armMap,
+    roughness: 0.9,
+    metalness: 0,
   });
+  stationFloor.userData.tile = 3;
   const stationScreen = (() => {
     const canvas = document.createElement("canvas");
     canvas.width = 256;
@@ -293,11 +269,18 @@ export function buildGasStations(world) {
       addSolid(x + side * 0.91, z + 1.44, 0.1, 0.1);
     }
   };
+  // Dépanneur walls: photo-scanned painted plaster (Poly Haven "beige_wall_001", CC0, ~3 m per tile).
+  const plasterScan = scannedSet("beige_wall_001", [0.4, 0.36, 0.3]);
   const storeShell = new MeshStandardMaterial({
-    color: "#c5c1b4",
-    roughness: 0.84,
-    metalness: 0.03,
+    color: "#e4e0d6",
+    map: plasterScan.map,
+    normalMap: plasterScan.normalMap,
+    roughnessMap: plasterScan.armMap,
+    aoMap: plasterScan.armMap,
+    roughness: 1,
+    metalness: 0,
   });
+  storeShell.userData.tile = 3;
   const storeRoofMat = new MeshStandardMaterial({
     color: "#353b3e",
     roughness: 0.72,

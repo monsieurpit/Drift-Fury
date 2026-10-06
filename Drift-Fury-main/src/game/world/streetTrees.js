@@ -1,5 +1,6 @@
 import {
   MeshStandardMaterial,
+  Vector2,
   Vector3,
   CylinderGeometry,
   CanvasTexture,
@@ -13,6 +14,7 @@ import {
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { createRandom } from "../util/random.js";
 import { createLeafCardMaterial } from "./foliageMaterial.js";
+import { scannedSet } from "./scannedTextures.js";
 import { splitInstancedMesh } from "../render/meshUtils.js";
 /** Trees along the sidewalks, with trunk colliders. */
 export function buildStreetTrees(world) {
@@ -66,54 +68,18 @@ export function buildStreetTrees(world) {
       metalness: 0,
       vertexColors: true, // the crown core is shaded darker than the leaf cards around it
     });
-    const barkCanvas = document.createElement("canvas");
-    barkCanvas.width = 128;
-    barkCanvas.height = 256;
-    const barkCtx = barkCanvas.getContext("2d");
-    const barkRnd = createRandom(9271);
-    const barkGradient = barkCtx.createLinearGradient(0, 0, 128, 0);
-    barkGradient.addColorStop(0, "#30271f");
-    barkGradient.addColorStop(0.24, "#66503a");
-    barkGradient.addColorStop(0.52, "#493829");
-    barkGradient.addColorStop(0.78, "#71563c");
-    barkGradient.addColorStop(1, "#30271f");
-    barkCtx.fillStyle = barkGradient;
-    barkCtx.fillRect(0, 0, 128, 256);
-    for (let line = 0; line < 70; line++) {
-      const x = barkRnd() * 128;
-      const shade = Math.floor(barkRnd() * 45);
-      barkCtx.strokeStyle =
-        line % 3
-          ? `rgba(22,15,10,${0.12 + barkRnd() * 0.34})`
-          : `rgba(190,151,105,${0.08 + barkRnd() * 0.2})`;
-      barkCtx.lineWidth = 0.5 + barkRnd() * 2;
-      barkCtx.beginPath();
-      barkCtx.moveTo(x, 0);
-      barkCtx.bezierCurveTo(
-        x + (barkRnd() - 0.5) * 18,
-        84,
-        x + (barkRnd() - 0.5) * 18,
-        172,
-        x + (barkRnd() - 0.5) * 12,
-        256,
-      );
-      barkCtx.stroke();
-      if (line < 7) {
-        barkCtx.fillStyle = `rgba(${shade},${shade * 0.78},${shade * 0.55},.08)`;
-        barkCtx.fillRect(x, 0, 1 + barkRnd() * 4, 256);
-      }
-    }
-    const barkTex = new CanvasTexture(barkCanvas);
-    barkTex.wrapS = RepeatWrapping;
-    barkTex.wrapT = RepeatWrapping;
-    barkTex.colorSpace = "srgb";
-    barkTex.anisotropy = 8;
+    // Photo-scanned bark (Poly Haven "bark_brown_02", CC0, ~1 m per tile). Trunks are unit cylinders
+    // stretched to ~5 m, so the scan repeats once around (~1.3 m girth) and five times up.
+    const barkScan = scannedSet("bark_brown_02", [0.08, 0.06, 0.045]);
+    for (const texture of [barkScan.map, barkScan.normalMap, barkScan.armMap]) texture.repeat.set(1, 5);
     const barkMat = new MeshStandardMaterial({
-      map: barkTex,
-      bumpMap: barkTex,
-      bumpScale: 0.12,
-      roughness: 0.96,
-      color: "#b6a18a",
+      map: barkScan.map,
+      normalMap: barkScan.normalMap,
+      normalScale: new Vector2(1.2, 1.2),
+      roughnessMap: barkScan.armMap,
+      aoMap: barkScan.armMap,
+      roughness: 1,
+      color: "#d8cfc4",
     });
     const spots = [];
     for (const ax of roadXs) {
