@@ -13,6 +13,7 @@ import {
   DirectionalLight,
   CanvasTexture,
   PMREMGenerator,
+  Sphere,
 } from "three";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
@@ -25,17 +26,29 @@ import { QUALITY_PRESETS, resolveQuality } from "./quality.js";
  * cards are left out of its depth/normal pre-pass: drawn without their alpha they would read as solid
  * quads and darken the air around every tree.
  */
+const aoSphere = new Sphere();
 class GameAOPass extends GTAOPass {
+  // Computed at half resolution: contact shadows are soft, so this looks the same at a quarter of the
+  // pixel cost (the blend samples the AO by screen UV, so it upsamples onto the full-size image).
+  setSize(width, height) {
+    super.setSize(Math.max(1, Math.floor(width / 2)), Math.max(1, Math.floor(height / 2)));
+  }
   overrideVisibility() {
     super.overrideVisibility();
+    const eye = this.camera.position;
     this.scene.traverse((object) => {
-      const materials = Array.isArray(object.material)
-        ? object.material
-        : object.material
-          ? [object.material]
-          : [];
-      if (materials.some((material) => material.alphaTest > 0 || material.transparent))
+      if (!object.isMesh) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      if (materials.some((material) => material.alphaTest > 0 || material.transparent)) {
         object.visible = false;
+        return;
+      }
+      // Contact shadows only matter close up: skip whatever lies wholly beyond 90 m (most of the
+      // scene's triangles), so the extra depth/normal pass stays cheap.
+      const sphere = object.boundingSphere || object.geometry.boundingSphere;
+      if (!sphere) return;
+      aoSphere.copy(sphere).applyMatrix4(object.matrixWorld);
+      if (aoSphere.distanceToPoint(eye) > 90) object.visible = false;
     });
   }
 }
