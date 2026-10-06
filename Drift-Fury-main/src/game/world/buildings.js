@@ -10,6 +10,7 @@ import {
   SphereGeometry,
   SRGBColorSpace,
   Vector3,
+  Vector4,
 } from "three";
 import { FUEL_STATIONS } from "../data/stations.js";
 import { createRandom } from "../util/random.js";
@@ -358,6 +359,114 @@ vec2 wallUv;`,
         cafe: true,
       },
     };
+    /**
+     * Interior mapping (the technique open-world games use for shop windows): each pixel of clear glass casts
+     * the view ray into a box-shaped room behind it (4.5 m deep) and shows the back wall, floor, ceiling or
+     * side wall it hits, all sampled from the bay's drawn interior. The room shifts with perspective as the
+     * camera moves, so the shops read as real spaces instead of pictures on the glass.
+     */
+    function applyInteriorMapping(
+      material,
+      { interior, interiorGlow, glassMask, top, bottom, width, height },
+    ) {
+      const uniforms = {
+        shopInterior: { value: interior },
+        shopInteriorGlow: { value: interiorGlow },
+        shopGlass: { value: glassMask },
+        shopBay: { value: new Vector4(top / height, bottom / height, 10 / width, 236 / width) },
+      };
+      material.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, uniforms);
+        shader.vertexShader = shader.vertexShader
+          .replace("#include <common>", "#include <common>\nvarying vec3 vShopPosition;")
+          .replace(
+            "#include <begin_vertex>",
+            "#include <begin_vertex>\nvShopPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;",
+          );
+        shader.fragmentShader = shader.fragmentShader
+          .replace(
+            "#include <common>",
+            `#include <common>
+uniform sampler2D shopInterior;
+uniform sampler2D shopInteriorGlow;
+uniform sampler2D shopGlass;
+uniform vec4 shopBay; // glass top, bottom (fractions of the canvas height from the top), bay x0, width
+varying vec3 vShopPosition;
+float shopInside;
+vec2 shopUv;
+float shopShade;
+float shopLod;`,
+          )
+          .replace(
+            "#include <map_fragment>",
+            `#include <map_fragment>
+{
+  // Tangent frame from screen derivatives (taken here, outside any branch): metres per unit of uv.
+  vec3 dpx = dFdx(vShopPosition);
+  vec3 dpy = dFdy(vShopPosition);
+  vec2 dux = dFdx(vMapUv);
+  vec2 duy = dFdy(vMapUv);
+  float det = dux.x * duy.y - dux.y * duy.x;
+  vec3 dPdu = (dpx * duy.y - dpy * dux.y) / det;
+  vec3 dPdv = (dpy * dux.x - dpx * duy.x) / det;
+  shopLod = log2(max(length(dux) * 512.0, length(duy) * 256.0));
+  shopInside = texture2D(shopGlass, vMapUv).r;
+  shopShade = 1.0;
+  if (shopInside > 0.5 && abs(det) > 1e-12) {
+    vec3 tangent = normalize(dPdu);
+    vec3 bitangent = normalize(dPdv);
+    vec3 inward = -normalize(cross(dPdu, dPdv));
+    vec3 view = normalize(vShopPosition - cameraPosition);
+    if (dot(view, inward) < 0.0) inward = -inward;
+    vec3 dir = vec3(dot(view, tangent), dot(view, bitangent), max(dot(view, inward), 0.05));
+    // Where this pixel sits on its bay's glass, in metres from the bottom-left corner.
+    vec2 tileUv = fract(vMapUv);
+    float bayIndex = floor(tileUv.x * 2.0);
+    float bayStart = bayIndex * 0.5 + shopBay.z;
+    float glassTop = 1.0 - shopBay.x;
+    float glassBottom = 1.0 - shopBay.y;
+    vec2 size = vec2(shopBay.w * length(dPdu), (glassTop - glassBottom) * length(dPdv));
+    vec3 p = vec3((tileUv.x - bayStart) / shopBay.w * size.x, (tileUv.y - glassBottom) / (glassTop - glassBottom) * size.y, 0.0);
+    float depth = 4.5;
+    float tx = dir.x > 0.0 ? (size.x - p.x) / dir.x : -p.x / min(dir.x, -1e-4);
+    float ty = dir.y > 0.0 ? (size.y - p.y) / dir.y : -p.y / min(dir.y, -1e-4);
+    float tz = depth / dir.z;
+    float t = min(min(tx, ty), tz);
+    vec3 hit = p + dir * t;
+    vec2 local; // position in the drawn bay interior, 0..1 across and 0..1 up
+    if (t == tz) {
+      local = hit.xy / size; // back wall
+      shopShade = 1.0;
+    } else if (t == ty && dir.y < 0.0) {
+      local = vec2(hit.x / size.x, 0.06 * (1.0 - hit.z / depth)); // floor strip, near the glass at the bottom
+      shopShade = 0.8;
+    } else if (t == ty) {
+      local = vec2(hit.x / size.x, 1.0 - 0.07 * hit.z / depth); // ceiling with its light fixtures
+      shopShade = 0.9;
+    } else {
+      // Side walls carry shelving too: the outer quarter of the drawn interior, stretched along the depth.
+      float along = hit.z / depth;
+      local = vec2(dir.x > 0.0 ? mix(0.985, 0.78, along) : mix(0.015, 0.22, along), hit.y / size.y);
+      shopShade = 0.7;
+    }
+    shopShade *= 1.0 - 0.25 * hit.z / depth;
+    local = clamp(local, vec2(0.004), vec2(0.996));
+    shopUv = vec2(bayStart + local.x * shopBay.w, glassBottom + local.y * (glassTop - glassBottom));
+    vec3 room = textureLod(shopInterior, shopUv, shopLod).rgb * shopShade;
+    diffuseColor.rgb = mix(diffuseColor.rgb, room, shopInside);
+  }
+}`,
+          )
+          .replace(
+            "#include <emissivemap_fragment>",
+            `#include <emissivemap_fragment>
+if (shopInside > 0.5) {
+  totalEmissiveRadiance = mix(totalEmissiveRadiance, textureLod(shopInteriorGlow, shopUv, shopLod).rgb * emissive * shopShade, shopInside);
+}`,
+          );
+      };
+      material.customProgramCacheKey = () => "drift-fury-shop-interior";
+    }
     const shopCache = new Map();
     function shopMaterial(sign, rx) {
       const mk = sign + "|" + rx;
@@ -373,6 +482,14 @@ vec2 wallUv;`,
       const cvE = mkCanvas(W, H);
       const g = cv.getContext("2d");
       const e = cvE.getContext("2d");
+      // The interior of each bay on its own (no frames), sampled by the interior-mapping shader, and a mask
+      // of the clear glass it shows through.
+      const cvI = mkCanvas(W, H);
+      const cvIE = mkCanvas(W, H);
+      const cvM = mkCanvas(W, H);
+      const gm = cvM.getContext("2d");
+      gm.fillStyle = "#000";
+      gm.fillRect(0, 0, W, H);
       // Draws into the colour map and the glow map with the same random sequence, so both line up.
       const both = (fn) => {
         const seed = Math.floor(rnd() * 1e9);
@@ -536,7 +653,28 @@ vec2 wallUv;`,
             }
           }
         });
-        // Frame: mullions, transom, door with a push bar (unlit, drawn over both maps).
+        cvI.getContext("2d").drawImage(cv, x0, top, x1 - x0, bottom - top, x0, top, x1 - x0, bottom - top);
+        cvIE.getContext("2d").drawImage(cvE, x0, top, x1 - x0, bottom - top, x0, top, x1 - x0, bottom - top);
+        if (!closed) {
+          gm.fillStyle = "#fff";
+          gm.fillRect(x0, top, x1 - x0, bottom - top);
+        }
+        // Frame: mullions, transom, door with a push bar (unlit, drawn over both maps and the glass mask).
+        [gm].forEach((c) => {
+          c.fillStyle = "#000";
+          c.fillRect(x0 - 4, top - 4, x1 - x0 + 8, 5);
+          c.fillRect(x0 - 4, bottom - 1, x1 - x0 + 8, 5);
+          c.fillRect(x0 - 4, top - 4, 5, bottom - top + 8);
+          c.fillRect(x1 - 1, top - 4, 5, bottom - top + 8);
+          c.fillRect(x0, top + 30, x1 - x0, 3);
+          if (door) {
+            c.fillRect(x0 + 140, top + 30, 4, bottom - top - 30);
+            c.fillRect(x0 + 200, top + 30, 4, bottom - top - 30);
+            c.fillRect(x0 + 150, top + 100, 44, 3);
+          } else {
+            c.fillRect(x0 + 116, top + 30, 4, bottom - top - 30);
+          }
+        });
         both((c, glow, random) => {
           c.fillStyle = glow ? "#000" : "#15181c";
           c.fillRect(x0 - 4, top - 4, x1 - x0 + 8, 5);
@@ -580,6 +718,12 @@ vec2 wallUv;`,
         clearcoatRoughness: 0.08,
         envMapIntensity: 0.7,
       });
+      const interior = textureOf(cvI);
+      const interiorGlow = textureOf(cvIE);
+      interior.colorSpace = SRGBColorSpace;
+      interiorGlow.colorSpace = SRGBColorSpace;
+      const glassMask = textureOf(cvM);
+      applyInteriorMapping(hit, { interior, interiorGlow, glassMask, top, bottom, width: W, height: H });
       shopCache.set(mk, hit);
       return hit;
     }
