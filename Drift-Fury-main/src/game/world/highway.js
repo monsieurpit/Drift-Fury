@@ -1,4 +1,6 @@
 import { MeshStandardMaterial, BoxGeometry, InstancedMesh } from "three";
+import { splitInstancedMesh } from "../render/meshUtils.js";
+import { BARRIER_UNIT_LENGTH, barrierGeometry, barrierMaterial } from "./jerseyBarrier.js";
 /** The A9 highway on the east side: lanes, reflector studs, guard rails and the city connectors. */
 export function buildHighway(world) {
   const {
@@ -6,9 +8,7 @@ export function buildHighway(world) {
     addSolid,
     addYellowLine,
     highwayMaterial,
-    poleMetal,
     scene,
-    sidewalkMaterial,
     tmpMatrix,
     tmpPosition,
     tmpRotation,
@@ -41,34 +41,48 @@ export function buildHighway(world) {
   reflectorStuds.count = studCount;
   reflectorStuds.instanceMatrix.needsUpdate = true;
   scene.add(reflectorStuds);
-  const postGeometry = new BoxGeometry(0.12, 0.9, 0.12);
-  const railGeometry = new BoxGeometry(0.6, 0.85, 11);
-  const guardPosts = new InstancedMesh(postGeometry, poleMetal, 200);
-  const guardRails = new InstancedMesh(railGeometry, sidewalkMaterial, 200);
-  guardPosts.castShadow = true;
-  guardRails.castShadow = true;
-  guardRails.receiveShadow = true;
-  let guardCount = 0;
+  // Concrete safety barriers along both edges: four precast New Jersey units per 14 m, each with a
+  // retroreflective delineator on top, left open where the city connectors join.
+  const units = [];
+  const delineators = [];
   for (let e = -690; e < 160; e += 14) {
     if (Math.abs(e - 70) >= 11 && Math.abs(e + 80) >= 11) {
       for (let t of [-15, 15]) {
-        tmpPosition.set(175 + t, 0.45, e);
-        tmpRotation.identity();
-        tmpScale.set(1, 1, 1);
-        tmpMatrix.compose(tmpPosition, tmpRotation, tmpScale);
-        guardPosts.setMatrixAt(guardCount, tmpMatrix);
-        guardRails.setMatrixAt(guardCount, tmpMatrix);
-        addSolid(175 + t, e, 0.3, 5.5);
-        guardCount++;
+        for (let k = 0; k < 4; k++) {
+          const z = e + (k - 1.5) * BARRIER_UNIT_LENGTH;
+          units.push([175 + t, z]);
+          delineators.push([175 + t, z]);
+        }
+        addSolid(175 + t, e, 0.3, 6.9);
       }
     }
   }
-  guardPosts.count = guardCount;
-  guardRails.count = guardCount;
-  guardPosts.instanceMatrix.needsUpdate = true;
-  guardRails.instanceMatrix.needsUpdate = true;
-  scene.add(guardPosts);
-  scene.add(guardRails);
+  const barrierUnits = new InstancedMesh(barrierGeometry(), barrierMaterial(), units.length);
+  const reflectors = new InstancedMesh(
+    new BoxGeometry(0.05, 0.11, 0.025),
+    new MeshStandardMaterial({
+      color: "#f4f1e6",
+      emissive: "#ffd9a0",
+      emissiveIntensity: 0.45,
+      roughness: 0.3,
+    }),
+    delineators.length,
+  );
+  tmpRotation.identity();
+  tmpScale.set(1, 1, 1);
+  units.forEach(([x, z], index) => {
+    tmpPosition.set(x, 0.1, z);
+    tmpMatrix.compose(tmpPosition, tmpRotation, tmpScale);
+    barrierUnits.setMatrixAt(index, tmpMatrix);
+    tmpPosition.set(x, 0.1 + 0.81 + 0.055, z);
+    tmpMatrix.compose(tmpPosition, tmpRotation, tmpScale);
+    reflectors.setMatrixAt(index, tmpMatrix);
+  });
+  barrierUnits.castShadow = true;
+  barrierUnits.receiveShadow = true;
+  for (const mesh of [barrierUnits, reflectors]) {
+    for (const part of splitInstancedMesh(mesh, 120)) scene.add(part);
+  }
   addBox(60, 0.12, 18, 147, 0.02, 70, highwayMaterial);
   addBox(60, 0.12, 18, 147, 0.02, -80, highwayMaterial);
 }
