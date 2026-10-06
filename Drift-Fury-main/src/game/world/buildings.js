@@ -8,6 +8,7 @@ import {
   Vector2,
   ConeGeometry,
   SphereGeometry,
+  SRGBColorSpace,
 } from "three";
 import { FUEL_STATIONS } from "../data/stations.js";
 import { createRandom } from "../util/random.js";
@@ -232,6 +233,46 @@ export function buildBuildings(world) {
     }
 
     /* --- lit shop-fronts for the ground floor --- */
+    // One storey (4.4 m) by two 4 m bays per texture tile: cornice, a sign band with backlit lettering, a
+    // framed shop window (one bay has the door) and a stone plinth. Behind the glass each kind of shop has
+    // its own interior lit by its ceiling fixtures; some are closed for the night behind half-lowered
+    // shutters. The emissive map carries only what actually glows, at a level bloom does not wash out.
+    const SHOP_KINDS = {
+      "#c6dc77": {
+        name: "PHARMACIE",
+        wall: "#e9f1ee",
+        light: "#f4fbff",
+        goods: ["#ffffff", "#d7efe4", "#8fd1b4", "#f2f2f2", "#cfe0f0"],
+        cross: true,
+      },
+      "#5a9fd4": {
+        name: "ÉPICERIE",
+        wall: "#e8e2d0",
+        light: "#f3f6ff",
+        goods: ["#e64b3c", "#f2b134", "#5fae4b", "#f6e27a", "#d9792b", "#7a4b9a"],
+      },
+      "#e89978": {
+        name: "CAFÉ",
+        wall: "#7a4a2c",
+        light: "#ffcf8a",
+        goods: ["#d9a066", "#f1e2c6", "#4b2e1c", "#c98b55"],
+        cafe: true,
+      },
+      "#8c87c7": {
+        name: "BOUTIQUE",
+        wall: "#d8cfc4",
+        light: "#fff1dc",
+        goods: ["#22252b", "#b23a48", "#e9e4dc", "#3d5a80", "#c9a66b"],
+        racks: true,
+      },
+      "#ff7a7a": {
+        name: "PIZZERIA",
+        wall: "#8e3b26",
+        light: "#ffbe73",
+        goods: ["#e7c27d", "#f4ead2", "#2b5d34", "#b8432f"],
+        cafe: true,
+      },
+    };
     const shopCache = new Map();
     function shopMaterial(sign, rx) {
       const mk = sign + "|" + rx;
@@ -239,69 +280,220 @@ export function buildBuildings(world) {
       if (hit) {
         return hit;
       }
+      const kind = SHOP_KINDS[sign];
       const rnd = createRandom(sign.charCodeAt(2) * 131 + sign.charCodeAt(4) * 7);
-      const cv = mkCanvas(256, 128);
-      const cvE = mkCanvas(256, 128);
-      const g2 = cv.getContext("2d");
-      const ge = cvE.getContext("2d");
-      g2.fillStyle = "#1b2027";
-      g2.fillRect(0, 0, 256, 128);
-      ge.fillStyle = "#000";
-      ge.fillRect(0, 0, 256, 128);
+      const W = 512;
+      const H = 256;
+      const cv = mkCanvas(W, H);
+      const cvE = mkCanvas(W, H);
+      const g = cv.getContext("2d");
+      const e = cvE.getContext("2d");
+      // Draws into the colour map and the glow map with the same random sequence, so both line up.
+      const both = (fn) => {
+        const seed = Math.floor(rnd() * 1e9);
+        fn(g, false, createRandom(seed));
+        fn(e, true, createRandom(seed));
+      };
+      // Base: dark stone frame everywhere, nothing glowing.
+      g.fillStyle = "#2a2d31";
+      g.fillRect(0, 0, W, H);
+      e.fillStyle = "#000";
+      e.fillRect(0, 0, W, H);
+      // Cornice and plinth.
+      g.fillStyle = "#3b3f45";
+      g.fillRect(0, 0, W, 12);
+      g.fillStyle = "#4a4d50";
+      g.fillRect(0, H - 18, W, 18);
+      g.fillStyle = "rgba(0,0,0,0.35)";
+      g.fillRect(0, H - 18, W, 2);
+      // Sign band: dark fascia with backlit letters in the sign colour and a soft halo.
+      g.fillStyle = "#14171b";
+      g.fillRect(10, 16, W - 20, 34);
+      both((c, glow, random) => {
+        c.font = "bold 24px Helvetica, Arial, sans-serif";
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        if (glow) {
+          c.shadowColor = sign;
+          c.shadowBlur = 10;
+        }
+        c.fillStyle = glow ? sign : tint(sign, 1.1);
+        c.fillText(kind.name, W / 2, 34);
+        c.shadowBlur = 0;
+        if (kind.cross) {
+          // Green pharmacy cross at each end of the fascia.
+          for (const cx of [40, W - 40]) {
+            c.fillStyle = glow ? "#3dff7a" : "#2fd36a";
+            c.fillRect(cx - 4, 20, 8, 26);
+            c.fillRect(cx - 13, 29, 26, 8);
+          }
+        }
+      });
+      // Two bays of glazing.
+      const top = 56;
+      const bottom = H - 22;
+      const closed = rnd() < 0.22;
       for (let bay = 0; bay < 2; bay++) {
-        const bx0 = bay * 128;
-        g2.fillStyle = sign;
-        g2.fillRect(bx0 + 14, 6, 100, 18);
-        ge.fillStyle = sign;
-        ge.fillRect(bx0 + 14, 6, 100, 18);
-        for (let k = 0; k < 6; k++) {
-          const lw = 6 + Math.floor(rnd() * 8);
-          g2.fillStyle = "rgba(0,0,0,0.6)";
-          g2.fillRect(bx0 + 20 + k * 15, 11, lw, 8);
-          ge.fillStyle = "#000";
-          ge.fillRect(bx0 + 20 + k * 15, 11, lw, 8);
-        }
-        g2.fillStyle = "#0c0f12";
-        g2.fillRect(bx0 + 6, 38, 116, 82);
-        const gl = g2.createLinearGradient(0, 42, 0, 118);
-        gl.addColorStop(0, "#ffe6b8");
-        gl.addColorStop(1, "#b57a3c");
-        g2.fillStyle = gl;
-        g2.fillRect(bx0 + 9, 41, 110, 76);
-        const eg = ge.createLinearGradient(0, 42, 0, 118);
-        eg.addColorStop(0, "rgba(255,226,170,0.85)");
-        eg.addColorStop(1, "rgba(180,120,60,0.6)");
-        ge.fillStyle = eg;
-        ge.fillRect(bx0 + 9, 41, 110, 76);
-        for (let k = 0; k < 4; k++) {
-          const sx = bx0 + 14 + k * 26;
-          const sh = 14 + Math.floor(rnd() * 26);
-          g2.fillStyle = "rgba(30,18,10,0.55)";
-          g2.fillRect(sx, 117 - sh, 14, sh);
-          ge.fillStyle = "rgba(0,0,0,0.5)";
-          ge.fillRect(sx, 117 - sh, 14, sh);
-        }
-        for (const ctx of [g2, ge]) {
-          ctx.fillStyle = ctx === g2 ? "#0c0f12" : "#000";
-          ctx.fillRect(bx0 + 62, 41, 4, 76);
-          ctx.fillRect(bx0 + 9, 70, 110, 3);
-        }
+        const x0 = bay * 256 + 10;
+        const x1 = x0 + 236;
+        const door = bay === 1;
+        // Interior, drawn into both maps (the emissive copy is the light the shop gives off).
+        both((c, glow, random) => {
+          const lit = closed ? 0.12 : 1;
+          const scale = (hex, k) => tint(hex, k * (glow ? lit * 0.62 : 0.55 + 0.45 * lit));
+          // Back wall lit from the ceiling: bright under the fixtures, falling off toward the floor.
+          const wall = c.createLinearGradient(0, top, 0, bottom);
+          wall.addColorStop(0, scale(kind.light, 0.95));
+          wall.addColorStop(0.35, scale(kind.wall, 0.9));
+          wall.addColorStop(1, scale(kind.wall, 0.45));
+          c.fillStyle = wall;
+          c.fillRect(x0, top, x1 - x0, bottom - top);
+          // Ceiling with recessed light fixtures.
+          c.fillStyle = scale("#3a3a3a", 0.8);
+          c.fillRect(x0, top, x1 - x0, 14);
+          for (let f = 0; f < 4; f++) {
+            c.fillStyle = closed ? scale("#555555", 1) : glow ? kind.light : "#ffffff";
+            c.fillRect(x0 + 18 + f * 56, top + 5, 30, 4);
+          }
+          if (kind.cafe) {
+            // Counter at the back, pendant lamps, small tables and chairs near the glass.
+            c.fillStyle = scale("#2a1a10", 1);
+            c.fillRect(x0 + 20, bottom - 70, 196, 40);
+            c.fillStyle = scale("#c9a46a", 1);
+            c.fillRect(x0 + 20, bottom - 72, 196, 4);
+            for (let l = 0; l < 3; l++) {
+              const lx = x0 + 50 + l * 68;
+              c.fillStyle = scale("#1a1a1a", 1);
+              c.fillRect(lx, top + 14, 1, 40);
+              c.fillStyle = glow && !closed ? kind.light : scale("#ffd79a", 1.1);
+              c.beginPath();
+              c.arc(lx, top + 58, 8, Math.PI, 0);
+              c.fill();
+            }
+            for (let t = 0; t < 3; t++) {
+              const tx = x0 + 30 + t * 70 + random() * 10;
+              c.fillStyle = scale("#1c140e", 1);
+              c.fillRect(tx, bottom - 26, 34, 4);
+              c.fillRect(tx + 16, bottom - 22, 3, 20);
+              c.fillRect(tx - 10, bottom - 18, 3, 16);
+              c.fillRect(tx + 40, bottom - 18, 3, 16);
+            }
+            // Shelves of cups and bottles behind the counter.
+            for (let r = 0; r < 2; r++) {
+              const sy = top + 30 + r * 22;
+              c.fillStyle = scale("#3a2616", 1);
+              c.fillRect(x0 + 24, sy + 12, 188, 2);
+              for (let k = 0; k < 24; k++) {
+                c.fillStyle = scale(kind.goods[Math.floor(random() * kind.goods.length)], 0.9);
+                const h = 6 + random() * 6;
+                c.fillRect(x0 + 26 + k * 7.8, sy + 12 - h, 5, h);
+              }
+            }
+          } else if (kind.racks) {
+            // Clothing rails with hanging garments and a couple of mannequins in the window.
+            for (let r = 0; r < 2; r++) {
+              const ry = top + 34 + r * 46;
+              c.fillStyle = scale("#8a8a8a", 1);
+              c.fillRect(x0 + 16, ry, 204, 2);
+              for (let k = 0; k < 18; k++) {
+                c.fillStyle = scale(kind.goods[Math.floor(random() * kind.goods.length)], 0.85);
+                c.fillRect(x0 + 18 + k * 11.3, ry + 2, 8, 26 + random() * 12);
+              }
+            }
+            for (let m = 0; m < 2; m++) {
+              const mx = x0 + 60 + m * 110;
+              c.fillStyle = scale("#e7ddd0", 0.9);
+              c.beginPath();
+              c.arc(mx, bottom - 92, 7, 0, Math.PI * 2);
+              c.fill();
+              c.fillStyle = scale(kind.goods[Math.floor(random() * kind.goods.length)], 0.9);
+              c.fillRect(mx - 11, bottom - 84, 22, 40);
+              c.fillStyle = scale("#e7ddd0", 0.9);
+              c.fillRect(mx - 6, bottom - 44, 4, 40);
+              c.fillRect(mx + 2, bottom - 44, 4, 40);
+            }
+          } else {
+            // Shelving units full of products, an aisle-end display near the glass.
+            for (let r = 0; r < 5; r++) {
+              const sy = top + 26 + r * 28;
+              if (sy > bottom - 20) break;
+              c.fillStyle = scale("#6b6f74", 1);
+              c.fillRect(x0 + 8, sy + 16, x1 - x0 - 16, 3);
+              let px = x0 + 10;
+              while (px < x1 - 14) {
+                const w = 4 + random() * 9;
+                const h = 7 + random() * 9;
+                c.fillStyle = scale(
+                  kind.goods[Math.floor(random() * kind.goods.length)],
+                  0.85 + random() * 0.25,
+                );
+                c.fillRect(px, sy + 16 - h, w, h);
+                px += w + 1 + random() * 2;
+              }
+            }
+            c.fillStyle = scale("#30343a", 1);
+            c.fillRect(x0 + 70, bottom - 40, 96, 40);
+          }
+          // Floor: darker, a sheen of reflected light along it.
+          const floor = c.createLinearGradient(0, bottom - 16, 0, bottom);
+          floor.addColorStop(0, scale(kind.wall, 0.35));
+          floor.addColorStop(1, scale(kind.light, 0.5));
+          c.fillStyle = floor;
+          c.fillRect(x0, bottom - 16, x1 - x0, 16);
+          if (closed) {
+            // Shutter half down: horizontal slats over the top of the window.
+            const shutterBottom = top + (bottom - top) * (0.35 + random() * 0.4);
+            c.fillStyle = glow ? "#000" : "#5b6066";
+            c.fillRect(x0, top, x1 - x0, shutterBottom - top);
+            if (!glow) {
+              c.fillStyle = "rgba(0,0,0,0.35)";
+              for (let y = top + 4; y < shutterBottom; y += 6) c.fillRect(x0, y, x1 - x0, 1.5);
+            }
+          }
+        });
+        // Frame: mullions, transom, door with a push bar (unlit, drawn over both maps).
+        both((c, glow, random) => {
+          c.fillStyle = glow ? "#000" : "#15181c";
+          c.fillRect(x0 - 4, top - 4, x1 - x0 + 8, 5);
+          c.fillRect(x0 - 4, bottom - 1, x1 - x0 + 8, 5);
+          c.fillRect(x0 - 4, top - 4, 5, bottom - top + 8);
+          c.fillRect(x1 - 1, top - 4, 5, bottom - top + 8);
+          c.fillRect(x0, top + 30, x1 - x0, 3);
+          if (door) {
+            c.fillRect(x0 + 140, top + 30, 4, bottom - top - 30);
+            c.fillRect(x0 + 200, top + 30, 4, bottom - top - 30);
+            if (!glow) {
+              c.fillStyle = "#9aa1a8";
+              c.fillRect(x0 + 150, top + 100, 44, 3);
+            }
+          } else {
+            c.fillRect(x0 + 116, top + 30, 4, bottom - top - 30);
+          }
+        });
+        // Glass: a faint diagonal reflection across each pane (colour map only, not emitted).
+        const sheen = g.createLinearGradient(x0, top, x1, bottom);
+        sheen.addColorStop(0, "rgba(255,255,255,0)");
+        sheen.addColorStop(0.45, "rgba(255,255,255,0.07)");
+        sheen.addColorStop(0.55, "rgba(255,255,255,0)");
+        g.fillStyle = sheen;
+        g.fillRect(x0, top, x1 - x0, bottom - top);
       }
-      g2.fillStyle = "#0b0e11";
-      g2.fillRect(0, 118, 256, 10);
       const mp = textureOf(cv);
       const em = textureOf(cvE);
+      mp.colorSpace = SRGBColorSpace;
+      em.colorSpace = SRGBColorSpace;
       mp.repeat.set(rx, 1);
       em.repeat.set(rx, 1);
       hit = new MeshPhysicalMaterial({
         map: mp,
         emissiveMap: em,
         emissive: "#ffffff",
-        emissiveIntensity: 1.3,
-        roughness: 0.45,
-        metalness: 0.2,
-        clearcoat: 0.5,
-        envMapIntensity: 0.6,
+        emissiveIntensity: 1,
+        roughness: 0.35,
+        metalness: 0.1,
+        clearcoat: 0.8,
+        clearcoatRoughness: 0.08,
+        envMapIntensity: 0.7,
       });
       shopCache.set(mk, hit);
       return hit;
