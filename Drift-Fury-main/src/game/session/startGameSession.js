@@ -469,7 +469,6 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const lookTarget = new Vector3();
   const cameraTarget = new Vector3();
   const shakeOffset = new Vector3();
-  const shadowAhead = new Vector3();
   const shadowCenter = new Vector3(0, 0, 70);
   let shadowsDue = true;
   let inCityEnvironment = () => {};
@@ -590,11 +589,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         };
       }
       // The moon follows the player, including up the mountain, and shines from where the moon is drawn
-      // in the sky. Its 180 m shadow box is centred 30 m ahead of the car (not of the camera: turning the
-      // view must not move the shadows).
-      const aheadHeading = state.onFoot ? footCameraYaw : state.heading;
-      shadowAhead.set(-Math.sin(aheadHeading) * 30, 0, -Math.cos(aheadHeading) * 30);
-      shadowCenter.set(state.x + shadowAhead.x, state.y || 0, state.z + shadowAhead.z);
+      // in the sky. Its 180 m shadow box is centred on the car: turning or drifting never moves it, so the
+      // cached shadows of the world (shadowCache.js) are only redrawn as the car travels.
+      shadowCenter.set(state.x, state.y || 0, state.z);
       shadowFrameCounter++;
       if (shadowFrameCounter >= shadowFrameInterval) {
         shadowsDue = true;

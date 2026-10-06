@@ -6,7 +6,7 @@
 // long streaky highlights in the wet asphalt, falling off with distance like real luminaires.
 import { Color, Frustum, Matrix4, Sphere, Vector3, Vector4 } from "three";
 
-export const LAMP_COUNT = 32;
+export const LAMP_COUNT = 20;
 const LAMP_RANGE = 28; // metres: beyond this a lamp adds nothing
 
 const DECLARATIONS = /* glsl */ `

@@ -34,10 +34,6 @@ export function buildRoads(world) {
     opacity: 0.38,
     depthWrite: false,
     side: 2,
-    // A few millimetres above the asphalt: keep it on top at any distance.
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -2,
   });
   const addRoadPuddle = (x, z, rx, rz, angle) => {
     const positions = [0, 0, 0];

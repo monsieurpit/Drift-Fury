@@ -4,7 +4,7 @@
 // hitch in the motion. The pacer measures the screen's refresh rate and how long this device really takes
 // per frame (average, worst frames and how much they vary), then picks the highest frame rate it can hold
 // steadily, from the rates that divide the refresh rate evenly so every frame stays on screen for the same
-// time: 60 or 30 on a 60 Hz screen; 120, 60 or 40 on a 120 Hz Mac; 144, 72, 48 or 36 at 144 Hz. It keeps
+// time (as long as locking to it costs little of the frame rate the device actually reaches): 60 or 30 on a 60 Hz screen; 120, 60 or 40 on a 120 Hz Mac; 144, 72, 48 or 36 at 144 Hz. It keeps
 // measuring: if frames start missing (a heavier part of the map), it steps down; when there has been
 // headroom for a while, it tries the next rate up, and backs off for longer each time a try fails.
 
@@ -78,20 +78,21 @@ export function createFramePacer({ minFps = 30 } = {}) {
       }
       stableWindows = 0;
     }
+    // Even the slowest rate is out of reach: the renderer should do less (lower the resolution).
+    overloaded = measuredFps < minFps * 0.95;
     if (struggling) {
       calmWindows = 0;
       stableWindows = 0;
-      if (divisor < maxDivisor()) {
+      // Lock to the next steady rate down only if it costs little: a steady 30 is smoother than an uneven
+      // 34, but an uneven 45 still plays better than a steady 30.
+      const slower = 1000 / (refreshMs * (divisor + 1));
+      if (divisor < maxDivisor() && slower >= measuredFps * 0.85) {
         divisor++;
         // Each drop makes the next try at a faster rate wait longer (no flip-flopping between two rates).
         calmNeeded = Math.min(40, calmNeeded * 2);
-        overloaded = false;
-      } else {
-        overloaded = true; // even the slowest steady rate is missed: the renderer should do less
       }
       return;
     }
-    overloaded = false;
     // Long stable stretches earn back quicker retries.
     if (++stableWindows >= 10) {
       stableWindows = 0;

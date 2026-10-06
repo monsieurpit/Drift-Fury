@@ -41,11 +41,6 @@ export function createWorldContext(world) {
   // Road paint is lit like the asphalt (a little glossier, with a faint retroreflective glow) instead of
   // unlit, which made every line glow like neon at night.
   const whitePaint = new MeshStandardMaterial({
-    // Painted on the road: always drawn over the asphalt, even far away where depth precision is coarse
-    // (otherwise distant lines break up and flicker as the camera moves).
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -4,
     color: "#e4e2d6",
     roughness: 0.5,
     metalness: 0,
@@ -53,11 +48,6 @@ export function createWorldContext(world) {
     emissiveIntensity: 0.12,
   });
   const yellowPaint = new MeshStandardMaterial({
-    // Painted on the road: always drawn over the asphalt, even far away where depth precision is coarse
-    // (otherwise distant lines break up and flicker as the camera moves).
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -4,
     color: "#d9b43c",
     roughness: 0.5,
     metalness: 0,
