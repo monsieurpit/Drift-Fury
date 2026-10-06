@@ -102,51 +102,8 @@ export function buildRoads(world) {
       addBox(to - from, 0.12, 18, (from + to) / 2, 0.01, roadZ, roadMaterial);
     }
   }
-  const roadY = 0.085;
-  for (const x of roadXs) {
-    for (let segment = 0; segment < roadZs.length - 1; segment++) {
-      const start = roadZs[segment] + 17;
-      const end = roadZs[segment + 1] - 17;
-      for (let z = start; z + 5 <= end; z += 9) {
-        addBox(0.15, 0.018, 5, x, roadY, z + 2.5, yellowPaint);
-      }
-    }
-    for (let zIndex = 0; zIndex < roadZs.length; zIndex++) {
-      for (const approach of [-1, 1]) {
-        if (zIndex + approach < 0 || zIndex + approach >= roadZs.length) {
-          continue;
-        }
-        const z = roadZs[zIndex];
-        const crossZ = z + approach * 11.5;
-        for (let stripe = -3; stripe <= 3; stripe++) {
-          addBox(0.75, 0.025, 2.6, x + stripe * 2.1, roadY + 0.008, crossZ, whitePaint);
-        }
-        addBox(9, 0.025, 0.2, x, roadY + 0.01, z + approach * 15.5, whitePaint);
-      }
-    }
-  }
-  for (const z of roadZs) {
-    for (let segment = 0; segment < roadXs.length - 1; segment++) {
-      const start = roadXs[segment] + 17;
-      const end = roadXs[segment + 1] - 17;
-      for (let x = start; x + 5 <= end; x += 9) {
-        addBox(5, 0.018, 0.15, x + 2.5, roadY, z, yellowPaint);
-      }
-    }
-    for (let xIndex = 0; xIndex < roadXs.length; xIndex++) {
-      for (const approach of [-1, 1]) {
-        if (xIndex + approach < 0 || xIndex + approach >= roadXs.length) {
-          continue;
-        }
-        const x = roadXs[xIndex];
-        const crossX = x + approach * 11.5;
-        for (let stripe = -3; stripe <= 3; stripe++) {
-          addBox(0.75, 0.025, 2.6, crossX, roadY + 0.008, z + stripe * 2.1, whitePaint);
-        }
-        addBox(0.2, 0.025, 9, x + approach * 15.5, roadY + 0.01, z, whitePaint);
-      }
-    }
-  }
+  // Centre dashes, zebra crossings and stop lines are painted by the road material itself
+  // (roadMarkings.js): drawn as thin strips of geometry they blinked and broke up in the distance.
   for (const x of roadXs) {
     for (const side of [-1, 1]) {
       const accessCuts = stationRoadAccesses

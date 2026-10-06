@@ -53,6 +53,19 @@ const FILM = /* glsl */ `
 // The water film: a clear coat that is glassy in puddles and a soft sheen where the road is only damp.
 material.clearcoat = max(material.clearcoat, wetness);
 material.clearcoatRoughness = mix(material.clearcoatRoughness, 0.0525 + geometryRoughness, max(wetPuddle, wetness * 0.6));
+// Specular antialiasing: where one pixel covers many bumps of the asphalt's normal map (any distance past a
+// few metres), its reflection is widened by how much the normal varies across the pixel, so the shiny wet
+// road shows a stable sheen instead of single sparkling pixels that blink from frame to frame (and that the
+// bloom turns into flashing blobs).
+{
+  vec3 normalDx = dFdx(normal);
+  vec3 normalDy = dFdy(normal);
+  float kernel = min(2.0 * 0.25 * (dot(normalDx, normalDx) + dot(normalDy, normalDy)), 0.3);
+  float alpha = material.roughness * material.roughness;
+  material.roughness = sqrt(sqrt(alpha * alpha + kernel));
+  float coatAlpha = material.clearcoatRoughness * material.clearcoatRoughness;
+  material.clearcoatRoughness = sqrt(sqrt(coatAlpha * coatAlpha + kernel * 0.5));
+}
 `;
 
 const BOX_PROJECTION = /* glsl */ `

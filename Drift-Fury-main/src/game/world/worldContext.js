@@ -3,6 +3,8 @@ import { CITY_REFLECTION_BOX, CITY_REFLECTION_PROBE, makeWet } from "../render/w
 import { getTerrainTextures } from "./terrainTextures.js";
 import { scannedSet } from "./scannedTextures.js";
 import { concreteTexture, createAsphaltMaterial, grassTexture } from "./textures.js";
+import { addRoadMarkings } from "./roadMarkings.js";
+import { ROAD_XS, ROAD_ZS } from "../data/roadGrid.js";
 /** Shared materials, the box/solid helpers and scratch math objects used by every part of the map. */
 export function createWorldContext(world) {
   const { scene } = world;
@@ -15,6 +17,8 @@ export function createWorldContext(world) {
     box: CITY_REFLECTION_BOX,
     grid: new Vector4(60, 50, -80, 9),
   });
+  // Lane lines, crossings and stop lines are painted in the road's shader (see roadMarkings.js).
+  addRoadMarkings(roadMaterial, { roadXs: ROAD_XS, roadZs: ROAD_ZS });
   const highwayMaterial = createAsphaltMaterial();
   // Sidewalks, curbs and trim: photo-scanned worn concrete (Poly Haven "concrete_floor_worn_001").
   const concreteScan = scannedSet("concrete_floor_worn_001", [0.3, 0.3, 0.3]);
