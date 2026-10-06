@@ -10,7 +10,7 @@ import { Frustum, InstancedMesh, Matrix4, Object3D, Sphere, Box3 } from "three";
 
 const LIGHT_NAMES = new Set(["blue", "red"]);
 
-export function createCarInstancer(scene) {
+export function createCarInstancer(scene, { onMesh } = {}) {
   const looks = new Map(); // template -> { parts, handles, sphere, capacity }
   const frustum = new Frustum();
   const viewProjection = new Matrix4();
@@ -35,6 +35,7 @@ export function createCarInstancer(scene) {
       mesh.userData.carInstances = true;
       part.mesh = mesh;
       scene.add(mesh);
+      onMesh?.(mesh);
     }
   }
 

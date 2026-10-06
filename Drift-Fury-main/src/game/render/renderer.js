@@ -16,6 +16,8 @@ import {
   CanvasTexture,
   PMREMGenerator,
   Sphere,
+  DepthTexture,
+  UnsignedIntType,
   HalfFloatType,
   NoBlending,
   ShaderMaterial,
@@ -27,6 +29,7 @@ import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
 import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
+import { TAAPass } from "./taaPass.js";
 import { createGradingPass } from "./gradingPass.js";
 import { QUALITY_PRESETS, brokenFeatures, resolveQuality } from "./quality.js";
 /**
@@ -96,7 +99,11 @@ class GameAOPass extends GTAOPass {
 class SceneRenderPass extends RenderPass {
   constructor(scene, camera) {
     super(scene, camera);
-    this.target = new WebGLRenderTarget(1, 1, { type: HalfFloatType });
+    // With a depth texture: temporal antialiasing reprojects the world from it.
+    this.target = new WebGLRenderTarget(1, 1, {
+      type: HalfFloatType,
+      depthTexture: new DepthTexture(1, 1, UnsignedIntType),
+    });
     this.copy = new FullScreenQuad(
       new ShaderMaterial({
         uniforms: UniformsUtils.clone(CopyShader.uniforms),
@@ -118,7 +125,7 @@ class SceneRenderPass extends RenderPass {
     this.target.setSize(width, height);
   }
   render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
-    if (!this.target.samples) {
+    if (!this.target.samples && !this.keepDepth) {
       super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
       return;
     }
@@ -161,6 +168,12 @@ function createComposer(renderer, scene, camera, width, height, bloomStrength, i
     composer.ao.blendIntensity = 0.9;
     composer.ao.enabled = false;
     composer.addPass(composer.ao);
+  }
+  if (inGame) {
+    // Temporal antialiasing, on the HDR image before bloom (see taaPass.js).
+    composer.taa = new TAAPass(scene, camera, () => composer.scenePass.target.depthTexture);
+    composer.taa.enabled = false;
+    composer.addPass(composer.taa);
   }
   composer.addPass(new UnrealBloomPass(new Vector2(width, height), bloomStrength, 0.4, 0.92));
   const vignette = new ShaderPass(VignetteShader);
@@ -409,15 +422,23 @@ export function createRenderer(container, inGame = false) {
     const broken = brokenFeatures();
     if (composer.ao) composer.ao.enabled = preset.ao && !broken.has("ao");
     composer.grading.enabled = preset.grading && !broken.has("grading");
+    // Temporal antialiasing on every level (it replaces MSAA: smoother, and no flicker on thin lines and
+    // small lights); MSAA, or SMAA without it, where TAA was found broken.
+    const taa = !!composer.taa && renderer.capabilities.isWebGL2 && !broken.has("taa");
+    if (composer.taa) {
+      composer.taa.enabled = taa;
+      composer.taa.reset();
+    }
+    composer.scenePass.keepDepth = taa;
     const msaaBroken = broken.has("msaa");
     const samples =
-      renderer.capabilities.isWebGL2 && !msaaBroken
+      renderer.capabilities.isWebGL2 && !msaaBroken && !taa
         ? Math.min(preset.msaa, renderer.capabilities.maxSamples)
         : 0;
     composer.scenePass.samples = samples;
     // SMAA where there is no MSAA: on BASSE (thin road lines and crossings shimmer badly without any
     // antialiasing) and where MSAA was found broken.
-    if (composer.smaa) composer.smaa.enabled = samples === 0 && renderer.capabilities.isWebGL2;
+    if (composer.smaa) composer.smaa.enabled = !taa && samples === 0 && renderer.capabilities.isWebGL2;
     if (inGame && shadowsAvailable) renderer.shadowMap.enabled = !broken.has("shadows");
     if (sun.castShadow && sun.shadow.mapSize.x !== preset.shadowMapSize) {
       sun.shadow.mapSize.set(preset.shadowMapSize, preset.shadowMapSize);
@@ -452,6 +473,7 @@ export function createRenderer(container, inGame = false) {
       const preset = QUALITY_PRESETS[quality];
       const broken = brokenFeatures();
       return [
+        composer.taa?.enabled && "taa",
         composer.scenePass.target.samples > 0 && "msaa",
         composer.ao?.enabled && "ao",
         composer.grading.enabled && "grading",

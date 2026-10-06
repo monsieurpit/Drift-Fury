@@ -277,28 +277,35 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   scene.add(playerCar);
   let playerCarSpec = game.state.playerVeh.spec;
   // Police, parked and traffic cars are instanced per look (carInstancing.js).
-  const carInstancer = createCarInstancer(scene);
+  // Moving things get motion vectors for the temporal antialiasing (taaPass.js).
+  const trackMotion = (object) => composer.taa?.track(object);
+  const carInstancer = createCarInstancer(scene, { onMesh: trackMotion });
+  trackMotion(playerCar);
   const policeCars = game.state.police.map(() => {
     return carInstancer.add(trafficTemplate("#ffffff", "coupe", true));
   });
   const playerPerson = createPerson("#2f3b4c");
   playerPerson.visible = false;
   scene.add(playerPerson);
+  trackMotion(playerPerson);
   const officerPeople = game.state.police.map(() => {
     const officer = createPerson("#1f2f4d");
     officer.visible = false;
     scene.add(officer);
+    trackMotion(officer);
     return officer;
   });
   const trafficCars = new Map();
   function swapPlayerCar(vehicle) {
     scene.remove(playerCar);
+    composer.taa?.untrack(playerCar);
     playerCar.traverse((e) => {
       e.geometry?.dispose();
       e.material?.dispose();
     });
     playerCar = batchPlayerCar(buildCar(vehicle.color, vehicle.shape, vehicle.kind === "police", true));
     scene.add(playerCar);
+    trackMotion(playerCar);
     playerCarSpec = vehicle.spec;
   }
   function syncTrafficCars() {
@@ -814,7 +821,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       shadowCache.update(shadowCenter.x, shadowCenter.y, shadowCenter.z);
       shadowsDue = false;
     }
+    composer.taa?.beginFrame(camera);
     composer.render();
+    composer.taa?.endFrame(camera);
     checkForBlackScreen();
   }
   // Black-screen watchdog: a short while after the session starts or the quality changes, look at the
@@ -941,8 +950,11 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     sun.target.position.set(x, 0, z);
     sun.target.updateMatrixWorld();
     renderer.shadowMap.needsUpdate = true;
+    composer.taa?.beginFrame(camera);
     composer.render();
+    composer.taa?.endFrame(camera);
   }
+  composer.taa?.reset();
   camera.position.set(0, 9, 85);
   await stage(1, "Prêt");
   if (debugSession) {
@@ -987,12 +999,14 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     setCar(e) {
       game.setCar(e);
       scene.remove(playerCar);
+      composer.taa?.untrack(playerCar);
       playerCar.traverse((e) => {
         e.geometry?.dispose();
         e.material?.dispose();
       });
       playerCar = batchPlayerCar(buildCar(e.color, e.shape, false, true));
       scene.add(playerCar);
+      trackMotion(playerCar);
       playerCarSpec = `player|${e.color}|${e.shape}`;
     },
     dispose() {

@@ -104,6 +104,7 @@ const BROKEN_KEY = "drift-fury-broken-features-v2";
 
 /** Suspects, in the order the watchdog tries them, with how the pause menu names them. */
 export const FEATURE_LABELS = {
+  taa: "Anticrénelage temporel TAA (remplacé par MSAA ou SMAA)",
   msaa: "Anticrénelage MSAA (remplacé par SMAA)",
   ao: "Occlusion ambiante",
   grading: "Étalonnage des couleurs",
