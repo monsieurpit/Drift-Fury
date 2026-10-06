@@ -130,9 +130,41 @@ function terrainGrid({ minX, maxX, minZ, maxZ, step }, { skipCell, edgeStep } = 
 }
 
 /** The mountain ground: a detailed mesh around the play area and a coarse one out to the horizon. */
+/** Forest density at a point: the same stands, tree line and clearings the planting uses. */
+function forestDensity(x, z, y) {
+  if (z > -112 || (x > 120 && x < 215)) return 0;
+  const treeLine = 118 + fbm(x / 160, z / 160, { seed: 77, octaves: 3 }) * 60;
+  const stand = fbm(x / 90, z / 90, { seed: 5, octaves: 3 });
+  return (
+    smoothstep(0.32, 0.6, stand) * (1 - smoothstep(treeLine - 25, treeLine, y)) * smoothstep(-112, -150, z)
+  );
+}
+
+/** Bakes forest density into a small texture over the forested area, for the forest-floor ground layer. */
+function bakeForestMap() {
+  const bounds = [-900, -1500, 1600, 1400];
+  const width = 200;
+  const height = 175;
+  const data = new Uint8Array(width * height * 4);
+  for (let row = 0; row < height; row++) {
+    const z = bounds[1] + ((row + 0.5) / height) * bounds[3];
+    for (let column = 0; column < width; column++) {
+      const x = bounds[0] + ((column + 0.5) / width) * bounds[2];
+      const index = (row * width + column) * 4;
+      data[index] = Math.round(forestDensity(x, z, terrainHeight(x, z)) * 255);
+      data[index + 3] = 255;
+    }
+  }
+  const texture = new DataTexture(data, width, height, RGBAFormat);
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearFilter;
+  texture.needsUpdate = true;
+  return { texture, bounds };
+}
+
 export function buildMountainTerrain(world) {
   const { scene } = world;
-  const material = createTerrainMaterial();
+  const material = createTerrainMaterial({ forest: bakeForestMap() });
   world.terrainMaterial = material;
   // The terrain only receives shadows: as a caster it doubled its triangle cost every frame for shadows the
   // slope lighting already conveys.

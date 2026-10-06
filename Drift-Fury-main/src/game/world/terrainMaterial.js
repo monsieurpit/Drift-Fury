@@ -1,7 +1,7 @@
 // Mountain ground material: a MeshStandardMaterial whose colour, roughness and normal are replaced by a blend
 // of grass (flat ground), rock (steep ground, projected from three axes so cliffs don't stretch) and snow
 // (high and not too steep), all broken up by large-scale variation so the tiling never shows.
-import { MeshStandardMaterial, Vector2, Vector3 } from "three";
+import { DataTexture, MeshStandardMaterial, RGBAFormat, Vector2, Vector3, Vector4 } from "three";
 import { getTerrainTextures } from "./terrainTextures.js";
 import { scannedSet } from "./scannedTextures.js";
 
@@ -18,6 +18,11 @@ uniform float terrainRockBias;
 uniform vec3 terrainRockAverage;
 uniform vec3 terrainGrassAverage;
 uniform vec3 terrainGrassTarget;
+uniform sampler2D terrainForest;
+uniform sampler2D terrainForestFloor;
+uniform vec4 terrainForestBounds; // min x, min z, size x, size z
+uniform vec3 terrainForestTarget;
+uniform vec3 terrainForestAverage;
 uniform vec3 terrainSnowAverage;
 varying vec3 vTerrainPosition;
 varying vec3 vTerrainNormal;
@@ -121,6 +126,14 @@ const COLOR_CHUNK = /* glsl */ `
     vec3 grassScale = terrainGrassTarget / max(terrainGrassAverage, vec3(1e-3));
     vec3 grass = terrainGrassTarget * (1.0 - terrainDetail);
     if (detail) grass += antiTile(terrainGrass, p.xz, terrainDx.xz, terrainDy.xz, 1.0 / 3.0, smoothstep(0.38, 0.62, macro.g)).rgb * grassScale * terrainDetail;
+    // Under the forest the ground is needles, twigs and dirt instead of meadow grass.
+    float forest = texture2D(terrainForest, (p.xz - terrainForestBounds.xy) / terrainForestBounds.zw).r;
+    forest = smoothstep(0.15, 0.6, forest + (macroFine.r - 0.5) * 0.3);
+    if (forest > 0.002) {
+      vec3 floorColor = terrainForestTarget * (1.0 - terrainDetail);
+      if (detail) floorColor += antiTile(terrainForestFloor, p.xz, terrainDx.xz, terrainDy.xz, 1.0 / 2.5, smoothstep(0.38, 0.62, macro.b)).rgb * terrainForestTarget / max(terrainForestAverage, vec3(1e-3)) * terrainDetail;
+      grass = mix(grass, floorColor, forest);
+    }
     grass *= mix(0.72, 1.18, macro.r) * mix(0.88, 1.08, macroFine.g);
     grass = mix(grass, grass * vec3(1.18, 1.05, 0.78), smoothstep(0.55, 0.8, macro.b) * 0.6);
     color += grass * grassAmount;
@@ -166,14 +179,22 @@ const NORMAL_CHUNK = /* glsl */ `
 }
 `;
 
-/** Creates the mountain ground material. `snowLine` = [altitude, random spread]. */
-export function createTerrainMaterial({ snowLine = [135, 70], rockBias = 0 } = {}) {
+// Default "no forest" mask for materials that don't pass one.
+const noForest = new DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1, RGBAFormat);
+noForest.needsUpdate = true;
+
+/**
+ * Creates the mountain ground material. `snowLine` = [altitude, random spread]; `forest` (optional) =
+ * { texture, bounds: [minX, minZ, sizeX, sizeZ] }, a map of forest density over the ground.
+ */
+export function createTerrainMaterial({ snowLine = [135, 70], rockBias = 0, forest = null } = {}) {
   const textures = getTerrainTextures();
   // Photo-scanned ground (Poly Haven, CC0): cliff rock, leafy meadow grass and snow. The procedural macro
   // variation still breaks up their tiling over large areas.
   const rock = scannedSet("rock_face_03", textures.rock.average);
   const grass = scannedSet("leafy_grass", textures.grass.average);
   const snow = scannedSet("snow_02", textures.snow.average);
+  const forestFloor = scannedSet("forrest_ground_01", [0.06, 0.05, 0.035]);
   const material = new MeshStandardMaterial({ color: "#ffffff", roughness: 1, metalness: 0 });
   const uniforms = {
     terrainRock: { value: rock.map },
@@ -189,6 +210,11 @@ export function createTerrainMaterial({ snowLine = [135, 70], rockBias = 0 } = {
     terrainRockAverage: { value: rock.average },
     terrainGrassAverage: { value: grass.average },
     terrainGrassTarget: { value: new Vector3(...textures.grass.average) },
+    terrainForest: { value: forest ? forest.texture : noForest },
+    terrainForestFloor: { value: forestFloor.map },
+    terrainForestBounds: { value: new Vector4(...(forest ? forest.bounds : [0, 0, 1, 1])) },
+    terrainForestTarget: { value: new Vector3(0.042, 0.036, 0.022) },
+    terrainForestAverage: { value: forestFloor.average },
     terrainSnowAverage: { value: snow.average },
   };
   material.onBeforeCompile = (shader) => {
