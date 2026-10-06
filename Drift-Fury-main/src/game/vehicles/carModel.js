@@ -28,6 +28,7 @@ import {
   surfacePoint,
 } from "./carSurface.js";
 import { buildWheel, tyreTextures } from "./wheel.js";
+import { applyCarPaint } from "./carPaint.js";
 /*
  * Drift Fury car builder: smooth lofted bodywork, tinted glass greenhouse, pillars, wheel arches,
  * lathe-turned tyres and alloy wheels, shaped lights and per-model details.
@@ -55,17 +56,19 @@ export function buildCar(
   const doorC = spec.axR - spec.arch - 0.08;
 
   /* ---- materials ---- */
-  const paint = new MeshPhysicalMaterial({
-    color: bodyColor,
-    metalness: 0.55,
-    roughness: 0.24,
-    clearcoat: 1,
-    clearcoatRoughness: 0.04,
-    envMapIntensity: 2,
-    sheen: 0.25,
-    sheenRoughness: 0.3,
-    sheenColor: "#fff6e8",
-  });
+  const paint = applyCarPaint(
+    new MeshPhysicalMaterial({
+      color: bodyColor,
+      metalness: 0.55,
+      roughness: 0.24,
+      clearcoat: 1,
+      clearcoatRoughness: 0.04,
+      envMapIntensity: 2,
+      sheen: 0.25,
+      sheenRoughness: 0.3,
+      sheenColor: "#fff6e8",
+    }),
+  );
   const glass = new MeshPhysicalMaterial({
     color: "#04080c",
     metalness: 0.05,
