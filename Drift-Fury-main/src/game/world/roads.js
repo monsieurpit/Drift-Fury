@@ -1,11 +1,12 @@
 import { MeshStandardMaterial, Mesh, BufferGeometry, Float32BufferAttribute } from "three";
 import { FUEL_STATIONS } from "../data/stations.js";
+import { ROAD_XS, ROAD_ZS } from "../data/roadGrid.js";
 import { createRandom } from "../util/random.js";
 /** City road grid layout, asphalt, puddles, lane markings, crosswalks and sidewalks. */
 export function buildRoads(world) {
   const { addBox, roadMaterial, scene, sidewalkMaterial, whitePaint, yellowPaint } = world;
-  const roadXs = [-120, -60, 0, 60, 120];
-  const roadZs = [-80, -30, 20, 70];
+  const roadXs = ROAD_XS;
+  const roadZs = ROAD_ZS;
   const stationRoadAccesses = FUEL_STATIONS.map((station) => {
     const roadX = roadXs.reduce(
       (nearest, x) => (Math.abs(x - station.x) < Math.abs(nearest - station.x) ? x : nearest),

@@ -11,6 +11,8 @@ import {
 import { updateGearbox } from "./gearbox.js";
 import { createCarPhysics } from "./physics.js";
 import { terrainHeight } from "../world/terrain.js";
+import { ROAD_XS, ROAD_ZS } from "../data/roadGrid.js";
+import { buildRoadGraph, createPoliceBrain } from "./policeAI.js";
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance2D = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const PLAYER_HALF_WIDTH = 1;
@@ -118,6 +120,17 @@ export function createGame(car, engine, solids, noPolice = false) {
     }
   }
   const solidGrid = buildSolidGrid(solids);
+  const blockedBuffer = [];
+  // Whether (x, z) is inside a solid grown by `margin` metres (wide for planning, tight for manoeuvring).
+  const blockedAt = (x, z, margin = 1.2) => {
+    for (let solid of solidGrid.near(x, z, 30, blockedBuffer)) {
+      if (Math.abs(x - solid.x) < solid.w + margin && Math.abs(z - solid.z) < solid.d + margin) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const brain = createPoliceBrain(buildRoadGraph({ roadXs: ROAD_XS, roadZs: ROAD_ZS }), blockedAt);
   const occluders = solids.filter((e) => e.w >= 3);
   const nearbyBuffer = [];
   function hasLineOfSight(officer) {
@@ -335,8 +348,6 @@ export function createGame(car, engine, solids, noPolice = false) {
           fuel: +(state.fuel > 0),
         });
       }
-      const headingX = -Math.sin(state.heading);
-      const headingZ = -Math.cos(state.heading);
       const speed = Math.hypot(state.vx, state.vz);
       if (!state.onFoot) {
         state.x += state.vx * dt;
@@ -427,14 +438,10 @@ export function createGame(car, engine, solids, noPolice = false) {
       let rammed = false;
       let seen = false;
       let grabbed = false;
-      const blockedAt = (x, z) => {
-        for (let solid of solidGrid.near(x, z, 30, nearbyBuffer)) {
-          if (Math.abs(x - solid.x) < solid.w + 1.2 && Math.abs(z - solid.z) < solid.d + 1.2) {
-            return true;
-          }
-        }
-        return false;
-      };
+      // Whether any officer can see the player right now (shared over the radio: everyone knows).
+      const officerSeesPlayer =
+        state.wanted > 0.15 && state.police.some((officer) => hasLineOfSight(officer));
+      brain.observe(state, officerSeesPlayer);
       state.police.forEach((officer, index) => {
         if (officer.onFoot) {
           let targetX = null;
@@ -481,103 +488,34 @@ export function createGame(car, engine, solids, noPolice = false) {
         }
         const chasing = state.wanted > 0.15;
         officer.contactCooldown = Math.max(0, (officer.contactCooldown || 0) - dt);
-        officer.speed = officer.speed || 0;
-        const distanceToPlayer = distance2D(officer, state);
-        let aimX;
-        let aimZ;
-        if (chasing) {
-          const leadTime =
-            officer.mode === 3
-              ? distanceToPlayer > 30
-                ? 2.5
-                : 1
-              : officer.mode === 2 && state.wanted >= 3
-                ? 3
-                : officer.mode === 1
-                  ? 1.2
-                  : 0;
-          aimX = state.x + state.vx * leadTime;
-          aimZ = state.z + state.vz * leadTime;
-          if (officer.mode === 3 && distanceToPlayer > 30) {
-            aimX += headingX * 10;
-            aimZ += headingZ * 10;
-          }
-        } else {
-          aimX = [-50, 50, -30, 30][index];
-          aimZ = Math.sin(state.elapsed * 0.1 + index) * 40;
-        }
-        let targetSpeed = chasing ? Math.min(engine.max * 0.8, 12.5 + state.wanted * 3.7) : 5;
-        if (state.onFoot && distanceToPlayer < 12) {
-          targetSpeed = Math.min(targetSpeed, Math.max(0, (distanceToPlayer - 7) * 1.5));
-        } else if (distanceToPlayer < 6) {
-          targetSpeed = Math.min(targetSpeed, Math.max(0, (distanceToPlayer - 1.5) * 1.8));
-        }
-        let targetHeading = Math.atan2(-(aimX - officer.x), -(aimZ - officer.z));
-        const lookahead = 5 + officer.speed * 0.45;
-        const clearanceAlong = (heading, maxDistance) => {
-          for (let distance = 2; distance <= maxDistance; distance += 2) {
-            if (
-              blockedAt(officer.x - Math.sin(heading) * distance, officer.z - Math.cos(heading) * distance)
-            ) {
-              return distance;
-            }
-          }
-          return maxDistance;
-        };
-        const clearanceAhead = clearanceAlong(officer.heading, lookahead);
-        const blocked = clearanceAhead < lookahead;
-        if (blocked) {
-          const swerveAngles = [-0.5, 0.5, -0.9, 0.9, -1.4, 1.4];
-          let bestHeading = officer.heading;
-          let bestClearance = 0;
-          for (let swerve of swerveAngles) {
-            const clearance = clearanceAlong(officer.heading + swerve, lookahead);
-            if (clearance > bestClearance) {
-              bestClearance = clearance;
-              bestHeading = officer.heading + swerve;
-            }
-          }
-          targetHeading = bestHeading;
-          targetSpeed = Math.min(targetSpeed, Math.max(1, clearanceAhead * 0.7));
-        }
-        for (let other of state.police) {
-          if (other === officer || other.onFoot) {
-            continue;
-          }
-          const dx = other.x - officer.x;
-          const dz = other.z - officer.z;
-          const distance = Math.hypot(dx, dz);
-          if (
-            distance < 8 &&
-            dx * -Math.sin(officer.heading) + dz * -Math.cos(officer.heading) > distance * 0.7
-          ) {
-            targetSpeed = Math.min(targetSpeed, Math.max(0, distance - 3) * 0.9);
-          }
-        }
-        const headingError = Math.atan2(
-          Math.sin(targetHeading - officer.heading),
-          Math.cos(targetHeading - officer.heading),
-        );
-        targetSpeed *= 1 - Math.min(0.55, Math.abs(headingError) * 0.5);
-        const maxTurnRate = Math.min(3.4, 72 / Math.max(officer.speed, 9));
-        officer.heading += clamp(headingError, -maxTurnRate * dt, maxTurnRate * dt);
-        officer.speed += clamp(targetSpeed - officer.speed, -28 * dt, (blocked ? 6 : 12) * dt);
-        officer.x += -Math.sin(officer.heading) * officer.speed * dt;
-        officer.z += -Math.cos(officer.heading) * officer.speed * dt;
+        // Other cars to keep clear of: the other cruisers, parked cars and (unless ramming) the player.
+        const obstacles = [];
+        for (const other of state.police) if (other !== officer && !other.onFoot) obstacles.push(other);
+        for (const vehicle of state.vehicles) obstacles.push(vehicle);
+        if (!chasing || officer.role !== "pursuer") obstacles.push(state);
+        brain.drive(officer, index, state, dt, {
+          chasing,
+          seen: officerSeesPlayer,
+          maxSpeed: Math.min(engine.max * 0.85, 13 + state.wanted * 3.8),
+          obstacles,
+        });
+        // Fallback if it still touches a solid (a pole on a tight corner): slide out, lose speed.
         for (let solid of solidGrid.near(officer.x, officer.z, 4, nearbyBuffer)) {
-          if (Math.abs(officer.x - solid.x) < solid.w + 1 && Math.abs(officer.z - solid.z) < solid.d + 2) {
+          if (Math.abs(officer.x - solid.x) < solid.w + 1 && Math.abs(officer.z - solid.z) < solid.d + 1) {
             const dx = officer.x - solid.x;
             const dz = officer.z - solid.z;
-            if (solid.w + 1 - Math.abs(dx) < solid.d + 2 - Math.abs(dz)) {
+            if (solid.w + 1 - Math.abs(dx) < solid.d + 1 - Math.abs(dz)) {
               officer.x = solid.x + Math.sign(dx || 1) * (solid.w + 1);
-              officer.speed *= 0.5;
             } else {
-              officer.z = solid.z + Math.sign(dz || 1) * (solid.d + 2);
-              officer.speed *= 0.5;
+              officer.z = solid.z + Math.sign(dz || 1) * (solid.d + 1);
             }
+            officer.speed *= 0.6;
+            officer.wallHits = (officer.wallHits || 0) + 1;
             break;
           }
         }
+        officer.x = clamp(officer.x, -200, 250);
+        officer.z = clamp(officer.z, -700, 150);
         if (chasing && hasLineOfSight(officer)) {
           seen = true;
         }
@@ -630,8 +568,16 @@ export function createGame(car, engine, solids, noPolice = false) {
             carA.z += contact.nz * push;
             carB.x -= contact.nx * push;
             carB.z -= contact.nz * push;
-            carA.speed *= 0.7;
-            carB.speed *= 0.7;
+            // Only lose speed when driving into each other (not every frame they touch, which froze them).
+            const [ax, az] = [-Math.sin(carA.heading), -Math.cos(carA.heading)];
+            const [bx, bz] = [-Math.sin(carB.heading), -Math.cos(carB.heading)];
+            const closing =
+              -(ax * carA.speed - bx * carB.speed) * contact.nx -
+              (az * carA.speed - bz * carB.speed) * contact.nz;
+            if (closing > 0.5) {
+              carA.speed *= 0.85;
+              carB.speed *= 0.85;
+            }
           }
         }
       }
