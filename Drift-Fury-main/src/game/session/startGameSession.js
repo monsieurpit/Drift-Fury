@@ -607,7 +607,6 @@ export function startGameSession(container, car, engine, controls, callbacks, no
       updateTrafficLights(dt);
       updateWorld(state.elapsed);
       inCityEnvironment(state.x, state.z);
-      updateLamps(state.x, state.z);
       composer.grading?.update(state.elapsed);
       const driving = !state.onFoot;
       const targetFov = driving ? 55 + speedFactor * 12 : 45;
@@ -646,6 +645,9 @@ export function startGameSession(container, car, engine, controls, callbacks, no
         state.z - Math.cos(cameraHeading) * lookAhead,
       );
       camera.lookAt(lookTarget);
+      // Street-lamp lighting uses lamp positions in view space: update them for this frame's camera.
+      camera.updateMatrixWorld();
+      updateLamps(state.x, state.z, camera);
       effects.update(state, dt, camera);
       audio.update(state.rpm, state.pedal, controls.current.muted, state.drifting, state);
       if (wasOnFoot && !state.onFoot) {

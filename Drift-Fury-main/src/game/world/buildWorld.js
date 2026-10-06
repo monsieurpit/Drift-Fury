@@ -46,7 +46,10 @@ export function buildWorld(scene) {
     lampPositions: world.lampPositions,
     signals: world.signals,
     /** Picks the street lamps nearest to (x, z) for the ground lighting; call as the player moves. */
-    updateLamps: (x, z) => lampLighting.update(x, z),
+    updateLamps: (x, z, camera) => {
+      lampLighting.update(x, z);
+      lampLighting.updateView(camera);
+    },
     /** Adds the street-lamp lighting to another material (effects, props). */
     lightByLamps: (material) => lampLighting.patch(material),
     /** Per-frame animation of world details (summit beacon, sky); `time` in seconds. */
