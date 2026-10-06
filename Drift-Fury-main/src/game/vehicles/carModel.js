@@ -811,7 +811,7 @@ export function buildCar(
       // road like real headlights, with a soft edge. (Light colour, cone and pool read as the lamps'.)
       // Low beams, not floodlights: bright enough to light the road ahead, without blowing out white paint,
       // crossings and wet reflections close to the car.
-      const sl = new SpotLight("#fff0d8", 650, 120, 0.5, 0.8, 1.6);
+      const sl = new SpotLight("#fff0d8", 120, 120, 0.5, 0.8, 1.6);
       sl.position.set(S.x, S.y + 4.2, S.z - halfLength + 1.45);
       const tg = new Object3D();
       tg.position.set(sd * 2.2, 0, S.z - halfLength - 24.55);

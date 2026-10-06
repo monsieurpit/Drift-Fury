@@ -215,31 +215,48 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const lampOrder = [];
   let lastLampX = Infinity;
   let lastLampZ = Infinity;
+  // The six real lights (they light the cars, trees and poles near the player) follow the nearest lamps.
+  // Each light stays on its lamp while that lamp is among the six nearest, and fades with distance toward
+  // the seventh, so a lamp leaving the set has already faded out and one joining it fades in: no light
+  // ever jumps from one lamp to another.
+  const lampSlots = [-1, -1, -1, -1, -1, -1];
+  let lampCutoff = Infinity;
   function updateLampLights(x, z) {
-    if ((x - lastLampX) ** 2 + (z - lastLampZ) ** 2 < 25) {
-      return;
-    }
-    lastLampX = x;
-    lastLampZ = z;
     const lamps = lampPositions;
     const count = lamps.length;
-    for (let i = 0; i < count; i++) {
-      const dx = lamps[i].x - x;
-      const dz = lamps[i].z - z;
-      lampDistances[i] = dx * dx + dz * dz;
-      lampOrder[i] = i;
-    }
-    lampOrder.length = count;
-    lampOrder.sort((e, t) => lampDistances[e] - lampDistances[t]);
-    for (let slot = 0; slot < 6; slot++) {
-      const lampLight = lampLights[slot];
-      const lampIndex = lampOrder[slot];
-      if (lampIndex == null) {
-        lampLight.light.visible = false;
-      } else {
-        lampLight.light.position.set(lamps[lampIndex].x, lamps[lampIndex].y, lamps[lampIndex].z);
-        lampLight.light.visible = true;
+    if ((x - lastLampX) ** 2 + (z - lastLampZ) ** 2 >= 1) {
+      lastLampX = x;
+      lastLampZ = z;
+      for (let i = 0; i < count; i++) {
+        const dx = lamps[i].x - x;
+        const dz = lamps[i].z - z;
+        lampDistances[i] = dx * dx + dz * dz;
+        lampOrder[i] = i;
       }
+      lampOrder.length = count;
+      lampOrder.sort((e, t) => lampDistances[e] - lampDistances[t]);
+      const nearest = new Set(lampOrder.slice(0, lampSlots.length));
+      lampCutoff =
+        count > lampSlots.length ? Math.sqrt(lampDistances[lampOrder[lampSlots.length]]) : Infinity;
+      for (let slot = 0; slot < lampSlots.length; slot++) {
+        if (!nearest.has(lampSlots[slot])) lampSlots[slot] = -1;
+        else nearest.delete(lampSlots[slot]);
+      }
+      for (const index of nearest) lampSlots[lampSlots.indexOf(-1)] = index;
+    }
+    const fadeLength = Math.max(4, lampCutoff * 0.35);
+    for (let slot = 0; slot < lampSlots.length; slot++) {
+      const light = lampLights[slot].light;
+      const index = lampSlots[slot];
+      if (index < 0) {
+        light.intensity = 0;
+        continue;
+      }
+      const lamp = lamps[index];
+      light.position.set(lamp.x, lamp.y, lamp.z);
+      const distance = Math.hypot(lamp.x - x, lamp.z - z);
+      const t = lampCutoff === Infinity ? 1 : Math.min(1, Math.max(0, (lampCutoff - distance) / fadeLength));
+      light.intensity = 0.6 * t * t * (3 - 2 * t);
     }
   }
   updateLampLights(0, 70);
@@ -509,7 +526,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
             view.applyQuality(QUALITY_LEVELS[level - 1]);
             nextScale = Math.min(1, resolutionScale + 0.1);
           } else {
-            nextScale = Math.max(0.6, resolutionScale - 0.1);
+            nextScale = Math.max(0.75, resolutionScale - 0.1); // below this, lines and crossings break up
           }
           if (performance.now() - lastRaise < 8000) {
             fastWindowsNeeded = Math.min(32, fastWindowsNeeded * 2);

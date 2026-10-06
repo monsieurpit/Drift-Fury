@@ -55,7 +55,9 @@ float haloSize = length(instanceMatrix[0].xyz);
 mvPosition.xy += position.xy * haloSize;
 // Pulled slightly toward the camera so the halo isn't cut by the lamp's own housing.
 mvPosition.xyz += normalize(-mvPosition.xyz) * 0.4;
-vHaloFade = 1.0 - smoothstep(${(fadeDistance * 0.6).toFixed(1)}, ${fadeDistance.toFixed(1)}, length(mvPosition.xyz));
+float haloDistance = length(mvPosition.xyz);
+// Fades far away, and also right next to the camera (driving under a lamp must not flash the screen).
+vHaloFade = (1.0 - smoothstep(${(fadeDistance * 0.6).toFixed(1)}, ${fadeDistance.toFixed(1)}, haloDistance)) * smoothstep(3.0, 9.0, haloDistance);
 gl_Position = projectionMatrix * mvPosition;`,
       );
     shader.fragmentShader = shader.fragmentShader
@@ -119,7 +121,9 @@ vConeView = normalize(-mvPosition.xyz);`,
 // Lit air is densest along the axis and fades to nothing at the cone's silhouette (no hard edge); it
 // thins out away from the lamp and right at the lamp head, and with distance from the camera.
 float facing = abs(dot(normalize(vConeNormal), vConeView));
-diffuseColor.rgb *= pow(facing, 2.0) * pow(1.0 - vConeDown, 1.4) * smoothstep(0.0, 0.08, vConeDown) * (1.0 - smoothstep(60.0, 120.0, 1.0 / max(gl_FragCoord.w, 1e-4)));`,
+// (And none of it right in front of the camera: passing through a cone would wash out the whole screen.)
+float coneDepth = 1.0 / max(gl_FragCoord.w, 1e-4);
+diffuseColor.rgb *= pow(facing, 2.0) * pow(1.0 - vConeDown, 1.4) * smoothstep(0.0, 0.08, vConeDown) * (1.0 - smoothstep(60.0, 120.0, coneDepth)) * smoothstep(4.0, 12.0, coneDepth);`,
       );
   };
   material.customProgramCacheKey = () => "drift-fury-light-cone";

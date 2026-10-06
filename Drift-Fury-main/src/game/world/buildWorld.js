@@ -57,8 +57,12 @@ export function* buildWorldInSteps(scene) {
   const updateSky = buildSky(world);
   // Every street lamp lights the city's ground in its shaders (see lampLighting.js).
   const lampLighting = createLampLighting(world.lampPositions);
-  const lit = new Set([world.roadMaterial, world.sidewalkMaterial, ...(world.buildingMaterials?.() ?? [])]);
-  for (const material of lit) {
+  // The ground (road, sidewalks and the paint on them) takes the lamps' light from a map baked once, so
+  // it never changes as the player moves or turns; walls and shop fronts light from the nearest lamps.
+  for (const material of [world.roadMaterial, world.sidewalkMaterial, world.whitePaint, world.yellowPaint]) {
+    if (material) lampLighting.patchGround(material);
+  }
+  for (const material of world.buildingMaterials?.() ?? []) {
     if (material) lampLighting.patch(material);
   }
   return {

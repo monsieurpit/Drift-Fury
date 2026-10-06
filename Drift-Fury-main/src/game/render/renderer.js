@@ -415,7 +415,9 @@ export function createRenderer(container, inGame = false) {
         ? Math.min(preset.msaa, renderer.capabilities.maxSamples)
         : 0;
     composer.scenePass.samples = samples;
-    if (composer.smaa) composer.smaa.enabled = msaaBroken && preset.msaa > 0;
+    // SMAA where there is no MSAA: on BASSE (thin road lines and crossings shimmer badly without any
+    // antialiasing) and where MSAA was found broken.
+    if (composer.smaa) composer.smaa.enabled = samples === 0 && renderer.capabilities.isWebGL2;
     if (inGame && shadowsAvailable) renderer.shadowMap.enabled = !broken.has("shadows");
     if (sun.castShadow && sun.shadow.mapSize.x !== preset.shadowMapSize) {
       sun.shadow.mapSize.set(preset.shadowMapSize, preset.shadowMapSize);
