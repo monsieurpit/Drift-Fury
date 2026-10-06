@@ -9,10 +9,12 @@ import {
   ConeGeometry,
   SphereGeometry,
   SRGBColorSpace,
+  Vector3,
 } from "three";
 import { FUEL_STATIONS } from "../data/stations.js";
 import { createRandom } from "../util/random.js";
 import { concreteTexture, normalMapFromHeight } from "./textures.js";
+import { scannedSet } from "./scannedTextures.js";
 /** City blocks: towers, podiums and storefronts on the lots between the roads. */
 export function buildBuildings(world) {
   const { addBox, darkMetal, poleMetal, roadXs, roadZs, scene, sidewalkMaterial } = world;
@@ -98,6 +100,11 @@ export function buildBuildings(world) {
       );
       const mapCv = mkCanvas(256, 256);
       const glowCv = mkCanvas(256, 256);
+      // White where the facade is wall (gets the scanned masonry), black over windows and their frames.
+      const maskCv = mkCanvas(256, 256);
+      const gm = maskCv.getContext("2d");
+      gm.fillStyle = "#fff";
+      gm.fillRect(0, 0, 256, 256);
       const g2 = mapCv.getContext("2d");
       const ge = glowCv.getContext("2d");
       g2.fillStyle = wall;
@@ -133,6 +140,8 @@ export function buildBuildings(world) {
           const style = rnd();
           g2.fillStyle = "#10151b";
           g2.fillRect(x0 - 2, y0 - 2, ww + 4, hh + 4);
+          gm.fillStyle = "#000";
+          gm.fillRect(x0 - 2, y0 - 2, ww + 4, hh + 4);
           const gl = g2.createLinearGradient(0, y0, 0, y0 + hh);
           if (lit) {
             gl.addColorStop(0, tint(glow, 0.95));
@@ -198,10 +207,84 @@ export function buildBuildings(world) {
         glass,
         map: textureOf(mapCv),
         glow: textureOf(glowCv),
+        mask: textureOf(maskCv),
         normal: normalMapFromHeight(mapCv, glass ? 1.1 : 1.9),
       };
       facadeCache.set(key, hit);
       return hit;
+    }
+    // Scanned masonry for the wall parts of the facades (Poly Haven, CC0): red brick or painted plaster on
+    // the classic buildings, cast concrete between the glazing of the glass towers. Plaster and concrete
+    // are recoloured to each building's wall colour; brick keeps its own colour, darkened for the night.
+    const wallScans = {
+      brick: { set: scannedSet("red_brick_03", [0.12, 0.05, 0.04]), metres: 1.6, keep: 1 },
+      plaster: { set: scannedSet("beige_wall_001", [0.4, 0.36, 0.3]), metres: 3, keep: 0 },
+      concrete: { set: scannedSet("concrete_wall_003", [0.3, 0.3, 0.28]), metres: 3, keep: 0 },
+    };
+    const srgbToLinear = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    function applyWallScan(material, mask, key, glass) {
+      const wallHex = wallColors.find((color) => key.includes(color)) || "#3e4855";
+      const v = parseInt(wallHex.slice(1), 16);
+      const wallLinear = new Vector3(
+        srgbToLinear(((v >> 16) & 255) / 255),
+        srgbToLinear(((v >> 8) & 255) / 255),
+        srgbToLinear((v & 255) / 255),
+      );
+      // Same layout for a wall colour always gets the same masonry.
+      const kind = glass ? "concrete" : wallColors.indexOf(wallHex) % 2 === 0 ? "brick" : "plaster";
+      const scan = wallScans[kind];
+      // Facade UVs run ~12 m per unit across and ~14.4 m up (see the repeat counts below).
+      const uniforms = {
+        wallMask: { value: mask },
+        wallScan: { value: scan.set.map },
+        wallScanNormal: { value: scan.set.normalMap },
+        wallScanAverage: { value: scan.set.average },
+        wallScanRepeat: { value: new Vector2(12 / scan.metres, 14.4 / scan.metres) },
+        wallTarget: { value: wallLinear.clone().multiplyScalar(1.15) },
+        wallBaseLuma: { value: wallLinear.dot(new Vector3(0.2126, 0.7152, 0.0722)) },
+        wallKeep: { value: scan.keep },
+      };
+      material.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, uniforms);
+        shader.fragmentShader = shader.fragmentShader
+          .replace(
+            "#include <common>",
+            `#include <common>
+uniform sampler2D wallMask;
+uniform sampler2D wallScan;
+uniform sampler2D wallScanNormal;
+uniform vec3 wallScanAverage;
+uniform vec2 wallScanRepeat;
+uniform vec3 wallTarget;
+uniform float wallBaseLuma;
+uniform float wallKeep;
+float wallAmount;
+vec2 wallUv;`,
+          )
+          .replace(
+            "#include <map_fragment>",
+            `#include <map_fragment>
+{
+  wallAmount = texture2D(wallMask, vMapUv).r;
+  // One unit of the (repeated) facade uv is ~12 m across and ~14.4 m up; the scan tiles at its real size.
+  wallUv = vNormalMapUv * wallScanRepeat;
+  vec3 scan = texture2D(wallScan, wallUv).rgb;
+  vec3 masonry = wallKeep > 0.5 ? scan * 0.55 : scan * wallTarget / max(wallScanAverage, vec3(1e-3));
+  // Keep the drawn floor bands and shading: scale by how far the canvas departs from the plain wall.
+  float shade = clamp(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)) / max(wallBaseLuma, 1e-3), 0.35, 1.4);
+  diffuseColor.rgb = mix(diffuseColor.rgb, masonry * shade, wallAmount);
+}`,
+          )
+          .replace(
+            "#include <normal_fragment_maps>",
+            `#include <normal_fragment_maps>
+{
+  vec3 wallN = texture2D(wallScanNormal, wallUv).xyz * 2.0 - 1.0;
+  normal = normalize(mix(normal, normalize(tbn * wallN), wallAmount * 0.85));
+}`,
+          );
+      };
+      material.customProgramCacheKey = () => "drift-fury-facade-scan";
     }
     const facadeMatCache = new Map();
     function facadeMaterial(key, fv, rx, ry) {
@@ -229,6 +312,7 @@ export function buildBuildings(world) {
         clearcoatRoughness: 0.22,
         envMapIntensity: fv.glass ? 1.2 : 0.25,
       });
+      applyWallScan(hit, cp(fv.mask), key, fv.glass);
       facadeMatCache.set(mk, hit);
       return hit;
     }
