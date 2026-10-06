@@ -705,15 +705,19 @@ export function buildCar(
     car.add(rev);
   }
 
-  /* focused player headlight spotlights */
+  /* player headlight spotlights (low beams) */
   if (isPlayer) {
     const hz = lamp.hz;
     for (const sd of [-1, 1]) {
       const S = surfacePoint(spec, hz, lamp.hs, sd);
-      const sl = new SpotLight("#fff0d8", 10, 56, 0.27, 0.72, 2);
-      sl.position.set(S.x, S.y, S.z - halfLength - 0.05);
+      // The light source sits ~4 m above the lamp and a little behind it, aimed at the road 26 m ahead.
+      // From bumper height the beam meets the road at such a grazing angle that almost all of its light
+      // piles up a few metres in front of the car; from above it throws a broad low-beam pool down the
+      // road like real headlights, with a soft edge. (Light colour, cone and pool read as the lamps'.)
+      const sl = new SpotLight("#fff0d8", 1600, 120, 0.5, 0.8, 1.6);
+      sl.position.set(S.x, S.y + 4.2, S.z - halfLength + 1.45);
       const tg = new Object3D();
-      tg.position.set(sd * 0.28, -1.35, -halfLength - 32);
+      tg.position.set(sd * 2.2, 0, S.z - halfLength - 24.55);
       car.add(tg);
       sl.target = tg;
       car.add(sl);
