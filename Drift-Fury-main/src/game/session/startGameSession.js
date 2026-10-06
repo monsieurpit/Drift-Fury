@@ -19,7 +19,14 @@ import { MOON_DIRECTION } from "../world/sky.js";
 export function startGameSession(container, car, engine, controls, callbacks, noPolice = false) {
   const view = createRenderer(container, true);
   const { scene, renderer, camera, sun, touchDevice, composer } = view;
-  const { solids, lampPositions, signals, update: updateWorld, updateLamps } = buildWorld(scene);
+  const {
+    solids,
+    lampPositions,
+    signals,
+    update: updateWorld,
+    updateLamps,
+    lightByLamps,
+  } = buildWorld(scene);
   // Cars sit on the ground: pitch and roll follow the terrain under their wheels (flat in the city).
   const sitOnGround = (object, x, z, heading, extraRoll = 0) => {
     const forwardX = -Math.sin(heading);
@@ -183,7 +190,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
     }
   }
   const audio = controls.current.audio || createAudio(engine);
-  const effects = createEffects(scene);
+  const effects = createEffects(scene, { patch: lightByLamps });
   const keys = {};
   let frameId;
   let lastFrameTime = performance.now();

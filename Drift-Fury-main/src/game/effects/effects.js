@@ -9,69 +9,47 @@ import {
   MeshStandardMaterial,
   BufferGeometry,
   Float32BufferAttribute,
+  Vector3,
 } from "three";
-export function createEffects(scene) {
-  const treadCanvas = document.createElement("canvas");
-  treadCanvas.width = 64;
-  treadCanvas.height = 128;
-  const treadContext = treadCanvas.getContext("2d");
-  treadContext.fillStyle = "rgba(17,19,21,0.42)";
-  treadContext.fillRect(0, 0, 64, 128);
-  for (let row = 0; row < 4; row++) {
-    const y = row * 32;
-    treadContext.clearRect(8, y + 3, 3, 11);
-    treadContext.clearRect(18, y + 3, 3, 11);
-    treadContext.clearRect(43, y + 18, 3, 11);
-    treadContext.clearRect(53, y + 18, 3, 11);
-    treadContext.fillStyle = "rgba(4,5,6,0.24)";
-    treadContext.fillRect(27, y + 14, 10, 2);
+import { fbm } from "../util/noise.js";
+import { createDriftSmoke } from "./driftSmoke.js";
+/**
+ * Rubber left on the road by a sliding tyre: dark in the middle with soft edges, streaked along its
+ * length by the tread grooves, patchier where the tyre skipped. u runs across the mark, v along it.
+ */
+function skidTexture() {
+  const width = 64;
+  const height = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  const image = context.createImageData(width, height);
+  for (let y = 0; y < height; y++) {
+    const patch = 0.7 + 0.3 * fbm(0.5, y / 40, { seed: 77, octaves: 3, period: 0, periodY: 0 });
+    for (let x = 0; x < width; x++) {
+      const across = (x + 0.5) / width;
+      const edge = Math.min(across, 1 - across);
+      let density = Math.min(1, edge / 0.16) ** 1.5;
+      // Tread grooves leave lighter lines along the mark.
+      for (const groove of [0.3, 0.5, 0.7])
+        density *= 1 - 0.45 * Math.exp(-(((across - groove) / 0.025) ** 2));
+      density *= patch * (0.85 + 0.15 * fbm(x / 6, y / 6, { seed: 78, octaves: 2 }));
+      const index = (y * width + x) * 4;
+      image.data[index] = image.data[index + 1] = image.data[index + 2] = 20;
+      image.data[index + 3] = Math.round(Math.min(1, density) * 235);
+    }
   }
-  const treadTexture = new CanvasTexture(treadCanvas);
-  treadTexture.wrapS = RepeatWrapping;
-  treadTexture.wrapT = RepeatWrapping;
-  treadTexture.colorSpace = "srgb";
-  const smokeCanvas = document.createElement("canvas");
-  smokeCanvas.width = 128;
-  smokeCanvas.height = 128;
-  const smokeContext = smokeCanvas.getContext("2d");
-  const smokeGradient = smokeContext.createRadialGradient(64, 64, 7, 64, 64, 62);
-  smokeGradient.addColorStop(0, "rgba(235,239,242,0.24)");
-  smokeGradient.addColorStop(0.34, "rgba(220,226,231,0.17)");
-  smokeGradient.addColorStop(0.72, "rgba(202,210,217,0.07)");
-  smokeGradient.addColorStop(1, "rgba(190,200,208,0)");
-  smokeContext.fillStyle = smokeGradient;
-  smokeContext.fillRect(0, 0, 128, 128);
-  const smokeTexture = new CanvasTexture(smokeCanvas);
-  smokeTexture.colorSpace = "srgb";
-  const smokeGeometry = new PlaneGeometry(1, 1);
-  const smokePuffs = Array.from(
-    {
-      length: 48,
-    },
-    () => {
-      const mesh = new Mesh(
-        smokeGeometry,
-        new MeshBasicMaterial({
-          map: smokeTexture,
-          color: "#c6cbd0",
-          transparent: true,
-          opacity: 0,
-          depthWrite: false,
-          side: 2,
-        }),
-      );
-      mesh.visible = false;
-      scene.add(mesh);
-      return {
-        mesh,
-        life: 0,
-        maxLife: 1,
-        vx: 0,
-        vy: 0,
-        vz: 0,
-      };
-    },
-  );
+  context.putImageData(image, 0, 0);
+  const texture = new CanvasTexture(canvas);
+  texture.wrapT = RepeatWrapping;
+  texture.colorSpace = "srgb";
+  texture.anisotropy = 8;
+  return texture;
+}
+
+export function createEffects(scene, { patch } = {}) {
+  const smoke = createDriftSmoke(scene, { patch });
   const crashSmoke = Array.from(
     {
       length: 20,
@@ -118,19 +96,31 @@ export function createEffects(scene) {
       };
     },
   );
-  const skidMaterial = new MeshBasicMaterial({
-    color: "#0d0f11",
-    map: treadTexture,
+  // Skid marks are lit like the road (moon, headlights, street lamps), with the slight sheen of rubber.
+  const skidMap = skidTexture();
+  const skidBase = new MeshStandardMaterial({
+    color: "#ffffff",
+    map: skidMap,
+    roughness: 0.55,
+    metalness: 0,
     transparent: true,
-    opacity: 0.76,
     depthWrite: false,
-    side: 2,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
   });
+  if (patch) patch(skidBase);
+  const SKID_LIFETIME = 120; // seconds a mark stays after the drift ends
+  const SKID_FADE = 15; // ... the last of which it spends fading out
   const skidTrails = Array.from(
     {
       length: 32,
     },
     () => {
+      // Each trail has its own copy (sharing the compiled program) so it can fade on its own.
+      const skidMaterial = skidBase.clone();
+      skidMaterial.onBeforeCompile = skidBase.onBeforeCompile;
+      skidMaterial.customProgramCacheKey = skidBase.customProgramCacheKey;
       const wheels = Array.from(
         {
           length: 2,
@@ -170,6 +160,7 @@ export function createEffects(scene) {
       );
       return {
         wheels,
+        material: skidMaterial,
         remaining: 0,
       };
     },
@@ -197,7 +188,8 @@ export function createEffects(scene) {
     },
   );
   let smokeTimer = 0;
-  let smokeCursor = 0;
+  const smokeOrigin = new Vector3();
+  const smokeVelocity = new Vector3();
   let trailCursor = 0;
   let activeTrail = null;
   let wasDrifting = false;
@@ -208,21 +200,7 @@ export function createEffects(scene) {
   return {
     update(state, dt, camera) {
       smokeTimer += dt;
-      smokePuffs.forEach((particle) => {
-        const mesh = particle.mesh;
-        mesh.visible = particle.life > 0;
-        if (particle.life > 0) {
-          particle.life -= dt;
-          mesh.position.x += particle.vx * dt;
-          mesh.position.y += particle.vy * dt;
-          mesh.position.z += particle.vz * dt;
-          mesh.scale.addScalar(dt * 0.72);
-          if (camera) {
-            mesh.lookAt(camera.position);
-          }
-          mesh.material.opacity = Math.max(0, particle.life / particle.maxLife) * 0.46;
-        }
-      });
+      smoke.update(dt);
       crashSmoke.forEach((puff) => {
         puff.mesh.visible = puff.life > 0;
         if (puff.life > 0) {
@@ -277,6 +255,7 @@ export function createEffects(scene) {
       skidTrails.forEach((trail) => {
         if (trail !== activeTrail && trail.remaining > 0) {
           trail.remaining = Math.max(0, trail.remaining - dt);
+          trail.material.opacity = Math.min(1, trail.remaining / SKID_FADE);
           if (trail.remaining === 0) {
             trail.wheels.forEach((wheel) => {
               wheel.mesh.visible = false;
@@ -289,6 +268,7 @@ export function createEffects(scene) {
       if (state.drifting && !wasDrifting) {
         activeTrail = skidTrails[trailCursor++ % skidTrails.length];
         activeTrail.remaining = 0;
+        activeTrail.material.opacity = 1;
         activeTrail.wheels.forEach((wheel) => {
           wheel.segments = 0;
           wheel.distance = 0;
@@ -339,7 +319,7 @@ export function createEffects(scene) {
           }
           const uvOffset = wheel.segments * 8;
           const v0 = wheel.distance;
-          const v1 = v0 + length * 1.6;
+          const v1 = v0 + length / 2.5; // the mark texture covers 2.5 m of road
           wheel.uvs.set([0, v0, 1, v0, 0, v1, 1, v1], uvOffset);
           wheel.distance = v1;
           wheel.segments++;
@@ -357,7 +337,7 @@ export function createEffects(scene) {
             const y = (state.y || 0) + 0.09;
             const wheel = activeTrail.wheels[sideIndex];
             if (wheel.last) {
-              appendSkidSegment(wheel, wheel.last.x, wheel.last.z, x, z, y, 0.16);
+              appendSkidSegment(wheel, wheel.last.x, wheel.last.z, x, z, y, 0.26);
             }
             wheel.last = {
               x,
@@ -373,22 +353,19 @@ export function createEffects(scene) {
             const x = state.x + offsetX;
             const z = state.z + offsetZ;
             const y = state.y || 0;
-            const particle = smokePuffs[smokeCursor++ % smokePuffs.length];
-            particle.maxLife = 0.9 + Math.random() * 0.55;
-            particle.life = particle.maxLife;
-            particle.mesh.position.set(x, y + 0.16 + Math.random() * 0.12, z);
-            particle.mesh.scale.set(0.65 + Math.random() * 0.4, 0.5 + Math.random() * 0.3, 1);
-            particle.vx =
-              Math.sin(state.heading) * (0.25 + state.speed * 0.035) + (Math.random() - 0.5) * 0.45;
-            particle.vy = 0.38 + Math.random() * 0.48;
-            particle.vz =
-              Math.cos(state.heading) * (0.25 + state.speed * 0.035) + (Math.random() - 0.5) * 0.45;
-            particle.mesh.material.opacity = 0.25 + Math.random() * 0.12;
+            // Smoke leaves the tyre with part of the car's motion, then the air takes over.
+            smokeOrigin.set(x, y + 0.25 + Math.random() * 0.15, z);
+            smokeVelocity.set(
+              Math.sin(state.heading) * (0.25 + state.speed * 0.035) + (Math.random() - 0.5) * 0.8,
+              0.3 + Math.random() * 0.4,
+              Math.cos(state.heading) * (0.25 + state.speed * 0.035) + (Math.random() - 0.5) * 0.8,
+            );
+            smoke.emit(smokeOrigin, smokeVelocity, 0.8 + Math.min(state.speed / 120, 1) * 0.6);
           }
         }
       }
       if (!state.drifting && wasDrifting) {
-        activeTrail.remaining = 20;
+        activeTrail.remaining = SKID_LIFETIME;
         activeTrail = null;
       }
       wasDrifting = state.drifting;
