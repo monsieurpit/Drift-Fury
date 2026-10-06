@@ -728,6 +728,9 @@ if (shopInside > 0.5) {
       return hit;
     }
 
+    // Exposed so the street lamps can light the facades and shop fronts (see buildWorld / lampLighting).
+    world.buildingMaterials = () => [...facadeMatCache.values(), ...shopCache.values(), lotMat];
+
     /* --- blocks --- */
     for (let bi = 0; bi < roadXs.length - 1; bi++) {
       for (let bj = 0; bj < roadZs.length - 1; bj++) {

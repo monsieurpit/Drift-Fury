@@ -37,7 +37,8 @@ export function buildWorld(scene) {
   const updateSky = buildSky(world);
   // Every street lamp lights the city's ground in its shaders (see lampLighting.js).
   const lampLighting = createLampLighting(world.lampPositions);
-  for (const material of [world.roadMaterial, world.sidewalkMaterial, world.lotMaterial]) {
+  const lit = new Set([world.roadMaterial, world.sidewalkMaterial, ...(world.buildingMaterials?.() ?? [])]);
+  for (const material of lit) {
     if (material) lampLighting.patch(material);
   }
   return {
