@@ -591,14 +591,17 @@ export function startGameSession(container, car, engine, controls, callbacks, no
       updateTrafficLights(dt);
       updateWorld(state.elapsed);
       inCityEnvironment(state.x, state.z);
-      const targetFov = 45 + speedFactor * 12;
+      const driving = !state.onFoot;
+      const targetFov = driving ? 55 + speedFactor * 12 : 45;
       if (camera.fov !== targetFov) {
         camera.fov = targetFov;
         camera.updateProjectionMatrix();
       }
       const inStore = state.onFoot && state.store >= 0;
-      const distanceBack = inStore ? 4.2 : 12 + speedFactor * 3;
-      const heightAbove = inStore ? 2.2 : 7.5 + speedFactor * 1.5;
+      // Driving: a low chase camera close behind the car, looking down the road ahead (horizon, sky and
+      // the next bend in frame) rather than down at the roof. On foot it stays the higher follow view.
+      const distanceBack = inStore ? 4.2 : driving ? 6.8 + speedFactor * 1.6 : 12;
+      const heightAbove = inStore ? 2.2 : driving ? 2.45 + speedFactor * 0.35 : 7.5;
       const cameraHeading = state.onFoot ? footCameraYaw : state.heading + cameraYaw;
       const cameraDistance = Math.hypot(distanceBack, heightAbove - 1) * cameraZoom;
       const cameraAngle = Math.atan2(heightAbove - 1, distanceBack) + cameraPitch;
@@ -607,6 +610,8 @@ export function startGameSession(container, car, engine, controls, callbacks, no
         (state.y || 0) + 1 + Math.sin(cameraAngle) * cameraDistance,
         state.z + Math.cos(cameraHeading) * Math.cos(cameraAngle) * cameraDistance,
       );
+      // Never below the ground (mountain slopes behind the car).
+      cameraTarget.y = Math.max(cameraTarget.y, terrainHeight(cameraTarget.x, cameraTarget.z) + 0.7);
       camera.position.lerp(cameraTarget, 1 - Math.exp(-dt * (state.onFoot ? 12 : 4.5)));
       if (state.shake > 0.01) {
         shakeOffset.set(
@@ -616,7 +621,12 @@ export function startGameSession(container, car, engine, controls, callbacks, no
         );
         camera.position.add(shakeOffset);
       }
-      lookTarget.set(state.x, (state.y || 0) + 1, state.z);
+      const lookAhead = driving && !inStore ? 7 + speedFactor * 4 : 0;
+      lookTarget.set(
+        state.x - Math.sin(cameraHeading) * lookAhead,
+        (state.y || 0) + (driving ? 1.25 : 1),
+        state.z - Math.cos(cameraHeading) * lookAhead,
+      );
       camera.lookAt(lookTarget);
       effects.update(state, dt, camera);
       audio.update(state.rpm, state.pedal, controls.current.muted, state.drifting, state);
