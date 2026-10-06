@@ -42,6 +42,7 @@ import {
 import { createTerrainMaterial } from "./terrainMaterial.js";
 import { createBranchCardMaterial, createFoliageMaterial } from "./foliageMaterial.js";
 import { getTerrainTextures } from "./terrainTextures.js";
+import { scannedSet } from "./scannedTextures.js";
 import { createRoadSurfaceMaterial } from "./roadSurface.js";
 
 // ------------------------------------------------------------------ terrain
@@ -632,13 +633,16 @@ function pineGeometry(random, variant, withCards) {
   const parts = [];
   const height = 9 + variant * 1.6;
   const crownBase = 1.4 + random() * 0.6;
-  const trunk = new CylinderGeometry(0.12, 0.26, crownBase + 1.2, 7, 1);
-  trunk.translate(0, (crownBase + 1.2) / 2, 0);
-  const bark = new Color("#3b2c22");
-  const trunkColors = [];
-  for (let i = 0; i < trunk.attributes.position.count; i++) trunkColors.push(bark.r, bark.g, bark.b);
-  trunk.setAttribute("color", new Float32BufferAttribute(trunkColors, 3));
-  parts.push(trunk.toNonIndexed());
+  // Trunk: its own group, drawn with the scanned bark (uv: once around, one repeat per 1.5 m up).
+  const trunkLength = crownBase + 1.2;
+  const trunk = new CylinderGeometry(0.12, 0.26, trunkLength, 9, 1).toNonIndexed();
+  trunk.translate(0, trunkLength / 2, 0);
+  const trunkUv = trunk.attributes.uv;
+  for (let i = 0; i < trunkUv.count; i++) trunkUv.setY(i, (trunkUv.getY(i) * trunkLength) / 1.5);
+  trunk.setAttribute(
+    "color",
+    new Float32BufferAttribute(new Float32Array(trunk.attributes.position.count * 3).fill(1), 3),
+  );
 
   const whorls = 7 + Math.floor(variant / 2);
   const cards = { positions: [], normals: [], colors: [], uvs: [] };
@@ -730,15 +734,15 @@ function pineGeometry(random, variant, withCards) {
       normal.setXYZ(i, n.x, n.y, n.z);
     }
   }
-  if (!withCards) return merged;
   merged.setAttribute("uv", new Float32BufferAttribute(new Float32Array(position.count * 2), 2));
+  // Groups: 0 trunk (bark), 1 crown core (foliage), 2 branch cards (card material, detailed level only).
+  if (!withCards) return mergeGeometries([trunk, merged], true);
   const cardGeometry = new BufferGeometry();
   cardGeometry.setAttribute("position", new Float32BufferAttribute(cards.positions, 3));
   cardGeometry.setAttribute("normal", new Float32BufferAttribute(cards.normals, 3));
   cardGeometry.setAttribute("color", new Float32BufferAttribute(cards.colors, 3));
   cardGeometry.setAttribute("uv", new Float32BufferAttribute(cards.uvs, 2));
-  // Group 0: solid core (foliage material), group 1: branch cards (alpha-tested card material).
-  return mergeGeometries([merged, cardGeometry], true);
+  return mergeGeometries([trunk, merged, cardGeometry], true);
 }
 
 /**
@@ -910,11 +914,15 @@ function buildForest(scene, variants, materials, farGeometry) {
       if (!trees.length) return;
       const variant = variants[variantIndex];
       detailed.add(
-        instancedMesh(trees, variant.geometry, [materials.foliage, materials.cards], center, {
+        instancedMesh(trees, variant.geometry, [materials.bark, materials.foliage, materials.cards], center, {
           name: "mountain-pines",
         }),
       );
-      solid.add(instancedMesh(trees, variant.simple, materials.foliage, center, { name: "mountain-pines" }));
+      solid.add(
+        instancedMesh(trees, variant.simple, [materials.bark, materials.foliage], center, {
+          name: "mountain-pines",
+        }),
+      );
     });
     const levels = new LOD();
     levels.name = "mountain-pines-lod";
@@ -1124,7 +1132,18 @@ export function buildMountainScenery(world) {
   const foliage = createFoliageMaterial();
   const branchCards = createBranchCardMaterial();
   const farPine = farPineGeometry();
-  buildForest(scene, variants, { foliage, cards: branchCards }, farPine);
+  // Pine trunks: photo-scanned pine bark (Poly Haven "pine_bark", CC0).
+  const pineBark = scannedSet("pine_bark", [0.07, 0.05, 0.04]);
+  const bark = new MeshStandardMaterial({
+    map: pineBark.map,
+    normalMap: pineBark.normalMap,
+    roughnessMap: pineBark.armMap,
+    aoMap: pineBark.armMap,
+    roughness: 1,
+    metalness: 0,
+    color: "#b8aca0",
+  });
+  buildForest(scene, variants, { bark, foliage, cards: branchCards }, farPine);
   // Backdrop forest: the same placement rules, a much lighter model and no shadows.
   for (const variant of variants) variant.trees = [];
   plant(-900, 700, -1500, -100, 13, false);
