@@ -14,6 +14,7 @@ import {
   TubeGeometry,
 } from "three";
 import { FUEL_STATIONS } from "../data/stations.js";
+import { addHalos } from "./lightGlow.js";
 import { terrainHeight } from "./terrain.js";
 /** Fuel stations: canopy, pumps, forecourt and the walk-in store with its shelves and coolers. */
 export function buildGasStations(world) {
@@ -110,10 +111,14 @@ export function buildGasStations(world) {
     roughness: 0.32,
     metalness: 0.08,
   });
+  // The light panels stay below the bloom threshold: thin and flat, they shrink below a pixel in the
+  // distance and would blink (and the bloom flash) as the camera moves. Their glow comes from halos,
+  // which stay stable at any distance (see lightGlow.js).
+  const lightHalos = [];
   const stationAwningLight = new MeshStandardMaterial({
     color: "#fff5df",
     emissive: "#ffe7b5",
-    emissiveIntensity: 1.35,
+    emissiveIntensity: 0.85,
     roughness: 0.35,
   });
   const stationSignTexture = (() => {
@@ -601,6 +606,7 @@ export function buildGasStations(world) {
     for (let light = 0; light < 2; light++) {
       const lightX = shopX + (light ? 3.5 : -3.5);
       addBox(1.7, 0.045, 0.34, lightX, groundY + 3.39, shopZ - 0.15, stationAwningLight);
+      lightHalos.push({ x: lightX, y: groundY + 3.33, z: shopZ - 0.15 });
     }
     const insideLight = new PointLight("#fff0d5", 0.55, 17, 2);
     insideLight.position.set(shopX, groundY + 2.8, shopZ);
@@ -650,6 +656,7 @@ export function buildGasStations(world) {
     for (let lampX of [-7.5, -2.5, 2.5, 7.5]) {
       for (let lampZ of [-5, 5]) {
         addBox(2.1, 0.045, 0.7, station.x + lampX, groundY + 4.94, station.z + lampZ, stationAwningLight);
+        lightHalos.push({ x: station.x + lampX, y: groundY + 4.88, z: station.z + lampZ });
       }
     }
     const canopyLight = new PointLight("#fff0d5", 0.7, 28, 2);
@@ -700,4 +707,5 @@ export function buildGasStations(world) {
     coolerProducts.instanceMatrix.needsUpdate = true;
     scene.add(coolerProducts);
   }
+  addHalos(scene, lightHalos, { color: "#ffe7b5", size: 1.8, intensity: 0.35 });
 }

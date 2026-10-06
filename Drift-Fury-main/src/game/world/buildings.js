@@ -73,7 +73,8 @@ export function buildBuildings(world) {
     const beaconMat = new MeshStandardMaterial({
       color: "#200000",
       emissive: "#ff2a2a",
-      emissiveIntensity: 3.2,
+      // Small and far: below the bloom threshold, or they blink into flashing blobs as the camera moves.
+      emissiveIntensity: 1.0,
       roughness: 0.4,
     });
     const SIGNS = ["#c6dc77", "#5a9fd4", "#e89978", "#8c87c7", "#ff7a7a"];
@@ -82,7 +83,8 @@ export function buildBuildings(world) {
         new MeshStandardMaterial({
           color: "#050505",
           emissive: col,
-          emissiveIntensity: 1.7,
+          // Thin neon strips: below the bloom threshold (they blinked and flashed in the distance).
+          emissiveIntensity: 1.0,
           roughness: 0.4,
         }),
     );

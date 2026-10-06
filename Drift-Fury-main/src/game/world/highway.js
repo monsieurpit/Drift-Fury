@@ -26,7 +26,8 @@ export function buildHighway(world) {
     new MeshStandardMaterial({
       color: "#ffeecc",
       emissive: "#ffcc66",
-      emissiveIntensity: 2.2,
+      // Tiny: kept below the bloom threshold so they don't blink into flashing blobs in the distance.
+      emissiveIntensity: 0.8,
     }),
     200,
   );

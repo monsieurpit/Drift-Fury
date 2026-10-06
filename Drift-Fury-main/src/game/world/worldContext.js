@@ -73,7 +73,9 @@ export function createWorldContext(world) {
     metalness: 0.6,
     roughness: 0.5,
     emissive: "#fff4d0",
-    emissiveIntensity: 1.6,
+    // Below the bloom threshold: the halos carry the glow (a thin panel blinks in the distance, and the
+    // bloom would turn that into a flashing blob).
+    emissiveIntensity: 0.8,
   });
   // Box UVs are in units of `tile` metres; the concrete scan covers about 3 m.
   for (const texture of [concreteScan.map, concreteScan.normalMap, concreteScan.armMap])

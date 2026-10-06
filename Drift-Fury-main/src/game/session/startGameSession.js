@@ -198,7 +198,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       for (const signal of signals) {
         if (signal.axis === axis) {
           signal.lenses.forEach((material, index) => {
-            material.emissiveIntensity = index === activeLens ? 1.35 : 0.025;
+            material.emissiveIntensity = index === activeLens ? 0.9 : 0.025;
           });
         }
       }

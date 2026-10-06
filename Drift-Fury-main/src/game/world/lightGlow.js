@@ -35,7 +35,7 @@ function haloTexture() {
 export function addHalos(
   scene,
   positions,
-  { color = "#ffd7a0", size = 2.4, intensity = 0.55, fadeDistance = 160 } = {},
+  { color = "#ffd7a0", size = 2.4, intensity = 0.55, fadeDistance = 160, minAngle = 0.006 } = {},
 ) {
   const material = new MeshBasicMaterial({
     map: haloTexture(),
@@ -47,22 +47,30 @@ export function addHalos(
   });
   material.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying float vHaloFade;")
+      .replace("#include <common>", "#include <common>\nvarying float vHaloFade;\nvarying float vHaloEnergy;")
       .replace(
         "#include <project_vertex>",
         `vec4 mvPosition = modelViewMatrix * vec4(instanceMatrix[3].xyz, 1.0);
 float haloSize = length(instanceMatrix[0].xyz);
-mvPosition.xy += position.xy * haloSize;
-// Pulled slightly toward the camera so the halo isn't cut by the lamp's own housing.
-mvPosition.xyz += normalize(-mvPosition.xyz) * 0.4;
 float haloDistance = length(mvPosition.xyz);
+// Never smaller than a few pixels on screen: a halo that shrinks below a pixel blinks from frame to frame
+// (and the bloom turns that into a flashing blob). Grown halos dim to keep the same total light.
+float shownSize = max(haloSize, haloDistance * ${minAngle.toFixed(4)});
+vHaloEnergy = (haloSize / shownSize) * (haloSize / shownSize);
+mvPosition.xy += position.xy * shownSize;
+// Pulled toward the camera so the halo isn't cut by the lamp's own housing (which would change as the
+// camera moves).
+mvPosition.xyz += normalize(-mvPosition.xyz) * min(1.0, haloDistance * 0.5);
 // Fades far away, and also right next to the camera (driving under a lamp must not flash the screen).
 vHaloFade = (1.0 - smoothstep(${(fadeDistance * 0.6).toFixed(1)}, ${fadeDistance.toFixed(1)}, haloDistance)) * smoothstep(3.0, 9.0, haloDistance);
 gl_Position = projectionMatrix * mvPosition;`,
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying float vHaloFade;")
-      .replace("#include <map_fragment>", "#include <map_fragment>\ndiffuseColor.rgb *= vHaloFade;");
+      .replace("#include <common>", "#include <common>\nvarying float vHaloFade;\nvarying float vHaloEnergy;")
+      .replace(
+        "#include <map_fragment>",
+        "#include <map_fragment>\ndiffuseColor.rgb *= vHaloFade * vHaloEnergy;",
+      );
   };
   material.customProgramCacheKey = () => "drift-fury-halo";
   const mesh = new InstancedMesh(new PlaneGeometry(1, 1), material, positions.length);
