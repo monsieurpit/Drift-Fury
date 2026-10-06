@@ -1,11 +1,19 @@
-import { MeshStandardMaterial, BoxGeometry, Mesh, Matrix4, Vector3, Quaternion } from "three";
+import { MeshStandardMaterial, BoxGeometry, Mesh, Matrix4, Vector3, Vector4, Quaternion } from "three";
+import { CITY_REFLECTION_BOX, CITY_REFLECTION_PROBE, makeWet } from "../render/wetSurface.js";
+import { getTerrainTextures } from "./terrainTextures.js";
 import { concreteTexture, createAsphaltMaterial, grassTexture } from "./textures.js";
 /** Shared materials, the box/solid helpers and scratch math objects used by every part of the map. */
 export function createWorldContext(world) {
   const { scene } = world;
   const solids = [];
   const lampPositions = [];
-  const roadMaterial = createAsphaltMaterial(6);
+  // City streets after rain: puddles, wet gutters and reflections of the lit city (see wetSurface.js).
+  const roadMaterial = makeWet(createAsphaltMaterial(6), {
+    noise: getTerrainTextures().macro,
+    probe: CITY_REFLECTION_PROBE,
+    box: CITY_REFLECTION_BOX,
+    grid: new Vector4(60, 50, -80, 9),
+  });
   const highwayMaterial = createAsphaltMaterial(10);
   const sidewalkMaterial = new MeshStandardMaterial({
     map: concreteTexture(),

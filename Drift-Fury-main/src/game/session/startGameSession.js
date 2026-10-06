@@ -6,6 +6,7 @@ import { createRenderer, gamePixelRatio } from "../render/renderer.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
 import { warmUpSession } from "../render/warmUp.js";
 import { captureCityEnvironment } from "../render/reflectionProbe.js";
+import { CITY_REFLECTION_PROBE } from "../render/wetSurface.js";
 import { createGame } from "../simulation/game.js";
 import { batchPlayerCar } from "../vehicles/batchPlayerCar.js";
 import { buildCar } from "../vehicles/carModel.js";
@@ -657,7 +658,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
   // City reflections: captured once from the middle of the grid at street level, used as the scene's
   // environment while the player is in the city (the night sky's elsewhere).
   const skyEnvironment = scene.environment;
-  const cityEnvironment = captureCityEnvironment(renderer, scene, new Vector3(0, 2.4, -5), [playerCar]);
+  const cityEnvironment = captureCityEnvironment(renderer, scene, CITY_REFLECTION_PROBE, [playerCar]);
   inCityEnvironment = (x, z) => {
     const inCity = z > -112 && x > -165 && x < 160;
     const environment = inCity ? cityEnvironment : skyEnvironment;
