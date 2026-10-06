@@ -1,6 +1,9 @@
 import { Color, Vector3 } from "three";
 import { createAudio } from "../audio/createAudio.js";
 import { createEffects } from "../effects/effects.js";
+import { createBlood } from "../effects/blood.js";
+import { createCrowd } from "../people/crowd.js";
+import { createPedestrians } from "../people/pedestrians.js";
 import { animatePerson, createPerson } from "../people/person.js";
 import { createRenderer, gamePixelRatio } from "../render/renderer.js";
 import {
@@ -380,6 +383,104 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const audio = controls.current.audio || createAudio(engine);
   cleanup.push(() => audio.close());
   const effects = createEffects(scene, { patch: lightByLamps });
+  // Pedestrians on the sidewalks (pedestrians.js), drawn as a crowd (crowd.js), and their blood.
+  const CITY_EDGE = 11.4;
+  const groundAt = (x, z) => {
+    const inCity =
+      x > ROAD_XS[0] - CITY_EDGE &&
+      x < ROAD_XS[ROAD_XS.length - 1] + CITY_EDGE &&
+      z > ROAD_ZS[0] - CITY_EDGE &&
+      z < ROAD_ZS[ROAD_ZS.length - 1] + CITY_EDGE;
+    if (!inCity) return terrainHeight(x, z);
+    let d = Infinity;
+    for (const roadX of ROAD_XS) d = Math.min(d, Math.abs(x - roadX));
+    for (const roadZ of ROAD_ZS) d = Math.min(d, Math.abs(z - roadZ));
+    return d < 9 ? 0.07 : d < CITY_EDGE ? 0.22 : 0.09;
+  };
+  const pedestrianCount = { low: 14, medium: 20, high: 28, ultra: 34 }[view.quality] ?? 20;
+  const blood = createBlood(scene, groundAt, { patch: lightByLamps });
+  const crowd = createCrowd(scene, pedestrianCount, {
+    onMesh: (mesh) => {
+      trackMotion(mesh);
+      clusteredLights.patchAll(mesh);
+    },
+  });
+  const pedestrians = createPedestrians({
+    roadXs: ROAD_XS,
+    roadZs: ROAD_ZS,
+    solids,
+    crowd,
+    blood,
+    groundAt,
+    count: pedestrianCount,
+  });
+  if (debugSession) debugSession.pedestrians = pedestrians;
+  const pedestrianCars = [];
+  const cameraRight = new Vector3();
+  const impactPoint = new Vector3();
+  const impactVelocity = new Vector3();
+  // Where a sound is for the listener (the camera): distance, and left/right.
+  const heard = (x, z) => {
+    cameraRight.setFromMatrixColumn(camera.matrixWorld, 0);
+    const dx = x - camera.position.x;
+    const dz = z - camera.position.z;
+    const distance = Math.hypot(dx, dz);
+    return [distance, distance > 0.01 ? (dx * cameraRight.x + dz * cameraRight.z) / distance : 0];
+  };
+  function updatePedestrians(state, dt) {
+    pedestrianCars.length = 0;
+    if (!state.onFoot) {
+      pedestrianCars.push({ x: state.x, z: state.z, heading: state.heading, vx: state.vx, vz: state.vz, player: true });
+    }
+    for (const officer of state.police) {
+      if (officer.onFoot) continue;
+      const speed = officer.speed || 0;
+      pedestrianCars.push({
+        x: officer.x,
+        z: officer.z,
+        heading: officer.heading,
+        vx: -Math.sin(officer.heading) * speed,
+        vz: -Math.cos(officer.heading) * speed,
+        player: false,
+      });
+    }
+    const events = pedestrians.update(dt, { cars: pedestrianCars, camera, phase: signalClock });
+    for (let index = 0; index < events.length; index++) {
+      const event = events[index];
+      const [distance, pan] = heard(event.x, event.z);
+      const female = event.ped.female;
+      if (event.type === "killed" || event.type === "runOver") {
+        const killed = event.type === "killed";
+        impactPoint.set(event.x, groundAt(event.x, event.z) + (killed ? 1.0 : 0.3), event.z);
+        impactVelocity.set(event.car.vx, killed ? 1.5 : 0.5, event.car.vz);
+        blood.spray(impactPoint, impactVelocity, Math.round(Math.min(70, (killed ? 14 : 6) + event.speed * 2.5)));
+        audio.bodyHit?.(event.speed, distance, pan);
+        if (killed) {
+          audio.hurt?.(female, distance, pan);
+          // Everyone around runs away screaming.
+          pedestrians.frighten(event.x, event.z, 30, events);
+          if (event.car.player) {
+            const witnessed = state.police.some((officer) => Math.hypot(officer.x - event.x, officer.z - event.z) < 90);
+            state.wanted = Math.min(5, (state.wanted || 0) + (witnessed ? 1 : 0.5));
+            state.shake = Math.min((state.shake || 0) + 0.25, 1.2);
+          }
+        }
+      } else if (event.type === "land") {
+        impactPoint.set(event.x, groundAt(event.x, event.z) + 0.2, event.z);
+        impactVelocity.set(0, 0.5, 0);
+        blood.spray(impactPoint, impactVelocity, Math.round(6 + event.strength * 3));
+        audio.bodyHit?.(event.strength * 2, distance, pan);
+      } else if (event.type === "scream") {
+        audio.scream?.(female, distance, pan);
+      } else if (event.type === "hurt") {
+        audio.hurt?.(female, distance, pan);
+      } else if (event.type === "talk") {
+        audio.murmur?.(female, distance, pan);
+      }
+    }
+    crowd.update();
+    blood.update(dt);
+  }
   const keys = {};
   let frameId;
   let lastFrameTime = performance.now();
@@ -825,6 +926,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       addCarLights(state, time);
       updateLamps(state.x, state.z, camera);
       effects.update(state, dt, camera);
+      updatePedestrians(state, dt);
       audio.update(state.rpm, state.pedal, controls.current.muted, state.drifting, state);
       if (wasOnFoot && !state.onFoot) {
         audio.startEngine();
