@@ -592,6 +592,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
       updateTrafficLights(dt);
       updateWorld(state.elapsed);
       inCityEnvironment(state.x, state.z);
+      composer.grading?.update(state.elapsed);
       const driving = !state.onFoot;
       const targetFov = driving ? 55 + speedFactor * 12 : 45;
       if (camera.fov !== targetFov) {

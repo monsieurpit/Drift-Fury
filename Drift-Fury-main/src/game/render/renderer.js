@@ -17,6 +17,7 @@ import {
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { createGradingPass } from "./gradingPass.js";
 function createComposer(renderer, scene, camera, width, height, bloomStrength) {
   const composer = new EffectComposer(renderer);
   if (renderer.capabilities.isWebGL2) {
@@ -32,6 +33,9 @@ function createComposer(renderer, scene, camera, width, height, bloomStrength) {
   vignette.uniforms.darkness.value = 1.08;
   composer.addPass(vignette);
   composer.addPass(new OutputPass());
+  // Colour grade in display space, after tone mapping (see gradingPass.js).
+  composer.grading = createGradingPass();
+  composer.addPass(composer.grading);
   return composer;
 }
 /**
