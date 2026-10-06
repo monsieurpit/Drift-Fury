@@ -223,14 +223,14 @@ function branchTexture() {
 let branchMap = null;
 
 /**
- * Material for alpha-tested pine branch cards (vertex colours + per-instance tint). Both faces use the
- * geometry's "up and out" normal, and alpha is boosted as the texture minifies so distant crowns stay full
- * instead of dissolving as the needles average away in the mipmaps.
+ * Material for alpha-tested foliage cards (pine branches, leaf clusters) with vertex colours and per-instance
+ * tint. Both faces use the geometry's "up and out" normal, and alpha is boosted as the texture minifies so
+ * distant crowns stay full instead of dissolving as the needles/leaves average away in the mipmaps.
  */
-export function createBranchCardMaterial() {
-  if (!branchMap) branchMap = branchTexture();
+function createCardMaterial(map, key) {
+  const { width, height } = map.image;
   const material = new MeshStandardMaterial({
-    map: branchMap,
+    map,
     vertexColors: true,
     alphaTest: 0.5,
     side: DoubleSide,
@@ -244,7 +244,7 @@ export function createBranchCardMaterial() {
         [
           "#include <map_fragment>",
           "{",
-          "  vec2 texel = vMapUv * vec2(256.0, 128.0);",
+          `  vec2 texel = vMapUv * vec2(${width.toFixed(1)}, ${height.toFixed(1)});`,
           "  float lod = 0.5 * log2(max(dot(dFdx(texel), dFdx(texel)), dot(dFdy(texel), dFdy(texel))));",
           "  diffuseColor.a *= 1.0 + min(max(0.0, lod), 4.0) * 0.25;",
           "}",
@@ -255,6 +255,101 @@ export function createBranchCardMaterial() {
         "#include <normal_fragment_begin>\nnormal = normalize(vNormal);\nnonPerturbedNormal = normal;",
       );
   };
-  material.customProgramCacheKey = () => "drift-fury-branch-card";
+  material.customProgramCacheKey = () => "drift-fury-card-" + key;
   return material;
+}
+
+/** Pine branch cards. */
+export function createBranchCardMaterial() {
+  if (!branchMap) branchMap = branchTexture();
+  return createCardMaterial(branchMap, "branch");
+}
+
+/**
+ * A cluster of broad leaves on twigs (street trees): overlapping pointed leaves in varied greens, darker
+ * toward the twig, a few yellowing. Colour rebuilt under the alpha like the branch texture.
+ */
+function leafClusterTexture() {
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  const random = createRandom(7331);
+  const greens = [
+    [64, 110, 46],
+    [52, 96, 40],
+    [80, 128, 54],
+    [44, 84, 36],
+    [96, 140, 60],
+    [120, 140, 60],
+  ];
+  // Twigs radiating from the lower centre.
+  context.strokeStyle = "rgb(60,44,30)";
+  for (let t = 0; t < 7; t++) {
+    const angle = -Math.PI / 2 + (random() - 0.5) * 2.4;
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(size / 2, size * 0.92);
+    context.lineTo(size / 2 + Math.cos(angle) * size * 0.42, size * 0.92 + Math.sin(angle) * size * 0.75);
+    context.stroke();
+  }
+  for (let leaf = 0; leaf < 230; leaf++) {
+    // Leaves fill a rough disc, thinning toward the edge so the silhouette is ragged.
+    const radius = Math.sqrt(random()) * size * 0.46;
+    const angle = random() * Math.PI * 2;
+    const x = size / 2 + Math.cos(angle) * radius;
+    const y = size / 2 + Math.sin(angle) * radius * 0.92;
+    const [r, g, b] = greens[Math.floor(random() * greens.length)];
+    const shade = 0.75 + random() * 0.45 - (radius / size) * 0.2;
+    context.fillStyle = `rgb(${Math.round(r * shade)},${Math.round(g * shade)},${Math.round(b * shade)})`;
+    context.save();
+    context.translate(x, y);
+    context.rotate(random() * Math.PI * 2);
+    const length = 9 + random() * 8;
+    const width = length * (0.42 + random() * 0.12);
+    context.beginPath();
+    context.moveTo(-length, 0);
+    context.quadraticCurveTo(0, -width, length, 0);
+    context.quadraticCurveTo(0, width, -length, 0);
+    context.fill();
+    // Midrib.
+    context.strokeStyle = `rgba(20,30,12,0.35)`;
+    context.lineWidth = 0.8;
+    context.beginPath();
+    context.moveTo(-length * 0.9, 0);
+    context.lineTo(length * 0.9, 0);
+    context.stroke();
+    context.restore();
+  }
+  const pixels = context.getImageData(0, 0, size, size).data;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const source = (y * size + x) * 4;
+      const target = ((size - 1 - y) * size + x) * 4;
+      const alpha = pixels[source + 3];
+      data[target] = alpha > 0 ? pixels[source] : 58;
+      data[target + 1] = alpha > 0 ? pixels[source + 1] : 100;
+      data[target + 2] = alpha > 0 ? pixels[source + 2] : 42;
+      data[target + 3] = alpha;
+    }
+  }
+  const texture = new DataTexture(data, size, size, RGBAFormat);
+  texture.colorSpace = SRGBColorSpace;
+  texture.wrapS = texture.wrapT = ClampToEdgeWrapping;
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = 4;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+let leafMap = null;
+
+/** Leaf-cluster cards for broadleaf street trees. */
+export function createLeafCardMaterial() {
+  if (!leafMap) leafMap = leafClusterTexture();
+  return createCardMaterial(leafMap, "leaf");
 }
