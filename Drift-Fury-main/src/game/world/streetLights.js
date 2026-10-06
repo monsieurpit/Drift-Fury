@@ -8,6 +8,7 @@ import {
   Vector3,
 } from "three";
 import { addHalos, addLightCones } from "./lightGlow.js";
+import { LIGHT_LAMP } from "../render/clusteredLights.js";
 
 /**
  * Street light poles along every road (their positions feed the lamp lighting): a tapered pole on a
@@ -16,6 +17,7 @@ import { addHalos, addLightCones } from "./lightGlow.js";
  */
 export function buildStreetLights(world) {
   const {
+    addLight,
     addSolid,
     lampGlow,
     lampPositions,
@@ -88,6 +90,19 @@ export function buildStreetLights(world) {
       x: headX,
       y: 7.28,
       z: headZ,
+    });
+    // The same light model and strength as the ground's baked lamp light (lampLighting.js).
+    addLight({
+      x: headX,
+      y: 7.28,
+      z: headZ,
+      color: "#ffcf94",
+      intensity: 450,
+      range: 28,
+      direction: [0, -1, 0],
+      cosOuter: 0.12,
+      cosInner: 0.7,
+      flags: LIGHT_LAMP,
     });
   }
   for (const x of roadXs) {

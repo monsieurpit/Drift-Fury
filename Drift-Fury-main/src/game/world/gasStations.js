@@ -9,7 +9,6 @@ import {
   CanvasTexture,
   MeshPhysicalMaterial,
   InstancedMesh,
-  PointLight,
   CatmullRomCurve3,
   TubeGeometry,
 } from "three";
@@ -20,6 +19,7 @@ import { terrainHeight } from "./terrain.js";
 export function buildGasStations(world) {
   const {
     addBox,
+    addLight,
     addSolid,
     concreteMaterial,
     roadMaterial,
@@ -607,13 +607,21 @@ export function buildGasStations(world) {
       const lightX = shopX + (light ? 3.5 : -3.5);
       addBox(1.7, 0.045, 0.34, lightX, groundY + 3.39, shopZ - 0.15, stationAwningLight);
       lightHalos.push({ x: lightX, y: groundY + 3.33, z: shopZ - 0.15 });
+      // Real light from each tube (clusteredLights.js): down on the shop front and the forecourt.
+      addLight({
+        x: lightX,
+        y: groundY + 3.3,
+        z: shopZ - 0.15,
+        color: "#fff0d5",
+        intensity: 55,
+        range: 13,
+        direction: [0, -1, 0],
+        cosOuter: 0.05,
+        cosInner: 0.6,
+      });
     }
-    const insideLight = new PointLight("#fff0d5", 0.55, 17, 2);
-    insideLight.position.set(shopX, groundY + 2.8, shopZ);
-    scene.add(insideLight);
-    const outsideLight = new PointLight("#dceeff", 0.55, 15, 2);
-    outsideLight.position.set(shopX, groundY + 3.3, frontZ - 1);
-    scene.add(outsideLight);
+    // The ceiling lights inside the store.
+    addLight({ x: shopX, y: groundY + 2.8, z: shopZ, color: "#fff0d5", intensity: 22, range: 9 });
   };
   for (let stationIndex = 0; stationIndex < FUEL_STATIONS.length; stationIndex++) {
     const station = FUEL_STATIONS[stationIndex];
@@ -657,11 +665,20 @@ export function buildGasStations(world) {
       for (let lampZ of [-5, 5]) {
         addBox(2.1, 0.045, 0.7, station.x + lampX, groundY + 4.94, station.z + lampZ, stationAwningLight);
         lightHalos.push({ x: station.x + lampX, y: groundY + 4.88, z: station.z + lampZ });
+        // Each canopy tube is a real light over the pumps (clusteredLights.js).
+        addLight({
+          x: station.x + lampX,
+          y: groundY + 4.85,
+          z: station.z + lampZ,
+          color: "#fff3df",
+          intensity: 95,
+          range: 18,
+          direction: [0, -1, 0],
+          cosOuter: 0.05,
+          cosInner: 0.55,
+        });
       }
     }
-    const canopyLight = new PointLight("#fff0d5", 0.7, 28, 2);
-    canopyLight.position.set(station.x, groundY + 4.62, station.z);
-    scene.add(canopyLight);
     addFuelPump(station.x - 4, station.z - 2.35, groundY);
     addFuelPump(station.x + 4, station.z - 2.35, groundY);
     addStationStore(station, stationIndex, groundY);

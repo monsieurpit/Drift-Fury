@@ -18,7 +18,7 @@ import { concreteTexture, normalMapFromHeight } from "./textures.js";
 import { scannedSet } from "./scannedTextures.js";
 /** City blocks: towers, podiums and storefronts on the lots between the roads. */
 export function buildBuildings(world) {
-  const { addBox, darkMetal, poleMetal, roadXs, roadZs, scene, sidewalkMaterial } = world;
+  const { addBox, addLight, darkMetal, poleMetal, roadXs, roadZs, scene, sidewalkMaterial } = world;
   let worldSeed = 9137;
   const worldRandom = () => {
     worldSeed = (worldSeed * 16807) % 2147483647;
@@ -778,6 +778,48 @@ if (shopInside > 0.5) {
             true,
           );
           addBox(sW + 1.2, 0.3, cD + 1.2, bxC, POD_H + 0.15, bzC, sidewalkMaterial);
+          // Real light from the shop: its windows light the sidewalk in front, its sign glows in its colour
+          // (clusteredLights.js). On the three street-facing sides (not the one facing the next lot). No
+          // random numbers here: the city's seeded layout stays the same.
+          {
+            const shopLight = SHOP_KINDS[SIGNS[signIdx]]?.light || "#fff2dc";
+            const halfX = (sW + 1) / 2;
+            const halfZ = (cD + 1) / 2;
+            for (const [nx, nz, length] of [
+              [side, 0, cD + 1],
+              [0, 1, sW + 1],
+              [0, -1, sW + 1],
+            ]) {
+              const faceX = bxC + nx * (halfX + 0.35);
+              const faceZ = bzC + nz * (halfZ + 0.35);
+              const windows = Math.max(1, Math.round(length / 8));
+              for (let w = 0; w < windows; w++) {
+                const along = ((w + 0.5) / windows - 0.5) * (length - 2);
+                addLight({
+                  x: faceX + (nx ? 0 : along),
+                  y: 2.2,
+                  z: faceZ + (nz ? 0 : along),
+                  color: shopLight,
+                  intensity: 26,
+                  range: 10,
+                  direction: [nx * 0.8, -0.6, nz * 0.8],
+                  cosOuter: 0.0,
+                  cosInner: 0.55,
+                });
+              }
+              addLight({
+                x: faceX,
+                y: POD_H - 0.7,
+                z: faceZ,
+                color: SIGNS[signIdx],
+                intensity: 14,
+                range: 8,
+                direction: [nx * 0.7, -0.7, nz * 0.7],
+                cosOuter: 0.0,
+                cosInner: 0.5,
+              });
+            }
+          }
           addBox(sW, hs, cD, bxC, POD_H + hs / 2, bzC, [fx, fx, roofMat, roofMat, fz, fz], true);
           // corner pilasters / frame fins
           for (const sx of [-1, 1]) {

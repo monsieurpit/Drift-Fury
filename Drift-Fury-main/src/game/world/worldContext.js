@@ -1,4 +1,4 @@
-import { MeshStandardMaterial, BoxGeometry, Mesh, Matrix4, Vector3, Vector4, Quaternion } from "three";
+import { Color, MeshStandardMaterial, BoxGeometry, Mesh, Matrix4, Vector3, Vector4, Quaternion } from "three";
 import { CITY_REFLECTION_BOX, CITY_REFLECTION_PROBE, makeWet } from "../render/wetSurface.js";
 import { getTerrainTextures } from "./terrainTextures.js";
 import { scannedSet } from "./scannedTextures.js";
@@ -10,6 +10,9 @@ export function createWorldContext(world) {
   const { scene } = world;
   const solids = [];
   const lampPositions = [];
+  // The world's real lights (street lamps, gas stations, shops), lit through clusteredLights.js.
+  const lights = [];
+  const addLight = (light) => lights.push({ ...light, color: new Color(light.color) });
   // City streets after rain: puddles, wet gutters and reflections of the lit city (see wetSurface.js).
   const roadMaterial = makeWet(createAsphaltMaterial(), {
     noise: getTerrainTextures().macro,
@@ -134,6 +137,8 @@ export function createWorldContext(world) {
   const tmpScale = new Vector3();
   Object.assign(world, {
     addBox,
+    addLight,
+    lights,
     addSolid,
     concreteMaterial,
     darkMetal,

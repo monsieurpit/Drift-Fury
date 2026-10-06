@@ -11,6 +11,7 @@ import { buildMountainRoad, buildMountainScenery, buildMountainTerrain, updateMo
 import { buildRoadClosure } from "./roadClosure.js";
 import { buildSky } from "./sky.js";
 import { createLampLighting } from "../render/lampLighting.js";
+import { LIGHT_LAMP, createClusteredLights } from "../render/clusteredLights.js";
 /**
  * Builds the whole map into `scene`: city grid, gas stations, highway and the mountain.
  * Each part lives in its own module and shares materials and helpers through the `world` object;
@@ -57,27 +58,41 @@ export function* buildWorldInSteps(scene) {
   const updateSky = buildSky(world);
   // Every street lamp lights the city's ground in its shaders (see lampLighting.js).
   const lampLighting = createLampLighting(world.lampPositions);
+  // Every light of the world (lamps, gas stations, shops) is a real light (see clusteredLights.js).
+  const clusteredLights = createClusteredLights();
+  for (const light of world.lights) clusteredLights.addStatic(light);
   // The ground (road, sidewalks and the paint on them) takes the lamps' light from a map baked once, so
-  // it never changes as the player moves or turns; walls and shop fronts light from the nearest lamps.
+  // it never changes as the player moves or turns; the other lights it takes like everything else.
   for (const material of [world.roadMaterial, world.sidewalkMaterial, world.whitePaint, world.yellowPaint]) {
-    if (material) lampLighting.patchGround(material);
+    if (!material) continue;
+    lampLighting.patchGround(material);
+    clusteredLights.patch(material, { skipFlags: LIGHT_LAMP });
   }
   for (const material of world.buildingMaterials?.() ?? []) {
-    if (material) lampLighting.patch(material);
+    if (material) clusteredLights.patch(material);
   }
   return {
     solids: world.solids,
     lampPositions: world.lampPositions,
     signals: world.signals,
-    /** Picks the street lamps nearest to (x, z) for the ground lighting; call as the player moves. */
+    clusteredLights,
+    /**
+     * Picks the street lamps nearest to (x, z) for the ground's wet glints and the lights around the
+     * camera; call every frame, after the frame's moving lights were added to clusteredLights.
+     */
     updateLamps: (x, z, camera) => {
       lampLighting.update(x, z);
       lampLighting.updateView(camera);
+      clusteredLights.setEnabled(true);
+      clusteredLights.update(camera);
     },
     /** Turns the lamp lighting off until the next updateLamps (for cube-map captures). */
-    clearLamps: () => lampLighting.clear(),
-    /** Adds the street-lamp lighting to another material (effects, props). */
-    lightByLamps: (material) => lampLighting.patch(material),
+    clearLamps: () => {
+      lampLighting.clear();
+      clusteredLights.setEnabled(false);
+    },
+    /** Adds the lights to another material (effects, props). */
+    lightByLamps: (material) => clusteredLights.patch(material),
     /** Per-frame animation of world details (summit beacon, sky); `time` in seconds. */
     update: (time) => {
       updateMountain(world, time);

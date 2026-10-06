@@ -1,4 +1,4 @@
-import { PointLight, Vector3 } from "three";
+import { Color, Vector3 } from "three";
 import { createAudio } from "../audio/createAudio.js";
 import { createEffects } from "../effects/effects.js";
 import { animatePerson, createPerson } from "../people/person.js";
@@ -133,12 +133,12 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   }
   const {
     solids,
-    lampPositions,
     signals,
     update: updateWorld,
     updateLamps,
     clearLamps,
     lightByLamps,
+    clusteredLights,
   } = worldStep.value;
   // Cars sit on the ground: pitch and roll follow the terrain under their wheels (flat in the city).
   const sitOnGround = (object, x, z, heading, extraRoll = 0) => {
@@ -193,7 +193,6 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   }
   await stage(0.42, "Véhicules, police et circulation");
   const game = createGame(car, engine, solids, noPolice);
-  const lampLights = [];
   // ?dfdebug exposes the live session for profiling tools
   const debugSession = /[?&]dfdebug\b/.test(location.search)
     ? (window.__dfDbg = {
@@ -232,62 +231,6 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       }
     }
   }
-  for (let slot = 0; slot < 6; slot++) {
-    const light = new PointLight("#ffd9a0", 0.6, 26, 2);
-    scene.add(light);
-    lampLights.push({
-      light,
-    });
-  }
-  const lampDistances = new Float32Array(lampPositions.length || 1);
-  const lampOrder = [];
-  let lastLampX = Infinity;
-  let lastLampZ = Infinity;
-  // The six real lights (they light the cars, trees and poles near the player) follow the nearest lamps.
-  // Each light stays on its lamp while that lamp is among the six nearest, and fades with distance toward
-  // the seventh, so a lamp leaving the set has already faded out and one joining it fades in: no light
-  // ever jumps from one lamp to another.
-  const lampSlots = [-1, -1, -1, -1, -1, -1];
-  let lampCutoff = Infinity;
-  function updateLampLights(x, z) {
-    const lamps = lampPositions;
-    const count = lamps.length;
-    if ((x - lastLampX) ** 2 + (z - lastLampZ) ** 2 >= 1) {
-      lastLampX = x;
-      lastLampZ = z;
-      for (let i = 0; i < count; i++) {
-        const dx = lamps[i].x - x;
-        const dz = lamps[i].z - z;
-        lampDistances[i] = dx * dx + dz * dz;
-        lampOrder[i] = i;
-      }
-      lampOrder.length = count;
-      lampOrder.sort((e, t) => lampDistances[e] - lampDistances[t]);
-      const nearest = new Set(lampOrder.slice(0, lampSlots.length));
-      lampCutoff =
-        count > lampSlots.length ? Math.sqrt(lampDistances[lampOrder[lampSlots.length]]) : Infinity;
-      for (let slot = 0; slot < lampSlots.length; slot++) {
-        if (!nearest.has(lampSlots[slot])) lampSlots[slot] = -1;
-        else nearest.delete(lampSlots[slot]);
-      }
-      for (const index of nearest) lampSlots[lampSlots.indexOf(-1)] = index;
-    }
-    const fadeLength = Math.max(4, lampCutoff * 0.35);
-    for (let slot = 0; slot < lampSlots.length; slot++) {
-      const light = lampLights[slot].light;
-      const index = lampSlots[slot];
-      if (index < 0) {
-        light.intensity = 0;
-        continue;
-      }
-      const lamp = lamps[index];
-      light.position.set(lamp.x, lamp.y, lamp.z);
-      const distance = Math.hypot(lamp.x - x, lamp.z - z);
-      const t = lampCutoff === Infinity ? 1 : Math.min(1, Math.max(0, (lampCutoff - distance) / fadeLength));
-      light.intensity = 0.6 * t * t * (3 - 2 * t);
-    }
-  }
-  updateLampLights(0, 70);
   let interaction = null;
   let playerCar = batchPlayerCar(buildCar(car.color, car.shape, false, true));
   scene.add(playerCar);
@@ -295,7 +238,12 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   // Police, parked and traffic cars are instanced per look (carInstancing.js).
   // Moving things get motion vectors for the temporal antialiasing (taaPass.js).
   const trackMotion = (object) => composer.taa?.track(object);
-  const carInstancer = createCarInstancer(scene, { onMesh: trackMotion });
+  const carInstancer = createCarInstancer(scene, {
+    onMesh: (mesh) => {
+      trackMotion(mesh);
+      clusteredLights.patchAll(mesh);
+    },
+  });
   trackMotion(playerCar);
   const policeCars = game.state.police.map(() => {
     return carInstancer.add(trafficTemplate("#ffffff", "coupe", true));
@@ -320,6 +268,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       e.material?.dispose();
     });
     playerCar = batchPlayerCar(buildCar(vehicle.color, vehicle.shape, vehicle.kind === "police", true));
+    clusteredLights.patchAll(playerCar);
     scene.add(playerCar);
     trackMotion(playerCar);
     playerCarSpec = vehicle.spec;
@@ -355,6 +304,71 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         carInstancer.remove(entry.car);
         trafficCars.delete(id);
       }
+    }
+  }
+  // The moving lights of the frame (clusteredLights.js): police cruisers' headlights and flashing light
+  // bars (also on cruisers left parked), the player's tail lights.
+  const carLightPool = [];
+  let carLightCount = 0;
+  const carLight = () => {
+    if (carLightCount === carLightPool.length) carLightPool.push({ color: new Color(), direction: [0, 0, 0] });
+    return carLightPool[carLightCount++];
+  };
+  const BAR_BLUE = new Color("#3a6bff");
+  const BAR_RED = new Color("#ff2a2a");
+  const HEADLIGHT = new Color("#fff0d8");
+  const TAIL = new Color("#ff1a10");
+  function addCarLights(state, time) {
+    carLightCount = 0;
+    const flashBlue = Math.sin(time * 0.018) > 0;
+    const addBar = (x, z) => {
+      const light = carLight();
+      Object.assign(light, { x, y: terrainHeight(x, z) + 1.75, z, intensity: 30, range: 16, flags: 0 });
+      light.color.copy(flashBlue ? BAR_BLUE : BAR_RED);
+      light.direction = null;
+      clusteredLights.addDynamic(light);
+    };
+    for (const officer of state.police) {
+      if (officer.onFoot) continue;
+      addBar(officer.x, officer.z);
+      // Low beams, from above the car like the player's (a light at bumper height grazes the road and
+      // piles its light up a few metres ahead), aimed at the road 22 m ahead.
+      const forwardX = -Math.sin(officer.heading);
+      const forwardZ = -Math.cos(officer.heading);
+      const ground = terrainHeight(officer.x, officer.z);
+      const beam = carLight();
+      Object.assign(beam, {
+        x: officer.x + forwardX * 0.8,
+        y: ground + 3.4,
+        z: officer.z + forwardZ * 0.8,
+        intensity: 600,
+        range: 40,
+        cosOuter: 0.86,
+        cosInner: 0.97,
+        flags: 0,
+      });
+      const length = Math.hypot(22, 3.4);
+      beam.direction = [(forwardX * 22) / length, -3.4 / length, (forwardZ * 22) / length];
+      beam.color.copy(HEADLIGHT);
+      clusteredLights.addDynamic(beam);
+    }
+    for (const vehicle of state.vehicles) {
+      if (vehicle.kind === "police") addBar(vehicle.x, vehicle.z);
+    }
+    if (!state.onFoot) {
+      const braking = state.brake > 0 || (state.speed > 5 && state.throttle === 0);
+      const tail = carLight();
+      Object.assign(tail, {
+        x: state.x + Math.sin(state.heading) * 2.4,
+        y: (state.y || 0) + 0.75,
+        z: state.z + Math.cos(state.heading) * 2.4,
+        intensity: braking ? 9 : 3,
+        range: 7,
+        flags: 0,
+      });
+      tail.direction = null;
+      tail.color.copy(TAIL);
+      clusteredLights.addDynamic(tail);
     }
   }
   const audio = controls.current.audio || createAudio(engine);
@@ -649,7 +663,6 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         shadowsDue = true;
         shadowFrameCounter = 0;
       }
-      updateLampLights(state.x, state.z);
       if (state._crash) {
         effects.crash(state._crash.x, state._crash.y, state._crash.z, state._crash.intensity);
         audio.crash(state._crash.intensity);
@@ -803,6 +816,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       camera.lookAt(lookTarget);
       // Street-lamp lighting uses lamp positions in view space: update them for this frame's camera.
       camera.updateMatrixWorld();
+      addCarLights(state, time);
       updateLamps(state.x, state.z, camera);
       effects.update(state, dt, camera);
       audio.update(state.rpm, state.pedal, controls.current.muted, state.drifting, state);
@@ -942,6 +956,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   // Every shader the session can need (the world, every traffic car look, police, effects), compiled in
   // parallel where the browser supports it.
   await stage(0.8, "Compilation des shaders");
+  // Everything lit is lit by the world's lights too (clusteredLights.js); cars as they are set up.
+  clusteredLights.patchAll(scene);
   await warmUpSession(renderer, scene, camera, [car.color], (template) => carInstancer.prepare(template));
   await stage(0.88, "Son du moteur");
   await Promise.race([audio.ready.catch(() => {}), sleep(15000)]);
