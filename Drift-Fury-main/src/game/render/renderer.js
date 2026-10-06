@@ -221,7 +221,7 @@ export function createRenderer(container, inGame = false) {
   }
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.toneMapping = 4;
-  renderer.toneMappingExposure = inGame ? 0.82 : 1.05;
+  renderer.toneMappingExposure = inGame ? 1.0 : 1.05;
   renderer.shadowMap.enabled = !lowPower;
   renderer.shadowMap.type = 2;
   if (renderer.physicallyCorrectLights) {
@@ -231,9 +231,9 @@ export function createRenderer(container, inGame = false) {
   renderer.domElement.className = inGame ? "game-canvas" : "game-canvas-preview";
   const camera = new PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1200);
   scene.add(
-    new HemisphereLight(inGame ? "#a1bfdc" : "#dfeaf8", inGame ? "#1a2418" : "#101a22", inGame ? 0.78 : 1.15),
+    new HemisphereLight(inGame ? "#a1bfdc" : "#dfeaf8", inGame ? "#1a2418" : "#101a22", inGame ? 0.95 : 1.15),
   );
-  const ambient = new AmbientLight(inGame ? "#3d536d" : "#78879a", inGame ? 0.38 : 0.58);
+  const ambient = new AmbientLight(inGame ? "#3d536d" : "#78879a", inGame ? 0.5 : 0.58);
   scene.add(ambient);
   const sun = new DirectionalLight(inGame ? "#a9c5e8" : "#f6d7a8", inGame ? 2.2 : 3.2);
   sun.position.set(-42, 88, -30);

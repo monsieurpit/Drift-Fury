@@ -54,7 +54,8 @@ export function createLampLighting(positions, { intensity = 450, color = "#ffcf9
   const frustum = new Frustum();
   const viewProjection = new Matrix4();
   const reach = new Sphere(new Vector3(), LAMP_RANGE);
-  const nearest = []; // indices of the lamps currently in the uniform array
+  const nearest = []; // candidate lamps around the player (several times what the shader takes)
+  const inView = []; // this frame's candidates that can light something on screen, with their distance
   const point = new Vector3();
   const distances = new Float32Array(positions.length);
   let lastX = Infinity;
@@ -83,24 +84,42 @@ export function createLampLighting(positions, { intensity = 450, color = "#ffcf9
       }
       const order = positions.map((_, index) => index).sort((a, b) => distances[a] - distances[b]);
       nearest.length = 0;
-      nearest.push(...order.slice(0, LAMP_COUNT));
+      nearest.push(...order.slice(0, LAMP_COUNT * 4));
     },
     /**
-     * Moves the chosen lamps into view space for this frame (call once per frame, before rendering).
-     * Lamps whose light cannot reach anything on screen (their whole range is outside the view) are left
-     * out, so each pixel only loops over the lamps that can light it: the image is the same, the shaders
-     * of the road, sidewalks and buildings do a fraction of the work.
+     * Picks this frame's lamps and moves them into view space (call once per frame, before rendering).
+     * Of the lamps around the player, those whose light can reach something on screen are ranked by
+     * distance from the camera and the nearest LAMP_COUNT go to the shader, so the light pools run on down
+     * the street ahead instead of being spent on lamps behind the camera. The farthest of them fade out
+     * with distance toward the first lamp left out, so lamps entering or leaving the set never pop.
      */
     updateView(camera) {
       viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       frustum.setFromProjectionMatrix(viewProjection);
-      let count = 0;
+      const eye = camera.position;
+      inView.length = 0;
       for (const index of nearest) {
         const p = positions[index];
         reach.center.set(p.x, p.y, p.z);
         if (!frustum.intersectsSphere(reach)) continue;
+        inView.push({ index, distance: reach.center.distanceTo(eye) });
+      }
+      inView.sort((a, b) => a.distance - b.distance);
+      const count = Math.min(LAMP_COUNT, inView.length);
+      // Distance of the first lamp that did not make it: the fade reaches zero there.
+      const cutoff = inView.length > LAMP_COUNT ? inView[LAMP_COUNT].distance : Infinity;
+      const fadeLength = Math.max(12, cutoff * 0.3);
+      for (let slot = 0; slot < count; slot++) {
+        const { index, distance } = inView[slot];
+        const p = positions[index];
+        const fade = Math.min(1, Math.max(0, (cutoff - distance) / fadeLength));
         point.set(p.x, p.y, p.z).applyMatrix4(camera.matrixWorldInverse);
-        uniforms.streetLamps.value[count++].set(point.x, point.y, point.z, intensity);
+        uniforms.streetLamps.value[slot].set(
+          point.x,
+          point.y,
+          point.z,
+          intensity * fade * fade * (3 - 2 * fade),
+        );
       }
       for (let slot = count; slot < LAMP_COUNT; slot++) uniforms.streetLamps.value[slot].set(0, 0, 0, 0);
       uniforms.streetLampCount.value = count;

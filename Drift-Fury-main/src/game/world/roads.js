@@ -34,6 +34,10 @@ export function buildRoads(world) {
     opacity: 0.38,
     depthWrite: false,
     side: 2,
+    // A few millimetres above the asphalt: keep it on top at any distance.
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -2,
   });
   const addRoadPuddle = (x, z, rx, rz, angle) => {
     const positions = [0, 0, 0];
@@ -92,16 +96,15 @@ export function buildRoads(world) {
       roadMaterial,
     );
   }
+  // The cross streets only fill the gaps between the avenues: two road surfaces overlapping at exactly
+  // the same height in every intersection would fight over which one is drawn (flickering asphalt as the
+  // camera moves).
   for (const roadZ of roadZs) {
-    addBox(
-      roadXs[roadXs.length - 1] - roadXs[0] + 18,
-      0.12,
-      18,
-      (roadXs[0] + roadXs[roadXs.length - 1]) / 2,
-      0.01,
-      roadZ,
-      roadMaterial,
-    );
+    for (let index = 0; index + 1 < roadXs.length; index++) {
+      const from = roadXs[index] + 9;
+      const to = roadXs[index + 1] - 9;
+      addBox(to - from, 0.12, 18, (from + to) / 2, 0.01, roadZ, roadMaterial);
+    }
   }
   const roadY = 0.085;
   for (const x of roadXs) {
@@ -189,13 +192,15 @@ export function buildRoads(world) {
   }
   for (const z of roadZs) {
     for (const side of [-1, 1]) {
+      // These stop where the avenues' sidewalks begin, so the corner squares are not covered twice (two
+      // tops at the same height flicker).
       let start = roadXs[0] - 11;
       for (const crossing of roadXs) {
-        const end = crossing - 9;
+        const end = crossing - 11.4;
         if (end > start) {
           addBox(end - start, 0.22, 2.4, (start + end) / 2, 0.11, z + side * 10.2, sidewalkMaterial);
         }
-        start = crossing + 9;
+        start = crossing + 11.4;
       }
       const end = roadXs[roadXs.length - 1] + 11;
       if (end > start) {
