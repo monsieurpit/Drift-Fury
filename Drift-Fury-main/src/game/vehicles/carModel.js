@@ -8,6 +8,7 @@ import {
   BoxGeometry,
   CylinderGeometry,
   TorusGeometry,
+  CircleGeometry,
   SphereGeometry,
   SpotLight,
   Object3D,
@@ -69,12 +70,14 @@ export function buildCar(
       sheenColor: "#fff6e8",
     }),
   );
+  // The player's car has a full cabin, so its glass is a lighter tint you can see into; traffic keeps dark
+  // privacy glass (it has no interior).
   const glass = new MeshPhysicalMaterial({
-    color: "#04080c",
+    color: detail ? "#0b141b" : "#04080c",
     metalness: 0.05,
     roughness: 0.03,
     transparent: true,
-    opacity: 0.84,
+    opacity: detail ? 0.5 : 0.84,
     clearcoat: 1,
     clearcoatRoughness: 0.02,
     envMapIntensity: 2.4,
@@ -362,10 +365,18 @@ export function buildCar(
     const display = new MeshStandardMaterial({
       color: "#08151b",
       emissive: "#26758a",
-      emissiveIntensity: 0.4,
+      emissiveIntensity: 0.9,
       roughness: 0.3,
       metalness: 0.18,
     });
+    const gaugeFace = new MeshStandardMaterial({
+      color: "#0b0f12",
+      emissive: "#f2e6c8",
+      emissiveIntensity: 0.35,
+      roughness: 0.4,
+    });
+    const gaugeNeedle = new MeshBasicMaterial({ color: "#ff3a2a" });
+    const ambientLed = new MeshBasicMaterial({ color: "#3d7fd6" });
     const cabinBox = (material, size, pos, rot = null, parent = cabin) => {
       const mesh = new Mesh(new BoxGeometry(...size), material);
       mesh.position.set(...pos);
@@ -424,7 +435,16 @@ export function buildCar(
       face.position.set(-0.4 + side * 0.085, 0.735, dashZ + 0.035);
       face.rotation.y = Math.PI;
       cabin.add(face);
+      // Backlit gauge face with a red needle.
+      const gauge = new Mesh(new CircleGeometry(0.056, 28), gaugeFace);
+      gauge.position.set(-0.4 + side * 0.085, 0.735, dashZ + 0.048);
+      gauge.rotation.y = Math.PI;
+      cabin.add(gauge);
+      const needle = cabinBox(gaugeNeedle, [0.004, 0.045, 0.002], [-0.4 + side * 0.085, 0.75, dashZ + 0.044]);
+      needle.rotation.z = side * 0.9 - 0.3;
     }
+    // Ambient LED strip along the dash, the soft cabin glow of a modern car at night.
+    cabinBox(ambientLed, [1.3, 0.006, 0.006], [0, 0.66, dashZ + 0.33]);
     const steering = new Group();
     steering.position.set(-0.4, 0.665, dashZ + 0.48);
     steering.rotation.y = Math.PI;
