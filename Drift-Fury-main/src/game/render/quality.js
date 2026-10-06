@@ -97,20 +97,35 @@ export function resolveQuality(choice = storedQuality()) {
   return choice === "auto" ? detectQuality() : choice;
 }
 
-const NO_AO_KEY = "drift-fury-no-ao";
+// Effects found to break rendering on this device (a black image), so they stay off here. Found by the
+// session's black-screen watchdog, which turns suspects off one at a time until the image comes back.
+const BROKEN_KEY = "drift-fury-broken-features";
 
-/** Whether ambient occlusion was found not to work on this device (it rendered a black screen). */
-export function aoBlockedOnDevice() {
+/** Suspects, in the order the watchdog tries them, with how the pause menu names them. */
+export const FEATURE_LABELS = {
+  msaa: "Anticrénelage MSAA (remplacé par SMAA)",
+  ao: "Occlusion ambiante",
+  grading: "Étalonnage des couleurs",
+  shadows: "Ombres",
+};
+
+/** The set of features marked broken on this device. */
+export function brokenFeatures() {
+  const broken = new Set();
   try {
-    return localStorage.getItem(NO_AO_KEY) === "1";
+    for (const name of JSON.parse(localStorage.getItem(BROKEN_KEY) || "[]")) broken.add(name);
+    if (localStorage.getItem("drift-fury-no-ao") === "1") broken.add("ao");
   } catch {
-    return false;
+    /* storage unavailable or corrupt: nothing marked */
   }
+  return broken;
 }
 
-export function blockAoOnDevice() {
+export function markFeatureBroken(name) {
   try {
-    localStorage.setItem(NO_AO_KEY, "1");
+    const broken = brokenFeatures();
+    broken.add(name);
+    localStorage.setItem(BROKEN_KEY, JSON.stringify([...broken]));
   } catch {
     /* ignore */
   }

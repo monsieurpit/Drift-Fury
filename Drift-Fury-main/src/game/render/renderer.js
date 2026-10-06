@@ -26,8 +26,9 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
+import { SMAAPass } from "three/addons/postprocessing/SMAAPass.js";
 import { createGradingPass } from "./gradingPass.js";
-import { QUALITY_PRESETS, aoBlockedOnDevice, resolveQuality } from "./quality.js";
+import { QUALITY_PRESETS, brokenFeatures, resolveQuality } from "./quality.js";
 /**
  * Ambient occlusion for the game view (soft contact shadows where surfaces meet). Alpha-tested foliage
  * cards are left out of its depth/normal pre-pass: drawn without their alpha they would read as solid
@@ -142,6 +143,12 @@ function createComposer(renderer, scene, camera, width, height, bloomStrength, i
   vignette.uniforms.darkness.value = 1.08;
   composer.addPass(vignette);
   composer.addPass(new OutputPass());
+  if (inGame) {
+    // Stand-in antialiasing for devices where multisampled HDR targets render black (see applyQuality).
+    composer.smaa = new SMAAPass(width, height);
+    composer.smaa.enabled = false;
+    composer.addPass(composer.smaa);
+  }
   // Colour grade in display space, after tone mapping (see gradingPass.js).
   composer.grading = createGradingPass();
   composer.addPass(composer.grading);
@@ -373,12 +380,18 @@ export function createRenderer(container, inGame = false) {
   const applyQuality = (level) => {
     quality = level;
     const preset = QUALITY_PRESETS[level];
-    if (composer.ao) composer.ao.enabled = preset.ao && !aoBlockedOnDevice();
-    composer.grading.enabled = preset.grading;
-    const samples = renderer.capabilities.isWebGL2
-      ? Math.min(preset.msaa, renderer.capabilities.maxSamples)
-      : 0;
+    // Effects found broken on this device stay off (quality.js); MSAA is replaced by SMAA.
+    const broken = brokenFeatures();
+    if (composer.ao) composer.ao.enabled = preset.ao && !broken.has("ao");
+    composer.grading.enabled = preset.grading && !broken.has("grading");
+    const msaaBroken = broken.has("msaa");
+    const samples =
+      renderer.capabilities.isWebGL2 && !msaaBroken
+        ? Math.min(preset.msaa, renderer.capabilities.maxSamples)
+        : 0;
     composer.scenePass.samples = samples;
+    if (composer.smaa) composer.smaa.enabled = msaaBroken && preset.msaa > 0;
+    if (inGame && shadowsAvailable) renderer.shadowMap.enabled = !broken.has("shadows");
     if (sun.castShadow && sun.shadow.mapSize.x !== preset.shadowMapSize) {
       sun.shadow.mapSize.set(preset.shadowMapSize, preset.shadowMapSize);
       sun.shadow.map?.dispose();
@@ -386,6 +399,7 @@ export function createRenderer(container, inGame = false) {
     }
     renderer.shadowMap.needsUpdate = true;
   };
+  const shadowsAvailable = renderer.shadowMap.enabled;
   if (inGame) applyQuality(quality);
   const resizeObserver = new ResizeObserver(() => {
     const width = container.clientWidth;
@@ -406,6 +420,17 @@ export function createRenderer(container, inGame = false) {
     touchDevice,
     composer,
     applyQuality,
+    /** The effects that are on right now and could be the cause of a black image, in the order to try. */
+    suspects() {
+      const preset = QUALITY_PRESETS[quality];
+      const broken = brokenFeatures();
+      return [
+        composer.scenePass.target.samples > 0 && "msaa",
+        composer.ao?.enabled && "ao",
+        composer.grading.enabled && "grading",
+        renderer.shadowMap.enabled && preset.shadows && "shadows",
+      ].filter((name) => name && !broken.has(name));
+    },
     get quality() {
       return quality;
     },

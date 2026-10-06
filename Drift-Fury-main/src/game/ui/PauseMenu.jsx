@@ -1,8 +1,9 @@
 import React from "react";
 import { PlayIcon, LogOutIcon } from "lucide-react";
-import { QUALITY_LABELS, storedQuality } from "../render/quality.js";
+import { FEATURE_LABELS, QUALITY_LABELS, brokenFeatures, storedQuality } from "../render/quality.js";
 export function PauseMenu({ onResume, onEnd, onQuality }) {
   const [quality, setQuality] = React.useState(storedQuality);
+  const broken = [...brokenFeatures()];
   const choose = (value) => {
     setQuality(value);
     onQuality?.(value);
@@ -44,6 +45,14 @@ export function PauseMenu({ onResume, onEnd, onQuality }) {
             </button>
           ))}
         </div>
+        {broken.length > 0 && (
+          <p className="mt-3 text-[10px] leading-5 text-[#849395]">
+            {"Désactivé sur cet appareil (image noire) : "}
+            <span className="text-[#c6cdce]">
+              {broken.map((name) => FEATURE_LABELS[name] || name).join(", ")}
+            </span>
+          </p>
+        )}
       </div>
     </div>
   );

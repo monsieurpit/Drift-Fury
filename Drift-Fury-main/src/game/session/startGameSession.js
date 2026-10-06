@@ -5,7 +5,7 @@ import { animatePerson, createPerson } from "../people/person.js";
 import { createRenderer, gamePixelRatio } from "../render/renderer.js";
 import {
   QUALITY_LEVELS,
-  blockAoOnDevice,
+  markFeatureBroken,
   resolveQuality,
   storeQuality,
   storedQuality,
@@ -788,8 +788,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   }
   // Black-screen watchdog: a short while after the session starts or the quality changes, look at the
   // finished image. A night city always has lit windows and lamps; an image with no light at all means an
-  // effect silently failed on this GPU. Ambient occlusion is the usual suspect (it multiplies the image):
-  // turn it off for this device and look again; if it is still black, step the quality down.
+  // effect silently failed on this GPU (multisampled HDR targets on some iPhones and iPads, for one). The
+  // suspects are turned off one at a time, for this device only (remembered), looking again after each;
+  // if nothing brings the image back, the quality steps down.
   let blackCheckFrames = 45;
   const blackRow = new Uint8Array(4 * 4096);
   function checkForBlackScreen() {
@@ -815,10 +816,12 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       }
     }
     if (brightest > 4) return;
-    if (composer.ao?.enabled) {
-      console.warn("Black frame with ambient occlusion on: turning it off on this device.");
-      blockAoOnDevice();
-      composer.ao.enabled = false;
+    // Turn the next suspect off for this device and look again.
+    const [suspect] = view.suspects();
+    if (suspect) {
+      console.warn(`Black frame: turning ${suspect} off on this device.`);
+      markFeatureBroken(suspect);
+      view.applyQuality(view.quality);
       blackCheckFrames = 30;
     } else {
       graphicsFailure("shader");
