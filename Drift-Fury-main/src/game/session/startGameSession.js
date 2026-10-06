@@ -28,6 +28,8 @@ import { trafficTemplate, trafficTemplates } from "../vehicles/trafficCars.js";
 import { createCarInstancer } from "../vehicles/carInstancing.js";
 import { buildWorldInSteps } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
+import { loadStreetProps, placeStreetProps } from "../world/streetProps.js";
+import { ROAD_XS, ROAD_ZS } from "../data/roadGrid.js";
 import { MOON_DIRECTION } from "../world/sky.js";
 const CANCELLED = Symbol("cancelled");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -151,6 +153,20 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     object.rotation.order = "YXZ";
     object.rotation.set(Math.atan2(front - back, 2.8), heading, Math.atan2(right - left, 1.6) + extraRoll);
   };
+  // Photo-scanned 3D street props (streetProps.js), placed before the world is frozen and batched.
+  await stage(0.355, "Objets de rue");
+  const streetProps = await loadStreetProps((done) => loading.report(0.355 + 0.004 * done, "Objets de rue"));
+  if (loading.cancelled()) {
+    cleanup.forEach((dispose) => dispose());
+    throw CANCELLED;
+  }
+  placeStreetProps(scene, streetProps, {
+    roadXs: ROAD_XS,
+    roadZs: ROAD_ZS,
+    solids,
+    lightByLamps,
+    heightAt: terrainHeight,
+  });
   await stage(0.36, "Optimisation de la géométrie");
   const staticBatch = batchStaticMeshes(scene, new Set(signals.flatMap((signal) => signal.lenses)), 96);
   // Everything in the scene so far is the world, which never moves: its shadows can be cached.

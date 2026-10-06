@@ -8,7 +8,10 @@ import { fileURLToPath } from "node:url";
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "dist");
 const port = Number(process.env.PORT) || 3000;
 const contentTypes = {
+  ".bin": "application/octet-stream",
   ".css": "text/css; charset=utf-8",
+  ".glb": "model/gltf-binary",
+  ".gltf": "model/gltf+json",
   ".html": "text/html; charset=utf-8",
   ".ico": "image/x-icon",
   ".jpeg": "image/jpeg",
