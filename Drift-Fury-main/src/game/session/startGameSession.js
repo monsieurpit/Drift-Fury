@@ -5,6 +5,7 @@ import { animatePerson, createPerson } from "../people/person.js";
 import { createRenderer, gamePixelRatio } from "../render/renderer.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
 import { warmUpSession } from "../render/warmUp.js";
+import { captureCityEnvironment } from "../render/reflectionProbe.js";
 import { createGame } from "../simulation/game.js";
 import { batchPlayerCar } from "../vehicles/batchPlayerCar.js";
 import { buildCar } from "../vehicles/carModel.js";
@@ -341,6 +342,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
   const cameraTarget = new Vector3();
   const shakeOffset = new Vector3();
   const shadowAhead = new Vector3();
+  let inCityEnvironment = () => {};
   function frame(time) {
     frameId = requestAnimationFrame(frame);
     const frameSeconds = (time - lastFrameTime) / 1000;
@@ -488,7 +490,8 @@ export function startGameSession(container, car, engine, controls, callbacks, no
         );
         playerCar.userData.wheels.forEach((e) => (e.rotation.x -= state.speed * 0.01 * dt));
         const braking = state.brake > 0 || (state.speed > 5 && state.throttle === 0);
-        playerCar.userData.brakeLights.forEach((t) => (t.material.emissiveIntensity = braking ? 1.5 : 0.15));
+        // Tail lights are on at night; braking makes them flare.
+        playerCar.userData.brakeLights.forEach((t) => (t.material.emissiveIntensity = braking ? 2.6 : 0.6));
       }
       playerPerson.visible = !!state.onFoot;
       if (state.onFoot) {
@@ -587,6 +590,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
       const speedFactor = Math.min(state.speed / 200, 1);
       updateTrafficLights(dt);
       updateWorld(state.elapsed);
+      inCityEnvironment(state.x, state.z);
       const targetFov = 45 + speedFactor * 12;
       if (camera.fov !== targetFov) {
         camera.fov = targetFov;
@@ -640,6 +644,15 @@ export function startGameSession(container, car, engine, controls, callbacks, no
     }
     composer.render();
   }
+  // City reflections: captured once from the middle of the grid at street level, used as the scene's
+  // environment while the player is in the city (the night sky's elsewhere).
+  const skyEnvironment = scene.environment;
+  const cityEnvironment = captureCityEnvironment(renderer, scene, new Vector3(0, 2.4, -5), [playerCar]);
+  inCityEnvironment = (x, z) => {
+    const inCity = z > -112 && x > -165 && x < 160;
+    const environment = inCity ? cityEnvironment : skyEnvironment;
+    if (scene.environment !== environment) scene.environment = environment;
+  };
   warmUpSession(renderer, scene, camera, [car.color]);
   if (debugSession) {
     debugSession.fx = effects;

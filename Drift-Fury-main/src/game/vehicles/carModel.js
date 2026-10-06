@@ -675,7 +675,7 @@ export function buildCar(
     const m = new MeshStandardMaterial({
       color: "#a30f0f",
       emissive: "#ff2020",
-      emissiveIntensity: 0.15,
+      emissiveIntensity: 0.6, // running lights on at night
       roughness: 0.3,
     });
     const tl = place(unitSph, m, S, -0.004);
