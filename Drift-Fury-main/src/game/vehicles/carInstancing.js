@@ -5,10 +5,13 @@
 // dozen draw calls in the main pass and again in the ambient-occlusion pass. Here each part of a template
 // is one InstancedMesh holding every car of that look, so a look costs a dozen draw calls however many cars
 // use it. Cars outside the view are left out of the instance list each frame (as frustum culling did per
-// car), except for their shadow proxies, whose shadows can fall into view.
-import { Frustum, InstancedMesh, Matrix4, Object3D, Sphere, Box3 } from "three";
+// car), except for their shadow proxies, whose shadows can fall into view. Looks are body shapes: the
+// templates are painted white and each car's paint colour is set per instance, so cars of every colour
+// share their shape's draw calls.
+import { Color, Frustum, InstancedMesh, Matrix4, Object3D, Sphere, Box3 } from "three";
 
 const LIGHT_NAMES = new Set(["blue", "red"]);
+const WHITE = new Color(1, 1, 1);
 
 export function createCarInstancer(scene, { onMesh } = {}) {
   const looks = new Map(); // template -> { parts, handles, sphere, capacity }
@@ -33,6 +36,8 @@ export function createCarInstancer(scene, { onMesh } = {}) {
       mesh.layers.mask = part.layers;
       mesh.name = part.name ? `car-${part.name}` : "";
       mesh.userData.carInstances = true;
+      // Per-car paint colour (allocated now, so the shader is compiled with it from the start).
+      if (part.paint) mesh.setColorAt(0, WHITE);
       part.mesh = mesh;
       scene.add(mesh);
       onMesh?.(mesh);
@@ -58,6 +63,7 @@ export function createCarInstancer(scene, { onMesh } = {}) {
         name: object.name,
         light: LIGHT_NAMES.has(object.name) ? object.name : null,
         proxy: object.name === "car-shadow-proxy",
+        paint: !!object.material?.userData?.carPaint,
         mesh: null,
       });
     });
@@ -75,12 +81,14 @@ export function createCarInstancer(scene, { onMesh } = {}) {
       lookFor(template);
     },
     /**
-     * A car of the look `template`: an Object3D to position, rotate and show/hide as usual (it is not
-     * added to the scene). userData.blue / userData.red switch a police car's light bar halves.
+     * A car of the look `template` painted `color`: an Object3D to position, rotate and show/hide as
+     * usual (it is not added to the scene). userData.blue / userData.red switch a police car's light bar
+     * halves.
      */
-    add(template) {
+    add(template, color = null) {
       const look = lookFor(template);
       const handle = new Object3D();
+      handle.userData.paint = color ? new Color(color) : WHITE;
       handle.userData.blue = true;
       handle.userData.red = true;
       handle.userData.look = look;
@@ -112,11 +120,13 @@ export function createCarInstancer(scene, { onMesh } = {}) {
             if (!part.proxy && !inView) continue;
             if (part.light && !handle.userData[part.light]) continue;
             matrix.multiplyMatrices(handle.matrix, part.local);
+            if (part.paint) part.mesh.setColorAt(part.mesh.count, handle.userData.paint);
             part.mesh.setMatrixAt(part.mesh.count++, matrix);
           }
         }
         for (const part of look.parts) {
           part.mesh.instanceMatrix.needsUpdate = true;
+          if (part.mesh.instanceColor) part.mesh.instanceColor.needsUpdate = true;
           // An empty instanced mesh still costs a full draw call in every pass: skip it.
           part.mesh.visible = part.mesh.count > 0;
         }

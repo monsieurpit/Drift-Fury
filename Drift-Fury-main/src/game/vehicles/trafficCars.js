@@ -77,12 +77,16 @@ function shadowProxy(template) {
   return proxy;
 }
 
-/** The shared template (built and batched once) of a traffic or police car look. */
+/**
+ * The shared template (built and batched once) of a traffic or police car look. Built in white paint:
+ * each car's colour is applied per instance (carInstancing.js), so every colour of a body shape is drawn
+ * together. (`color` is kept for the callers' sake; the template does not depend on it.)
+ */
 export function trafficTemplate(color, shape, police = false) {
-  const key = (police ? "police" : "traffic") + "|" + color + "|" + shape;
+  const key = (police ? "police" : "traffic") + "|" + shape;
   let template = trafficTemplates.get(key);
   if (!template) {
-    template = buildCar(color, shape, police);
+    template = buildCar("#ffffff", shape, police);
     template.userData = {};
     batchStaticMeshes(template, new Set(), Infinity);
     const proxy = shadowProxy(template);

@@ -70,6 +70,8 @@ export function buildCar(
       sheenColor: "#fff6e8",
     }),
   );
+  // (Instanced traffic is built in white paint and coloured per car, see carInstancing.js.)
+  paint.userData.carPaint = true;
   // The player's car has a full cabin, so its glass is a lighter tint you can see into; traffic keeps dark
   // privacy glass (it has no interior).
   const glass = new MeshPhysicalMaterial({
@@ -998,6 +1000,8 @@ export function buildCar(
       lip(carLength - 0.75, carLength - 0.12, 0.13, hwMax * 1.4);
     } else if (kind === "muscle") {
       lip(carLength - 0.55, carLength - 0.08, 0.07, hwMax * 1.6);
+    } else if (kind === "sedan" || kind === "suv" || kind === "hatch") {
+      // Everyday cars: no spoiler.
     } else {
       lip(carLength - 0.55, carLength - 0.08, 0.07, hwMax * 1.55);
     }

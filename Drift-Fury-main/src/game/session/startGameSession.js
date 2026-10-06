@@ -283,15 +283,21 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         const carModel =
           vehicle.kind === "police"
             ? carInstancer.add(trafficTemplate("#ffffff", "coupe", true))
-            : carInstancer.add(trafficTemplate(vehicle.color, vehicle.shape || "coupe"));
+            : carInstancer.add(trafficTemplate(vehicle.color, vehicle.shape || "coupe"), vehicle.color);
         entry = {
           car: carModel,
         };
         trafficCars.set(vehicle.id, entry);
       }
       entry.car.visible = true;
-      entry.car.position.set(vehicle.x, terrainHeight(vehicle.x, vehicle.z) + 0.1, vehicle.z);
-      sitOnGround(entry.car, vehicle.x, vehicle.z, vehicle.heading);
+      // Parked cars don't move: place them only when they do.
+      if (entry.x !== vehicle.x || entry.z !== vehicle.z || entry.heading !== vehicle.heading) {
+        entry.x = vehicle.x;
+        entry.z = vehicle.z;
+        entry.heading = vehicle.heading;
+        entry.car.position.set(vehicle.x, terrainHeight(vehicle.x, vehicle.z) + 0.1, vehicle.z);
+        sitOnGround(entry.car, vehicle.x, vehicle.z, vehicle.heading);
+      }
       if (
         interaction?.direction === "exit" &&
         Math.hypot(vehicle.x - interaction.carX, vehicle.z - interaction.carZ) < 0.5
@@ -958,7 +964,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   await stage(0.8, "Compilation des shaders");
   // Everything lit is lit by the world's lights too (clusteredLights.js); cars as they are set up.
   clusteredLights.patchAll(scene);
-  await warmUpSession(renderer, scene, camera, [car.color], (template) => carInstancer.prepare(template));
+  await warmUpSession(renderer, scene, camera, [car.shape], (template) => carInstancer.prepare(template));
   await stage(0.88, "Son du moteur");
   await Promise.race([audio.ready.catch(() => {}), sleep(15000)]);
   // A few full renders around the map, so the shadow, ambient occlusion and post-processing passes, the

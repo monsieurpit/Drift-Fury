@@ -19,7 +19,25 @@ const PLAYER_HALF_WIDTH = 1;
 const PLAYER_HALF_LENGTH = 2.25;
 const NPC_HALF_WIDTH = 1.05;
 const NPC_HALF_LENGTH = 2.3;
-export const TRAFFIC_COLORS = ["#8a97a8", "#b0563a", "#3f6f8f", "#7a6f9a", "#5a7a5e"];
+// Everyday car paints (the colours real streets are full of) and body shapes. Every colour of a shape is
+// drawn in the same draw calls (carInstancing.js), so the palette costs nothing.
+export const TRAFFIC_COLORS = [
+  "#8a97a8",
+  "#b0563a",
+  "#3f6f8f",
+  "#7a6f9a",
+  "#5a7a5e",
+  "#e6e6e2",
+  "#151618",
+  "#9aa1a8",
+  "#4a4e54",
+  "#1f2c45",
+  "#8e1b1b",
+  "#b8a888",
+  "#33503f",
+  "#c9c2b4",
+];
+export const CIVILIAN_SHAPES = ["sedan", "suv", "hatch", "coupe"];
 const WALK_SPEED = 4.6;
 const OFFICER_RUN_SPEED = 4.9;
 export function createGame(car, engine, solids, noPolice = false) {
@@ -115,10 +133,11 @@ export function createGame(car, engine, solids, noPolice = false) {
         heading: parkHeading,
         kind: "civilian",
         color: TRAFFIC_COLORS[id % TRAFFIC_COLORS.length],
-        shape: "coupe",
+        shape: CIVILIAN_SHAPES[id % CIVILIAN_SHAPES.length],
       });
     }
   }
+  parkAlongCurbs(state, solids);
   const solidGrid = buildSolidGrid(solids);
   const blockedBuffer = [];
   // Whether (x, z) is inside a solid grown by `margin` metres (wide for planning, tight for manoeuvring).
@@ -378,6 +397,39 @@ export function createGame(car, engine, solids, noPolice = false) {
           }
           break;
         }
+        // Parked cars are solid too (a box around each, along its heading).
+        for (const vehicle of state.vehicles) {
+          if (Math.abs(vehicle.x - state.x) > 7 || Math.abs(vehicle.z - state.z) > 7) continue;
+          const spec = getCollisionProfile(vehicle.shape || "coupe");
+          const halfLength = spec.length / 2;
+          const halfWidth = 0.92;
+          const cos = Math.abs(Math.cos(vehicle.heading));
+          const sin = Math.abs(Math.sin(vehicle.heading));
+          const box = {
+            x: vehicle.x,
+            z: vehicle.z,
+            w: halfWidth * cos + halfLength * sin,
+            d: halfWidth * sin + halfLength * cos,
+          };
+          const collision = collideFootprintWithBox(footprint, box);
+          if (!collision) continue;
+          state.x -= collision.nx * (collision.depth + 0.02);
+          state.z -= collision.nz * (collision.depth + 0.02);
+          const impactSpeed = Math.max(0, state.vx * collision.nx + state.vz * collision.nz);
+          if (impactSpeed > 0.6) {
+            state.vx -= collision.nx * impactSpeed * 1.3;
+            state.vz -= collision.nz * impactSpeed * 1.3;
+            if (takeDamage(4 + impactSpeed * 0.8)) {
+              state._crash = {
+                x: state.x,
+                y: state.y || 0,
+                z: state.z,
+                intensity: Math.min(impactSpeed * 0.08, 1.5),
+              };
+            }
+          }
+          break;
+        }
         if (state.x < -200 || state.x > 250 || state.z > 150 || state.z < -700) {
           state.x = clamp(state.x, -200, 250);
           state.z = clamp(state.z, -700, 150);
@@ -614,4 +666,55 @@ export function createGame(car, engine, solids, noPolice = false) {
       return state;
     },
   };
+}
+
+/**
+ * Cars parked along the city's curbs, between the intersections (clear of the crossings and stop lines),
+ * facing the way traffic drives on their side of the road. Seeded: the same streets every session.
+ * They are ordinary vehicles: solid, and the player can take any of them.
+ */
+function parkAlongCurbs(state, solids) {
+  let seed = 7331;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+  const LANE = 7.35; // parking lane centre, from the road's centre line (the curb is at 9 m)
+  const CLEAR = 18; // metres kept clear around each intersection centre
+  const SLOT = 6.6;
+  // (halfX, halfZ: the car's half extents with a little room.)
+  const blocked = (x, z, halfX, halfZ) =>
+    solids.some((s) => Math.abs(x - s.x) < s.w + halfX && Math.abs(z - s.z) < s.d + halfZ) ||
+    FUEL_STATIONS.some((st) => Math.abs(z - st.z) < 10 && Math.abs(x - st.x) < 48) ||
+    state.vehicles.some((v) => Math.hypot(v.x - x, v.z - z) < 6);
+  const park = (x, z, heading) => {
+    const alongZ = Math.abs(Math.cos(heading)) > 0.5;
+    if (random() > 0.42 || blocked(x, z, alongZ ? 1.1 : 2.7, alongZ ? 2.7 : 1.1)) return;
+    const id = state.nextVid++;
+    state.vehicles.push({
+      id,
+      x,
+      z,
+      heading,
+      kind: "civilian",
+      color: TRAFFIC_COLORS[Math.floor(random() * TRAFFIC_COLORS.length)],
+      shape: CIVILIAN_SHAPES[Math.floor(random() * CIVILIAN_SHAPES.length)],
+    });
+  };
+  for (const x of ROAD_XS) {
+    for (let k = 0; k + 1 < ROAD_ZS.length; k++) {
+      for (let z = ROAD_ZS[k] + CLEAR + SLOT / 2; z <= ROAD_ZS[k + 1] - CLEAR - SLOT / 2; z += SLOT) {
+        park(x + LANE, z, 0); // right-hand traffic: heading north (-z) on the east side
+        park(x - LANE, z, Math.PI);
+      }
+    }
+  }
+  for (const z of ROAD_ZS) {
+    for (let k = 0; k + 1 < ROAD_XS.length; k++) {
+      for (let x = ROAD_XS[k] + CLEAR + SLOT / 2; x <= ROAD_XS[k + 1] - CLEAR - SLOT / 2; x += SLOT) {
+        park(x, z + LANE, -Math.PI / 2);
+        park(x, z - LANE, Math.PI / 2);
+      }
+    }
+  }
 }
