@@ -309,7 +309,19 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           const restHeight = ground + 0.13 * rig.scale.y;
           if (!dead.settled) {
             dead.velocity.y -= 9.8 * dt;
+            const fromX = dead.position.x;
+            const fromZ = dead.position.z;
             dead.position.addScaledVector(dead.velocity, dt);
+            // Walls, poles, parked things: the body slams into them and drops instead of going through.
+            if (blocked(dead.position.x, dead.position.z, 0.3)) {
+              const impact = Math.hypot(dead.velocity.x, dead.velocity.z);
+              dead.position.x = fromX;
+              dead.position.z = fromZ;
+              dead.velocity.x *= -0.15;
+              dead.velocity.z *= -0.15;
+              dead.spin.multiplyScalar(0.4);
+              if (impact > 2) events.push({ type: "land", ped, x: fromX, z: fromZ, strength: impact * 0.5 });
+            }
             const angle = dead.spin.length() * dt;
             if (angle > 0) {
               tmpQuaternion.setFromAxisAngle(lyingAxis.copy(dead.spin).normalize(), angle);
