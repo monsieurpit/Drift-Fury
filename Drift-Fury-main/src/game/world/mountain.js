@@ -42,7 +42,7 @@ import {
 import { createTerrainMaterial } from "./terrainMaterial.js";
 import { createBranchCardMaterial, createFoliageMaterial } from "./foliageMaterial.js";
 import { getTerrainTextures } from "./terrainTextures.js";
-import { ROAD_TEXTURE_LENGTH, createRoadSurfaceMaterial } from "./roadSurface.js";
+import { createRoadSurfaceMaterial } from "./roadSurface.js";
 
 // ------------------------------------------------------------------ terrain
 
@@ -296,14 +296,15 @@ export function buildMountainRoad(world) {
   const half = ROAD_HALF_WIDTH;
   const lift = 0.07; // the city road surface sits 7 cm above the ground; match it so the join is seamless
 
-  // Asphalt with lane wear: the texture spans the road width and repeats every 40 m along it.
+  // The city's asphalt (tiled every `tile` metres like the streets) with a lane-wear overlay.
+  const tile = world.roadMaterial.userData.tile || 10;
   const asphalt = new Mesh(
     sweep(
       samples,
       [-half, -half / 2, 0, half / 2, half].map((o) => [o, lift]),
-      { uScale: 1 / (2 * half), uOffset: half, vScale: 1 / ROAD_TEXTURE_LENGTH },
+      { uScale: 1 / tile, uOffset: half, vScale: 1 / tile },
     ),
-    createRoadSurfaceMaterial(2 * half),
+    createRoadSurfaceMaterial(world.roadMaterial, 2 * half),
   );
   asphalt.name = "mountain-road";
   asphalt.receiveShadow = true;

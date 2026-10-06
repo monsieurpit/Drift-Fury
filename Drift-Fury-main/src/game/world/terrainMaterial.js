@@ -27,6 +27,7 @@ float terrainGrassDry;
 float terrainFar;
 float terrainRockMix;
 float terrainDetail;
+float terrainRockDetail;
 
 // Triplanar blend weights from the world normal (sharpened so each face mostly uses one projection).
 vec3 triplanarWeights(vec3 n) {
@@ -98,15 +99,17 @@ const COLOR_CHUNK = /* glsl */ `
   // Past ~150 m the detail textures are below a pixel and average out: use their mean colour and the
   // geometric normal instead of sampling them (most of the terrain on screen is that far away).
   terrainDetail = 1.0 - smoothstep(120.0, 170.0, length(vViewPosition));
+  // The large-scale rock (57 m strata and fractures) stays readable much further out.
+  terrainRockDetail = 1.0 - smoothstep(350.0, 550.0, length(vViewPosition));
   float grassAmount = (1.0 - terrainRockAmount) * (1.0 - terrainSnowAmount);
   float rockAmount = terrainRockAmount * (1.0 - terrainSnowAmount);
 
   vec3 color = vec3(0.0);
   bool detail = terrainDetail > 0.002;
   if (rockAmount > 0.002) {
-    vec3 rock = terrainRockAverage * (1.0 - terrainDetail);
-    if (detail && terrainRockMix < 0.998) rock += triplanarColor(terrainRock, p, terrainDx, terrainDy, terrainWeights, 1.0 / 13.0) * (1.0 - terrainRockMix) * terrainDetail;
-    if (detail && terrainRockMix > 0.002) rock += triplanarColor(terrainRock, p.zyx + vec3(31.0, 0.0, 17.0), terrainDx.zyx, terrainDy.zyx, terrainWeights.zyx, 1.0 / 57.0) * terrainRockMix * terrainDetail;
+    vec3 rock = terrainRockAverage * (1.0 - terrainRockDetail);
+    if (terrainRockMix < 0.998) rock += triplanarColor(terrainRock, p, terrainDx, terrainDy, terrainWeights, 1.0 / 13.0) * (1.0 - terrainRockMix) * terrainRockDetail;
+    if (terrainRockMix > 0.002 && terrainRockDetail > 0.002) rock += triplanarColor(terrainRock, p.zyx + vec3(31.0, 0.0, 17.0), terrainDx.zyx, terrainDy.zyx, terrainWeights.zyx, 1.0 / 57.0) * terrainRockMix * terrainRockDetail;
     rock *= mix(0.78, 1.12, macro.b) * mix(0.9, 1.06, macroFine.r);
     color += rock * rockAmount;
   }
@@ -134,28 +137,27 @@ const NORMAL_CHUNK = /* glsl */ `
 {
   vec3 p = vTerrainPosition;
   vec3 n = normalize(vTerrainNormal);
-  vec3 worldNormal = n;
   float rockAmount = terrainRockAmount;
-  if (terrainDetail > 0.002) {
-  worldNormal = vec3(0.0);
-  if (rockAmount > 0.002) {
-    vec3 rockN = vec3(0.0);
-    if (terrainRockMix < 0.998) rockN += triplanarNormal(terrainRockNormal, p, terrainDx, terrainDy, n, terrainWeights, 1.0 / 13.0, mix(1.4, 0.5, terrainFar)) * (1.0 - terrainRockMix);
-    if (terrainRockMix > 0.002) rockN += triplanarNormal(terrainRockNormal, p.zyx + vec3(31.0, 0.0, 17.0), terrainDx.zyx, terrainDy.zyx, n.zyx, terrainWeights.zyx, 1.0 / 57.0, 1.6).zyx * terrainRockMix;
-    worldNormal += normalize(rockN) * rockAmount;
+  // Each layer's detail normal fades to the geometric normal at the distance its texture stops reading.
+  vec3 rockN = n;
+  if (rockAmount > 0.002 && terrainRockDetail > 0.002) {
+    vec3 detailN = vec3(0.0);
+    if (terrainRockMix < 0.998) detailN += triplanarNormal(terrainRockNormal, p, terrainDx, terrainDy, n, terrainWeights, 1.0 / 13.0, mix(1.4, 0.5, terrainFar)) * (1.0 - terrainRockMix);
+    if (terrainRockMix > 0.002) detailN += triplanarNormal(terrainRockNormal, p.zyx + vec3(31.0, 0.0, 17.0), terrainDx.zyx, terrainDy.zyx, n.zyx, terrainWeights.zyx, 1.0 / 57.0, 1.6).zyx * terrainRockMix;
+    rockN = normalize(mix(n, normalize(detailN), terrainRockDetail));
   }
-  if (rockAmount < 0.998) {
+  vec3 groundN = n;
+  if (rockAmount < 0.998 && terrainDetail > 0.002) {
     vec2 dx = terrainDx.xz;
     vec2 dy = terrainDy.xz;
     vec3 groundTex = vec3(0.0, 0.0, 1.0);
     if (terrainSnowAmount < 0.998) groundTex = sampleGrad(terrainGrassNormal, p.xz / 7.5, dx / 7.5, dy / 7.5).xyz * 2.0 - 1.0;
     if (terrainSnowAmount > 0.002) groundTex = mix(groundTex, sampleGrad(terrainSnowNormal, p.xz / 6.0, dx / 6.0, dy / 6.0).xyz * 2.0 - 1.0, terrainSnowAmount);
     groundTex.xy *= 0.9;
-    worldNormal += normalize(vec3(groundTex.x + n.x, abs(groundTex.z) * n.y, groundTex.y + n.z)) * (1.0 - rockAmount);
+    groundN = normalize(mix(n, normalize(vec3(groundTex.x + n.x, abs(groundTex.z) * n.y, groundTex.y + n.z)), terrainDetail));
   }
-  worldNormal = mix(n, normalize(worldNormal), terrainDetail);
-  }
-  normal = normalize((viewMatrix * vec4(normalize(worldNormal), 0.0)).xyz);
+  vec3 worldNormal = normalize(mix(groundN, rockN, rockAmount));
+  normal = normalize((viewMatrix * vec4(worldNormal, 0.0)).xyz);
 }
 `;
 
