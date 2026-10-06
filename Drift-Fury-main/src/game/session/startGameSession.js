@@ -11,6 +11,8 @@ import {
   storedQuality,
 } from "../render/quality.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
+import { createShadowCache } from "../render/shadowCache.js";
+import { createFramePacer } from "../render/framePacer.js";
 import { warmUpSession } from "../render/warmUp.js";
 import { captureCityEnvironment } from "../render/reflectionProbe.js";
 import { CITY_REFLECTION_PROBE } from "../render/wetSurface.js";
@@ -22,7 +24,8 @@ import {
 import { createGame } from "../simulation/game.js";
 import { batchPlayerCar } from "../vehicles/batchPlayerCar.js";
 import { buildCar } from "../vehicles/carModel.js";
-import { createTrafficCar } from "../vehicles/trafficCars.js";
+import { trafficTemplate, trafficTemplates } from "../vehicles/trafficCars.js";
+import { createCarInstancer } from "../vehicles/carInstancing.js";
 import { buildWorldInSteps } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
 import { MOON_DIRECTION } from "../world/sky.js";
@@ -150,6 +153,16 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   };
   await stage(0.36, "Optimisation de la géométrie");
   const staticBatch = batchStaticMeshes(scene, new Set(signals.flatMap((signal) => signal.lenses)), 96);
+  // Everything in the scene so far is the world, which never moves: its shadows can be cached.
+  const shadowCache = createShadowCache(
+    renderer,
+    scene,
+    camera,
+    sun,
+    new Set(scene.children),
+    MOON_DIRECTION,
+  );
+  cleanup.push(() => shadowCache.dispose());
   await stage(0.42, "Véhicules, police et circulation");
   const game = createGame(car, engine, solids, noPolice);
   const lampLights = [];
@@ -234,10 +247,10 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   let playerCar = batchPlayerCar(buildCar(car.color, car.shape, false, true));
   scene.add(playerCar);
   let playerCarSpec = game.state.playerVeh.spec;
+  // Police, parked and traffic cars are instanced per look (carInstancing.js).
+  const carInstancer = createCarInstancer(scene);
   const policeCars = game.state.police.map(() => {
-    const policeCar = createTrafficCar("#ffffff", "coupe", true);
-    scene.add(policeCar);
-    return policeCar;
+    return carInstancer.add(trafficTemplate("#ffffff", "coupe", true));
   });
   const playerPerson = createPerson("#2f3b4c");
   playerPerson.visible = false;
@@ -268,9 +281,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       if (!entry) {
         const carModel =
           vehicle.kind === "police"
-            ? createTrafficCar("#ffffff", "coupe", true)
-            : createTrafficCar(vehicle.color, vehicle.shape || "coupe");
-        scene.add(carModel);
+            ? carInstancer.add(trafficTemplate("#ffffff", "coupe", true))
+            : carInstancer.add(trafficTemplate(vehicle.color, vehicle.shape || "coupe"));
         entry = {
           car: carModel,
         };
@@ -288,13 +300,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     }
     for (let [id, entry] of trafficCars) {
       if (!activeIds.has(id)) {
-        scene.remove(entry.car);
-        if (!entry.car.userData.sharedTemplate) {
-          entry.car.traverse((e) => {
-            e.geometry?.dispose();
-            e.material?.dispose();
-          });
-        }
+        carInstancer.remove(entry.car);
         trafficCars.delete(id);
       }
     }
@@ -420,7 +426,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   let resolutionScale = 1;
   let windowTime = 0;
   let windowFrames = 0;
-  let shadowFrameInterval = touchDevice ? 2 : 1;
+  // Shadows are cheap to refresh now that the static world's are cached (shadowCache.js): every frame.
+  const shadowFrameInterval = 1;
+  const pacer = createFramePacer({ minFps: 30 });
   let slowWindows = 0;
   let fastWindows = 0;
   let fastWindowsNeeded = 4;
@@ -462,10 +470,14 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const cameraTarget = new Vector3();
   const shakeOffset = new Vector3();
   const shadowAhead = new Vector3();
+  const shadowCenter = new Vector3(0, 0, 70);
+  let shadowsDue = true;
   let inCityEnvironment = () => {};
   let disposed = false;
   function frame(time) {
     frameId = requestAnimationFrame(frame);
+    // Adaptive frame pacing (framePacer.js): skip this screen refresh to keep a steady frame rate.
+    if (!pacer.tick(time)) return;
     const frameSeconds = (time - lastFrameTime) / 1000;
     const dt = Math.min(frameSeconds, 0.04);
 
@@ -478,14 +490,18 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     if (windowTime > 1) {
       const averageFrame = windowTime / windowFrames;
       let nextScale = resolutionScale;
-      shadowFrameInterval = touchDevice ? 2 : averageFrame > 1 / 32 ? 3 : averageFrame > 1 / 48 ? 2 : 1;
       // resizing reallocates every post-processing target, so only react to sustained trends and
       // back off when a resolution increase did not hold
       if (skipWindow) {
         skipWindow = false;
       } else {
-        slowWindows = averageFrame > 1 / 45 ? slowWindows + 1 : 0;
-        fastWindows = averageFrame < 1 / 57 ? fastWindows + 1 : 0;
+        // The frame pacer lowers the frame rate first (keeping the image); the resolution only drops when
+        // even its slowest steady rate (30 fps) cannot be held, and comes back when there is headroom.
+        slowWindows = pacer.overloaded ? slowWindows + 1 : 0;
+        fastWindows =
+          !pacer.overloaded && pacer.jitter < 0.1 && averageFrame < (1 / pacer.targetFps) * 1.08
+            ? fastWindows + 1
+            : 0;
         if (slowWindows >= 2) {
           const level = QUALITY_LEVELS.indexOf(view.quality);
           if (qualityChoice === "auto" && resolutionScale <= 0.8 && level > 0) {
@@ -579,18 +595,10 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       camera.getWorldDirection(shadowAhead);
       shadowAhead.y = 0;
       if (shadowAhead.lengthSq() > 1e-6) shadowAhead.normalize().multiplyScalar(45);
-      const shadowX = state.x + shadowAhead.x;
-      const shadowZ = state.z + shadowAhead.z;
-      sun.position.set(
-        shadowX + MOON_DIRECTION.x * 127,
-        (state.y || 0) + MOON_DIRECTION.y * 127,
-        shadowZ + MOON_DIRECTION.z * 127,
-      );
-      sun.target.position.set(shadowX, state.y || 0, shadowZ);
-      sun.target.updateMatrixWorld();
+      shadowCenter.set(state.x + shadowAhead.x, state.y || 0, state.z + shadowAhead.z);
       shadowFrameCounter++;
       if (shadowFrameCounter >= shadowFrameInterval) {
-        renderer.shadowMap.needsUpdate = true;
+        shadowsDue = true;
         shadowFrameCounter = 0;
       }
       updateLampLights(state.x, state.z);
@@ -633,20 +641,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           policeCar.position.set(officer.x, terrainHeight(officer.x, officer.z) + 0.1, officer.z);
           sitOnGround(policeCar, officer.x, officer.z, officer.heading);
         }
-        const blueLight =
-          policeCar.userData.blueLight === undefined
-            ? (policeCar.userData.blueLight = policeCar.getObjectByName("blue") || null)
-            : policeCar.userData.blueLight;
-        const redLight =
-          policeCar.userData.redLight === undefined
-            ? (policeCar.userData.redLight = policeCar.getObjectByName("red") || null)
-            : policeCar.userData.redLight;
-        if (blueLight) {
-          blueLight.visible = !officer.onFoot && Math.sin(time * 0.018) > 0;
-        }
-        if (redLight) {
-          redLight.visible = !officer.onFoot && Math.sin(time * 0.018) <= 0;
-        }
+        policeCar.userData.blue = Math.sin(time * 0.018) > 0;
+        policeCar.userData.red = !policeCar.userData.blue;
       });
       officerPeople.forEach((person, index) => {
         const officer = state.police[index];
@@ -769,6 +765,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         hudTimer = 0;
         callbacks.current.onHud({
           ...state,
+          fps: pacer.fps,
+          fpsTarget: pacer.targetFps,
+          refreshHz: pacer.refreshHz,
           police: state.police.map((e) => ({
             ...e,
           })),
@@ -782,6 +781,12 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           credits: Math.floor(state.score / 12 + state.elapsed * 2),
         });
       }
+    }
+    carInstancer.update(camera);
+    // Shadows last, once every car and person is in place for this frame (see shadowCache.js).
+    if (shadowsDue) {
+      shadowCache.update(shadowCenter.x, shadowCenter.y, shadowCenter.z);
+      shadowsDue = false;
     }
     composer.render();
     checkForBlackScreen();
@@ -886,7 +891,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   // Every shader the session can need (the world, every traffic car look, police, effects), compiled in
   // parallel where the browser supports it.
   await stage(0.8, "Compilation des shaders");
-  await warmUpSession(renderer, scene, camera, [car.color]);
+  await warmUpSession(renderer, scene, camera, [car.color], (template) => carInstancer.prepare(template));
   await stage(0.88, "Son du moteur");
   await Promise.race([audio.ready.catch(() => {}), sleep(15000)]);
   // A few full renders around the map, so the shadow, ambient occlusion and post-processing passes, the
@@ -921,8 +926,21 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const session = {
     /** Starts the frame loop (once loading is done). */
     start() {
-      lastFrameTime = performance.now();
-      frameId = requestAnimationFrame(frame);
+      // A few idle refreshes first to measure the screen's refresh rate for the frame pacer.
+      const deltas = [];
+      let previous = -1;
+      const calibrate = (time) => {
+        if (previous >= 0) deltas.push(time - previous);
+        previous = time;
+        if (deltas.length < 30) {
+          frameId = requestAnimationFrame(calibrate);
+          return;
+        }
+        pacer.calibrate(deltas);
+        lastFrameTime = performance.now();
+        frameId = requestAnimationFrame(frame);
+      };
+      frameId = requestAnimationFrame(calibrate);
     },
     /** Graphics quality from the pause menu: "auto" or a preset name. */
     setQuality(choice) {
@@ -932,6 +950,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       resolutionScale = 1;
       skipWindow = true;
       blackCheckFrames = 45;
+      pacer.reset();
       windowTime = 0;
       windowFrames = 0;
       const ratio = gamePixelRatio(container.clientWidth, container.clientHeight, touchDevice, view.quality);
@@ -966,6 +985,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       window.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       audio.close();
+      shadowCache.dispose();
       view.dispose();
     },
   };

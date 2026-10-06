@@ -192,6 +192,7 @@ export function GamePage() {
           </div>
           {paused && !result && (
             <PauseMenu
+              hud={hud}
               onResume={() => setPaused(false)}
               onQuality={(value) => controls.current.setQuality?.(value)}
               onEnd={() =>

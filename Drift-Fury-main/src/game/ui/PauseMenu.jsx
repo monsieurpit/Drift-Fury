@@ -1,7 +1,7 @@
 import React from "react";
 import { PlayIcon, LogOutIcon } from "lucide-react";
 import { FEATURE_LABELS, QUALITY_LABELS, brokenFeatures, storedQuality } from "../render/quality.js";
-export function PauseMenu({ onResume, onEnd, onQuality }) {
+export function PauseMenu({ onResume, onEnd, onQuality, hud }) {
   const [quality, setQuality] = React.useState(storedQuality);
   const broken = [...brokenFeatures()];
   const choose = (value) => {
@@ -45,6 +45,14 @@ export function PauseMenu({ onResume, onEnd, onQuality }) {
             </button>
           ))}
         </div>
+        {hud?.fpsTarget > 0 && (
+          <p className="mt-3 text-[10px] leading-5 text-[#849395]">
+            {"FLUIDITÉ AUTO · "}
+            <span className="text-[#c6cdce]">{Math.round(hud.fpsTarget)} images/s visées</span>
+            {hud.fps > 0 ? ` · ${Math.round(hud.fps)} mesurées` : ""}
+            {hud.refreshHz > 0 ? ` · écran ${Math.round(hud.refreshHz)} Hz` : ""}
+          </p>
+        )}
         {broken.length > 0 && (
           <p className="mt-3 text-[10px] leading-5 text-[#849395]">
             {"Désactivé sur cet appareil (image noire) : "}

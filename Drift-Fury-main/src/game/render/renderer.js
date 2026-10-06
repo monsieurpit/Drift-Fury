@@ -41,23 +41,48 @@ class GameAOPass extends GTAOPass {
   setSize(width, height) {
     super.setSize(Math.max(1, Math.floor(width / 2)), Math.max(1, Math.floor(height / 2)));
   }
+  // The depth/normal pre-pass hides what it should not see: alpha-tested or transparent meshes, points and
+  // lines, and whatever lies wholly beyond 90 m. Only those get hidden and restored, from a list of the
+  // scene's drawables refreshed every second or so (instead of walking the whole scene graph three times
+  // per frame, as the base class does).
   overrideVisibility() {
-    super.overrideVisibility();
+    if (!this.drawables || ++this.drawablesAge > 60) {
+      this.drawables = [];
+      this.drawablesAge = 0;
+      this.scene.traverse((object) => {
+        if (!object.isMesh && !object.isPoints && !object.isLine) return;
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        const alwaysHidden =
+          object.isPoints ||
+          object.isLine ||
+          materials.some((material) => material.alphaTest > 0 || material.transparent);
+        this.drawables.push({ object, alwaysHidden });
+      });
+    }
+    this.hiddenNow = this.hiddenNow || [];
     const eye = this.camera.position;
-    this.scene.traverse((object) => {
-      if (!object.isMesh) return;
-      const materials = Array.isArray(object.material) ? object.material : [object.material];
-      if (materials.some((material) => material.alphaTest > 0 || material.transparent)) {
-        object.visible = false;
-        return;
+    for (const { object, alwaysHidden } of this.drawables) {
+      if (!object.visible) continue;
+      let hide = alwaysHidden;
+      // Instanced cars hold only the cars in view already (their geometry sphere is not where they are).
+      if (!hide && !object.isInstancedMesh) {
+        // Contact shadows only matter close up: skip whatever lies wholly beyond 90 m (most of the
+        // scene's triangles), so the extra depth/normal pass stays cheap.
+        const sphere = object.boundingSphere || object.geometry.boundingSphere;
+        if (sphere) {
+          aoSphere.copy(sphere).applyMatrix4(object.matrixWorld);
+          hide = aoSphere.distanceToPoint(eye) > 90;
+        }
       }
-      // Contact shadows only matter close up: skip whatever lies wholly beyond 90 m (most of the
-      // scene's triangles), so the extra depth/normal pass stays cheap.
-      const sphere = object.boundingSphere || object.geometry.boundingSphere;
-      if (!sphere) return;
-      aoSphere.copy(sphere).applyMatrix4(object.matrixWorld);
-      if (aoSphere.distanceToPoint(eye) > 90) object.visible = false;
-    });
+      if (hide) {
+        object.visible = false;
+        this.hiddenNow.push(object);
+      }
+    }
+  }
+  restoreVisibility() {
+    for (const object of this.hiddenNow) object.visible = true;
+    this.hiddenNow.length = 0;
   }
 }
 /**

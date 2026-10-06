@@ -73,7 +73,8 @@ function shadowProxy(template) {
   return proxy;
 }
 
-export function createTrafficCar(color, shape, police = false) {
+/** The shared template (built and batched once) of a traffic or police car look. */
+export function trafficTemplate(color, shape, police = false) {
   const key = (police ? "police" : "traffic") + "|" + color + "|" + shape;
   let template = trafficTemplates.get(key);
   if (!template) {
@@ -87,7 +88,11 @@ export function createTrafficCar(color, shape, police = false) {
     template.add(proxy);
     trafficTemplates.set(key, template);
   }
-  const car = template.clone();
+  return template;
+}
+
+export function createTrafficCar(color, shape, police = false) {
+  const car = trafficTemplate(color, shape, police).clone();
   car.userData = {
     sharedTemplate: true,
   };
