@@ -436,7 +436,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         }
       }
     }
-    const target = 0.25 + 0.75 * Math.min(1, Math.max(0, (clear - 2) / 12));
+    // (Shop glass reflects the raised source straight back at the camera: close up, almost off.)
+    const open = Math.min(1, Math.max(0, (clear - 3) / 11));
+    const target = 0.08 + 0.92 * open * open;
     beamScale += (target - beamScale) * (1 - Math.exp(-6 * dt));
     for (const beam of playerCar.userData.headlightBeams || []) {
       beam.userData.baseIntensity ??= beam.intensity;
