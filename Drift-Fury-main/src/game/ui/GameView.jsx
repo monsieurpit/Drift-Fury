@@ -1,6 +1,18 @@
 import React from "react";
 import { startGameSession } from "../session/startGameSession.js";
-export function GameView({ car, engine, controls, onHud, onFinish, onStation, onPause, noPolice }) {
+export function GameView({
+  car,
+  engine,
+  controls,
+  onHud,
+  onFinish,
+  onStation,
+  onPause,
+  onLoading,
+  onReady,
+  onLoadError,
+  noPolice,
+}) {
   const containerRef = React.useRef(null);
   const sessionRef = React.useRef(null);
   const callbacksRef = React.useRef({
@@ -8,12 +20,18 @@ export function GameView({ car, engine, controls, onHud, onFinish, onStation, on
     onFinish,
     onStation,
     onPause,
+    onLoading,
+    onReady,
+    onLoadError,
   });
   callbacksRef.current = {
     onHud,
     onFinish,
     onStation,
     onPause,
+    onLoading,
+    onReady,
+    onLoadError,
   };
   React.useEffect(() => {
     sessionRef.current = startGameSession(

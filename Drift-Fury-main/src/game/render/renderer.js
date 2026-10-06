@@ -1,5 +1,7 @@
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
+import { CopyShader } from "three/addons/shaders/CopyShader.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import {
   Vector2,
@@ -14,6 +16,11 @@ import {
   CanvasTexture,
   PMREMGenerator,
   Sphere,
+  HalfFloatType,
+  NoBlending,
+  ShaderMaterial,
+  UniformsUtils,
+  WebGLRenderTarget,
 } from "three";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
@@ -52,15 +59,62 @@ class GameAOPass extends GTAOPass {
     });
   }
 }
+/**
+ * The scene render, antialiased. Only this pass draws geometry, so only its target is multisampled: it
+ * renders into its own MSAA target, which is resolved and copied once into the composer's (single-sample)
+ * buffers. Every post-processing pass after it (AO blend, bloom, vignette, output, grading) then reads and
+ * writes plain targets instead of 4x-multisampled half-float ones, which saves a multisample resolve and
+ * 4x the framebuffer bandwidth on each of them for an identical image (full-screen passes have no
+ * geometry edges for MSAA to smooth).
+ */
+class SceneRenderPass extends RenderPass {
+  constructor(scene, camera) {
+    super(scene, camera);
+    this.target = new WebGLRenderTarget(1, 1, { type: HalfFloatType });
+    this.copy = new FullScreenQuad(
+      new ShaderMaterial({
+        uniforms: UniformsUtils.clone(CopyShader.uniforms),
+        vertexShader: CopyShader.vertexShader,
+        fragmentShader: CopyShader.fragmentShader,
+        blending: NoBlending,
+        depthTest: false,
+        depthWrite: false,
+      }),
+    );
+  }
+  set samples(value) {
+    if (this.target.samples !== value) {
+      this.target.samples = value;
+      this.target.dispose();
+    }
+  }
+  setSize(width, height) {
+    this.target.setSize(width, height);
+  }
+  render(renderer, writeBuffer, readBuffer, deltaTime, maskActive) {
+    if (!this.target.samples) {
+      super.render(renderer, writeBuffer, readBuffer, deltaTime, maskActive);
+      return;
+    }
+    super.render(renderer, writeBuffer, this.target, deltaTime, maskActive);
+    this.copy.material.uniforms.tDiffuse.value = this.target.texture;
+    renderer.setRenderTarget(readBuffer);
+    this.copy.render(renderer);
+  }
+  dispose() {
+    this.target.dispose();
+    this.copy.dispose();
+  }
+}
 function createComposer(renderer, scene, camera, width, height, bloomStrength, inGame) {
   const composer = new EffectComposer(renderer);
+  composer.scenePass = new SceneRenderPass(scene, camera);
   if (renderer.capabilities.isWebGL2) {
-    composer.renderTarget1.samples = Math.min(4, renderer.capabilities.maxSamples);
-    composer.renderTarget2.samples = Math.min(4, renderer.capabilities.maxSamples);
+    composer.scenePass.samples = Math.min(4, renderer.capabilities.maxSamples);
   }
+  composer.addPass(composer.scenePass);
   composer.setPixelRatio(renderer.getPixelRatio());
   composer.setSize(width, height);
-  composer.addPass(new RenderPass(scene, camera));
   if (inGame) {
     composer.ao = new GameAOPass(scene, camera, width, height);
     composer.ao.updateGtaoMaterial({
@@ -324,12 +378,7 @@ export function createRenderer(container, inGame = false) {
     const samples = renderer.capabilities.isWebGL2
       ? Math.min(preset.msaa, renderer.capabilities.maxSamples)
       : 0;
-    for (const target of [composer.renderTarget1, composer.renderTarget2]) {
-      if (target.samples !== samples) {
-        target.samples = samples;
-        target.dispose();
-      }
-    }
+    composer.scenePass.samples = samples;
     if (sun.castShadow && sun.shadow.mapSize.x !== preset.shadowMapSize) {
       sun.shadow.mapSize.set(preset.shadowMapSize, preset.shadowMapSize);
       sun.shadow.map?.dispose();

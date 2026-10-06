@@ -7,6 +7,7 @@ import { loadProgress, saveProgress } from "../game/data/progress.js";
 import { GameView } from "../game/ui/GameView.jsx";
 import { GarageScreen } from "../game/ui/GarageScreen.jsx";
 import { Hud } from "../game/ui/Hud.jsx";
+import { LoadingScreen } from "../game/ui/LoadingScreen.jsx";
 import { PauseMenu } from "../game/ui/PauseMenu.jsx";
 import { PickerModal } from "../game/ui/PickerModal.jsx";
 import { ResultScreen } from "../game/ui/ResultScreen.jsx";
@@ -20,6 +21,9 @@ export function GamePage() {
   const [paused, setPaused] = React.useState(false);
   const [muted, setMuted] = React.useState(false);
   const [noPolice, setNoPolice] = React.useState(false);
+  // Session loading: { progress, label, done, error } while the loading screen is up.
+  const [loading, setLoading] = React.useState(null);
+  const loadingRef = React.useRef(false);
   const controls = React.useRef({
     keys: {},
     paused: false,
@@ -48,10 +52,9 @@ export function GamePage() {
       finished: false,
       audio,
     };
-    setHud({
-      ...INITIAL_HUD,
-      audioLoading: true,
-    });
+    setHud(INITIAL_HUD);
+    loadingRef.current = true;
+    setLoading({ progress: 0, label: "Démarrage", done: false, error: null });
     setResult(null);
     setPaused(false);
     setScreen("race");
@@ -76,13 +79,15 @@ export function GamePage() {
     });
   };
   const returnToLobby = () => {
+    loadingRef.current = false;
+    setLoading(null);
     setScreen("lobby");
     setResult(null);
     setPaused(false);
     setPicker(null);
   };
   const togglePause = () => {
-    if (!result) {
+    if (!result && !loadingRef.current) {
       if (picker) {
         setPicker(null);
         return;
@@ -114,17 +119,29 @@ export function GamePage() {
             onFinish={finishSession}
             onStation={() => setPicker("cars")}
             onPause={togglePause}
+            onLoading={({ progress, label }) =>
+              setLoading((value) => (value ? { ...value, progress, label } : value))
+            }
+            onReady={() => {
+              loadingRef.current = false;
+              setLoading((value) => (value ? { ...value, progress: 1, done: true } : value));
+            }}
+            onLoadError={(error) => setLoading((value) => (value ? { ...value, error } : value))}
             noPolice={noPolice}
           />
-          <Hud
-            hud={hud}
-            engine={engine}
-            muted={muted}
-            onMute={() => setMuted((e) => !e)}
-            onPause={togglePause}
-            onStation={() => setPicker("cars")}
-          />
-          {!paused && !result && !picker && <TouchControls controls={controls} />}
+          {(!loading || loading.done) && (
+            <Hud
+              hud={hud}
+              engine={engine}
+              muted={muted}
+              onMute={() => setMuted((e) => !e)}
+              onPause={togglePause}
+              onStation={() => setPicker("cars")}
+            />
+          )}
+          {!paused && !result && !picker && !(loading && !loading.done) && (
+            <TouchControls controls={controls} />
+          )}
           <div className="pointer-events-none absolute bottom-2 left-1/2 hidden -translate-x-1/2 text-[8px] tracking-widest text-white/50 xl:block">
             {
               "ZQSD / WASD / FLÈCHES • CONDUIRE \xA0 ESPACE • DRIFT \xA0 E • STATION \xA0 F • PIED/ENTRER \xA0 ESC • PAUSE"
@@ -143,6 +160,7 @@ export function GamePage() {
             />
           )}{" "}
           {result && <ResultScreen result={result} onReturn={returnToLobby} />}
+          {loading && <LoadingScreen {...loading} />}
         </div>
       )}
       {picker && (

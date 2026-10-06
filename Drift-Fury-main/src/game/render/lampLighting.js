@@ -4,13 +4,15 @@
 // road, sidewalk and lot materials as a uniform array and each pixel is lit by all of them through the same
 // physically based light model as every other light: warm pools of light along every street, glints and
 // long streaky highlights in the wet asphalt, falling off with distance like real luminaires.
-import { Color, Vector3, Vector4 } from "three";
+import { Color, Frustum, Matrix4, Sphere, Vector3, Vector4 } from "three";
 
 export const LAMP_COUNT = 24;
+const LAMP_RANGE = 28; // metres: beyond this a lamp adds nothing
 
 const DECLARATIONS = /* glsl */ `
 uniform vec4 streetLamps[${LAMP_COUNT}]; // view-space position (updated every frame), intensity
 uniform vec3 streetLampColor;
+uniform int streetLampCount; // lamps in use: the first streetLampCount entries
 `;
 
 const LIGHTING = /* glsl */ `
@@ -18,11 +20,12 @@ const LIGHTING = /* glsl */ `
 {
   vec3 lampDown = normalize((viewMatrix * vec4(0.0, -1.0, 0.0, 0.0)).xyz);
   for (int i = 0; i < ${LAMP_COUNT}; i++) {
+    if (i >= streetLampCount) break;
     vec4 lamp = streetLamps[i];
     if (lamp.w <= 0.0) continue;
     vec3 toLamp = lamp.xyz - geometryPosition;
     float distanceSquared = dot(toLamp, toLamp);
-    float range = 28.0;
+    float range = ${LAMP_RANGE.toFixed(1)};
     if (distanceSquared > range * range) continue;
     IncidentLight lampLight;
     lampLight.direction = toLamp * inversesqrt(distanceSquared);
@@ -46,7 +49,11 @@ export function createLampLighting(positions, { intensity = 450, color = "#ffcf9
   const uniforms = {
     streetLamps: { value: Array.from({ length: LAMP_COUNT }, () => new Vector4(0, 0, 0, 0)) },
     streetLampColor: { value: new Color(color) },
+    streetLampCount: { value: 0 },
   };
+  const frustum = new Frustum();
+  const viewProjection = new Matrix4();
+  const reach = new Sphere(new Vector3(), LAMP_RANGE);
   const nearest = []; // indices of the lamps currently in the uniform array
   const point = new Vector3();
   const distances = new Float32Array(positions.length);
@@ -78,19 +85,28 @@ export function createLampLighting(positions, { intensity = 450, color = "#ffcf9
       nearest.length = 0;
       nearest.push(...order.slice(0, LAMP_COUNT));
     },
-    /** Moves the chosen lamps into view space for this frame (call once per frame, before rendering). */
+    /**
+     * Moves the chosen lamps into view space for this frame (call once per frame, before rendering).
+     * Lamps whose light cannot reach anything on screen (their whole range is outside the view) are left
+     * out, so each pixel only loops over the lamps that can light it: the image is the same, the shaders
+     * of the road, sidewalks and buildings do a fraction of the work.
+     */
     updateView(camera) {
-      uniforms.streetLamps.value.forEach((lamp, slot) => {
-        const index = nearest[slot];
-        if (index === undefined) {
-          lamp.set(0, 0, 0, 0);
-          return;
-        }
-        point
-          .set(positions[index].x, positions[index].y, positions[index].z)
-          .applyMatrix4(camera.matrixWorldInverse);
-        lamp.set(point.x, point.y, point.z, intensity);
-      });
+      viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      frustum.setFromProjectionMatrix(viewProjection);
+      let count = 0;
+      for (const index of nearest) {
+        const p = positions[index];
+        reach.center.set(p.x, p.y, p.z);
+        if (!frustum.intersectsSphere(reach)) continue;
+        point.set(p.x, p.y, p.z).applyMatrix4(camera.matrixWorldInverse);
+        uniforms.streetLamps.value[count++].set(point.x, point.y, point.z, intensity);
+      }
+      for (let slot = count; slot < LAMP_COUNT; slot++) uniforms.streetLamps.value[slot].set(0, 0, 0, 0);
+      uniforms.streetLampCount.value = count;
+    },
+    clear() {
+      uniforms.streetLampCount.value = 0;
     },
   };
 }

@@ -1,15 +1,23 @@
 import { TRAFFIC_COLORS } from "../simulation/game.js";
 import { createTrafficCar, trafficTemplates } from "../vehicles/trafficCars.js";
-/* compile every shader the session can need before the first frame, so nothing stalls mid-drive */
-export function warmUpSession(renderer, scene, camera, extraColors = []) {
+/**
+ * Compiles every shader the session can need before the first frame, so nothing stalls mid-drive: the
+ * scene (including effects that have nothing to draw yet, like tyre smoke and skid marks) and every traffic
+ * and police car look. Uses parallel shader compilation where the browser supports it.
+ */
+export async function warmUpSession(renderer, scene, camera, extraColors = []) {
   for (const color of [...TRAFFIC_COLORS, ...extraColors]) {
     createTrafficCar(color, "coupe");
   }
   createTrafficCar("#ffffff", "coupe", true);
   try {
-    renderer.compile(scene, camera);
+    await renderer.compileAsync(scene, camera);
     for (const template of trafficTemplates.values()) {
-      renderer.compile(template, camera, scene);
+      await renderer.compileAsync(template, camera, scene);
     }
-  } catch (error) {}
+  } catch (error) {
+    try {
+      renderer.compile(scene, camera);
+    } catch (fallbackError) {}
+  }
 }

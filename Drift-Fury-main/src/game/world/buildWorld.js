@@ -18,22 +18,42 @@ import { createLampLighting } from "../render/lampLighting.js";
  * Returns the collision solids, street lamp positions (for the moving light pool) and traffic signals.
  */
 export function buildWorld(scene) {
+  const steps = buildWorldInSteps(scene);
+  for (;;) {
+    const { done, value } = steps.next();
+    if (done) return value;
+  }
+}
+
+/**
+ * The same as buildWorld, one part at a time: a generator that yields { label, progress } (0..1) after
+ * each part so a loading screen can show progress and the page stays responsive; its return value is
+ * buildWorld's result.
+ */
+export function* buildWorldInSteps(scene) {
   const world = {
     scene,
   };
-  createWorldContext(world);
-  buildGround(world);
-  buildMountainTerrain(world);
-  buildRoads(world);
-  buildTrafficControl(world);
-  buildStreetLights(world);
-  buildBuildings(world);
-  buildStreetTrees(world);
-  buildGasStations(world);
-  buildHighway(world);
-  buildMountainRoad(world);
-  buildRoadClosure(world);
-  buildMountainScenery(world);
+  const parts = [
+    ["Matériaux", createWorldContext],
+    ["Terrain", buildGround],
+    ["Montagne", buildMountainTerrain],
+    ["Routes", buildRoads],
+    ["Feux et panneaux", buildTrafficControl],
+    ["Lampadaires", buildStreetLights],
+    ["Bâtiments et commerces", buildBuildings],
+    ["Arbres", buildStreetTrees],
+    ["Stations-service", buildGasStations],
+    ["Autoroute", buildHighway],
+    ["Route de montagne", buildMountainRoad],
+    ["Barrages", buildRoadClosure],
+    ["Forêt et rochers", buildMountainScenery],
+  ];
+  for (let index = 0; index < parts.length; index++) {
+    yield { label: parts[index][0], progress: index / (parts.length + 1) };
+    parts[index][1](world);
+  }
+  yield { label: "Ciel", progress: parts.length / (parts.length + 1) };
   const updateSky = buildSky(world);
   // Every street lamp lights the city's ground in its shaders (see lampLighting.js).
   const lampLighting = createLampLighting(world.lampPositions);
@@ -50,6 +70,8 @@ export function buildWorld(scene) {
       lampLighting.update(x, z);
       lampLighting.updateView(camera);
     },
+    /** Turns the lamp lighting off until the next updateLamps (for cube-map captures). */
+    clearLamps: () => lampLighting.clear(),
     /** Adds the street-lamp lighting to another material (effects, props). */
     lightByLamps: (material) => lampLighting.patch(material),
     /** Per-frame animation of world details (summit beacon, sky); `time` in seconds. */

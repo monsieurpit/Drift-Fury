@@ -18,7 +18,13 @@ let pending = 0;
 let resolveReady;
 /** Resolves once every requested scanned texture has loaded (or failed). */
 export const scannedTexturesReady = new Promise((resolve) => (resolveReady = resolve));
-manager.onLoad = () => resolveReady();
+let loadedCount = 0;
+let ready = false;
+manager.onLoad = () => {
+  ready = true;
+  resolveReady();
+};
+manager.onProgress = (url, loaded) => (loadedCount = loaded);
 manager.onError = (url) => console.warn("Scanned texture failed to load:", url);
 
 const BASE = (import.meta.env?.BASE_URL || "/") + "textures/";
@@ -72,3 +78,6 @@ export function scannedSet(name, fallbackAverage = [0.2, 0.2, 0.2]) {
 
 /** Whether any scanned set was requested (so callers know whether to wait on scannedTexturesReady). */
 export const scannedTexturesRequested = () => pending > 0;
+
+/** Loading progress of the scanned textures: { loaded, total, ready }. */
+export const scannedTextureProgress = () => ({ loaded: loadedCount, total: pending, ready });

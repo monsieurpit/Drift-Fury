@@ -8,25 +8,101 @@ import { batchStaticMeshes } from "../render/staticBatching.js";
 import { warmUpSession } from "../render/warmUp.js";
 import { captureCityEnvironment } from "../render/reflectionProbe.js";
 import { CITY_REFLECTION_PROBE } from "../render/wetSurface.js";
-import { scannedTexturesReady } from "../world/scannedTextures.js";
+import {
+  scannedTextureProgress,
+  scannedTexturesReady,
+  scannedTexturesRequested,
+} from "../world/scannedTextures.js";
 import { createGame } from "../simulation/game.js";
 import { batchPlayerCar } from "../vehicles/batchPlayerCar.js";
 import { buildCar } from "../vehicles/carModel.js";
 import { createTrafficCar } from "../vehicles/trafficCars.js";
-import { buildWorld } from "../world/buildWorld.js";
+import { buildWorldInSteps } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
 import { MOON_DIRECTION } from "../world/sky.js";
+const CANCELLED = Symbol("cancelled");
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Starts a driving session in `container`. Everything is loaded up front behind the loading screen (the
+ * world, cars, photo-scanned textures and their upload to the GPU, reflections, every shader, the engine
+ * sound, and a few warm-up renders of the city, highway and mountain) so nothing is built, compiled or
+ * uploaded mid-drive. Progress goes to callbacks.current.onLoading({ progress, label }); onReady() is
+ * called when the first frame is about to be drawn. The returned session can be disposed at any time,
+ * including while it is still loading.
+ */
 export function startGameSession(container, car, engine, controls, callbacks, noPolice = false) {
+  let live = null;
+  let cancelled = false;
+  let pendingCar = null;
+  const loading = {
+    report: (progress, label) => callbacks.current.onLoading?.({ progress, label }),
+    cancelled: () => cancelled,
+  };
+  bootGameSession(container, car, engine, controls, callbacks, noPolice, loading)
+    .then((session) => {
+      if (cancelled) {
+        session.dispose();
+        return;
+      }
+      live = session;
+      if (pendingCar && pendingCar.id !== car.id) session.setCar(pendingCar);
+      session.start();
+      callbacks.current.onReady?.();
+    })
+    .catch((error) => {
+      if (error !== CANCELLED) {
+        console.error(error);
+        callbacks.current.onLoadError?.(error);
+      }
+    });
+  const session = {
+    setQuality(choice) {
+      if (live) live.setQuality(choice);
+      else storeQuality(choice);
+    },
+    setCar(next) {
+      if (live) live.setCar(next);
+      else pendingCar = next;
+    },
+    dispose() {
+      cancelled = true;
+      live?.dispose();
+    },
+  };
+  return session;
+}
+
+async function bootGameSession(container, car, engine, controls, callbacks, noPolice, loading) {
+  const cleanup = [];
+  // Lets the loading screen paint, and stops here if the session was closed meanwhile.
+  const stage = async (progress, label) => {
+    loading.report(progress, label);
+    await sleep(16);
+    if (loading.cancelled()) {
+      cleanup.forEach((dispose) => dispose());
+      throw CANCELLED;
+    }
+  };
+  await stage(0.01, "Moteur graphique");
   const view = createRenderer(container, true);
+  cleanup.push(() => view.dispose());
   const { scene, renderer, camera, sun, touchDevice, composer } = view;
+  const worldSteps = buildWorldInSteps(scene);
+  let worldStep = worldSteps.next();
+  while (!worldStep.done) {
+    await stage(0.03 + worldStep.value.progress * 0.32, worldStep.value.label);
+    worldStep = worldSteps.next();
+  }
   const {
     solids,
     lampPositions,
     signals,
     update: updateWorld,
     updateLamps,
+    clearLamps,
     lightByLamps,
-  } = buildWorld(scene);
+  } = worldStep.value;
   // Cars sit on the ground: pitch and roll follow the terrain under their wheels (flat in the city).
   const sitOnGround = (object, x, z, heading, extraRoll = 0) => {
     const forwardX = -Math.sin(heading);
@@ -40,7 +116,9 @@ export function startGameSession(container, car, engine, controls, callbacks, no
     object.rotation.order = "YXZ";
     object.rotation.set(Math.atan2(front - back, 2.8), heading, Math.atan2(right - left, 1.6) + extraRoll);
   };
+  await stage(0.36, "Optimisation de la géométrie");
   const staticBatch = batchStaticMeshes(scene, new Set(signals.flatMap((signal) => signal.lenses)), 96);
+  await stage(0.42, "Véhicules, police et circulation");
   const game = createGame(car, engine, solids, noPolice);
   const lampLights = [];
   // ?dfdebug exposes the live session for profiling tools
@@ -190,6 +268,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
     }
   }
   const audio = controls.current.audio || createAudio(engine);
+  cleanup.push(() => audio.close());
   const effects = createEffects(scene, { patch: lightByLamps });
   const keys = {};
   let frameId;
@@ -674,29 +753,103 @@ export function startGameSession(container, car, engine, controls, callbacks, no
     }
     composer.render();
   }
+  // Photo-scanned textures (downloaded in the background since the world started building).
+  if (scannedTexturesRequested()) {
+    const waitStart = Date.now();
+    for (;;) {
+      const { loaded, total, ready } = scannedTextureProgress();
+      if (ready) break;
+      await stage(0.48 + 0.2 * (loaded / Math.max(1, total)), `Textures photoréalistes ${loaded}/${total}`);
+      // A very slow connection: start anyway, the textures will appear when they arrive.
+      if (Date.now() - waitStart > 30000) break;
+      await sleep(80);
+    }
+  }
+  // Upload every texture to the GPU now rather than on the frame that first shows it.
+  const textures = new Set();
+  const collect = (value) => {
+    if (value?.isTexture) textures.add(value);
+  };
+  scene.traverse((object) => {
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : object.material
+        ? [object.material]
+        : [];
+    for (const material of materials) {
+      for (const key of Object.keys(material)) collect(material[key]);
+      if (material.uniforms) for (const uniform of Object.values(material.uniforms)) collect(uniform?.value);
+    }
+  });
+  let uploaded = 0;
+  for (const texture of textures) {
+    if (texture.image && !texture.isRenderTargetTexture) renderer.initTexture(texture);
+    if (++uploaded % 12 === 0)
+      await stage(0.68 + 0.07 * (uploaded / textures.size), "Envoi des textures au GPU");
+  }
   // City reflections: captured once from the middle of the grid at street level, used as the scene's
   // environment while the player is in the city (the night sky's elsewhere).
+  await stage(0.76, "Reflets de la ville");
   const skyEnvironment = scene.environment;
+  clearLamps();
   let cityEnvironment = captureCityEnvironment(renderer, scene, CITY_REFLECTION_PROBE, [playerCar]);
-  // Retake it once the photo-scanned ground textures have arrived, so reflections show the real surfaces.
-  scannedTexturesReady.then(() => {
-    if (disposed) return;
-    const previous = cityEnvironment;
-    cityEnvironment = captureCityEnvironment(renderer, scene, CITY_REFLECTION_PROBE, [playerCar]);
-    if (scene.environment === previous) scene.environment = cityEnvironment;
-    previous.dispose();
-  });
+  // If the scanned textures were still on their way, retake it when they arrive.
+  if (!scannedTextureProgress().ready && scannedTexturesRequested()) {
+    scannedTexturesReady.then(() => {
+      if (disposed) return;
+      const previous = cityEnvironment;
+      clearLamps();
+      cityEnvironment = captureCityEnvironment(renderer, scene, CITY_REFLECTION_PROBE, [playerCar]);
+      if (scene.environment === previous) scene.environment = cityEnvironment;
+      previous.dispose();
+    });
+  }
   inCityEnvironment = (x, z) => {
     const inCity = z > -112 && x > -165 && x < 160;
     const environment = inCity ? cityEnvironment : skyEnvironment;
     if (scene.environment !== environment) scene.environment = environment;
   };
-  warmUpSession(renderer, scene, camera, [car.color]);
+  // Every shader the session can need (the world, every traffic car look, police, effects), compiled in
+  // parallel where the browser supports it.
+  await stage(0.8, "Compilation des shaders");
+  await warmUpSession(renderer, scene, camera, [car.color]);
+  await stage(0.88, "Son du moteur");
+  await Promise.race([audio.ready.catch(() => {}), sleep(15000)]);
+  // A few full renders around the map, so the shadow, ambient occlusion and post-processing passes, the
+  // mountain's chunks and every texture have all been drawn once before the session starts.
+  const warmUpViews = [
+    [0, 9, 85, 0, 1, 50],
+    [10, 3, 40, 2, 1, -20],
+    [175, 4, -180, 175, 2, -260],
+    [40, 30, -330, 30, 20, -420],
+    [-60, 6, -20, 0, 1, -30],
+  ];
+  for (let index = 0; index < warmUpViews.length; index++) {
+    await stage(0.9 + 0.09 * (index / warmUpViews.length), "Préchauffage du rendu");
+    const [x, y, z, lx, ly, lz] = warmUpViews[index];
+    camera.position.set(x, y, z);
+    camera.lookAt(lx, ly, lz);
+    camera.updateMatrixWorld();
+    inCityEnvironment(x, z);
+    updateLamps(x, z, camera);
+    sun.position.set(x + MOON_DIRECTION.x * 127, MOON_DIRECTION.y * 127, z + MOON_DIRECTION.z * 127);
+    sun.target.position.set(x, 0, z);
+    sun.target.updateMatrixWorld();
+    renderer.shadowMap.needsUpdate = true;
+    composer.render();
+  }
+  camera.position.set(0, 9, 85);
+  await stage(1, "Prêt");
   if (debugSession) {
     debugSession.fx = effects;
+    debugSession.ready = true;
   }
-  frameId = requestAnimationFrame(frame);
   const session = {
+    /** Starts the frame loop (once loading is done). */
+    start() {
+      lastFrameTime = performance.now();
+      frameId = requestAnimationFrame(frame);
+    },
     /** Graphics quality from the pause menu: "auto" or a preset name. */
     setQuality(choice) {
       qualityChoice = choice;
