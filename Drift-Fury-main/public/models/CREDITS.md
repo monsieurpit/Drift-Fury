@@ -1,7 +1,8 @@
 # 3D model credits
 
 Street props used in Drift Fury. Simplified (fewer triangles) and with textures resized to 512 px for the
-web; otherwise unmodified.
+web. The hydrant and trash can files keep one of their two variants, and the cone file keeps the cone
+without its ground plane and bulb; otherwise unmodified.
 
 | File | Source | Author | License |
 | --- | --- | --- | --- |
