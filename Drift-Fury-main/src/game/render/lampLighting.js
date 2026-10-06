@@ -112,7 +112,9 @@ export function createLampLighting(positions, { intensity = 450, color = "#ffcf9
       for (let slot = 0; slot < count; slot++) {
         const { index, distance } = inView[slot];
         const p = positions[index];
-        const fade = Math.min(1, Math.max(0, (cutoff - distance) / fadeLength));
+        // (All the lamps in view fit: nothing to fade toward. Infinity / Infinity would be NaN, and one NaN
+        // light turns the whole frame black through the bloom.)
+        const fade = cutoff === Infinity ? 1 : Math.min(1, Math.max(0, (cutoff - distance) / fadeLength));
         point.set(p.x, p.y, p.z).applyMatrix4(camera.matrixWorldInverse);
         uniforms.streetLamps.value[slot].set(
           point.x,

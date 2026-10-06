@@ -99,7 +99,8 @@ export function resolveQuality(choice = storedQuality()) {
 
 // Effects found to break rendering on this device (a black image), so they stay off here. Found by the
 // session's black-screen watchdog, which turns suspects off one at a time until the image comes back.
-const BROKEN_KEY = "drift-fury-broken-features";
+// (v2: marks made before a lamp-lighting bug that blacked out frames was fixed are discarded.)
+const BROKEN_KEY = "drift-fury-broken-features-v2";
 
 /** Suspects, in the order the watchdog tries them, with how the pause menu names them. */
 export const FEATURE_LABELS = {
@@ -114,7 +115,6 @@ export function brokenFeatures() {
   const broken = new Set();
   try {
     for (const name of JSON.parse(localStorage.getItem(BROKEN_KEY) || "[]")) broken.add(name);
-    if (localStorage.getItem("drift-fury-no-ao") === "1") broken.add("ao");
   } catch {
     /* storage unavailable or corrupt: nothing marked */
   }
