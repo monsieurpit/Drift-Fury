@@ -8,6 +8,7 @@ import { batchStaticMeshes } from "../render/staticBatching.js";
 import { warmUpSession } from "../render/warmUp.js";
 import { captureCityEnvironment } from "../render/reflectionProbe.js";
 import { CITY_REFLECTION_PROBE } from "../render/wetSurface.js";
+import { scannedTexturesReady } from "../world/scannedTextures.js";
 import { createGame } from "../simulation/game.js";
 import { batchPlayerCar } from "../vehicles/batchPlayerCar.js";
 import { buildCar } from "../vehicles/carModel.js";
@@ -344,6 +345,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
   const shakeOffset = new Vector3();
   const shadowAhead = new Vector3();
   let inCityEnvironment = () => {};
+  let disposed = false;
   function frame(time) {
     frameId = requestAnimationFrame(frame);
     const frameSeconds = (time - lastFrameTime) / 1000;
@@ -666,7 +668,15 @@ export function startGameSession(container, car, engine, controls, callbacks, no
   // City reflections: captured once from the middle of the grid at street level, used as the scene's
   // environment while the player is in the city (the night sky's elsewhere).
   const skyEnvironment = scene.environment;
-  const cityEnvironment = captureCityEnvironment(renderer, scene, CITY_REFLECTION_PROBE, [playerCar]);
+  let cityEnvironment = captureCityEnvironment(renderer, scene, CITY_REFLECTION_PROBE, [playerCar]);
+  // Retake it once the photo-scanned ground textures have arrived, so reflections show the real surfaces.
+  scannedTexturesReady.then(() => {
+    if (disposed) return;
+    const previous = cityEnvironment;
+    cityEnvironment = captureCityEnvironment(renderer, scene, CITY_REFLECTION_PROBE, [playerCar]);
+    if (scene.environment === previous) scene.environment = cityEnvironment;
+    previous.dispose();
+  });
   inCityEnvironment = (x, z) => {
     const inCity = z > -112 && x > -165 && x < 160;
     const environment = inCity ? cityEnvironment : skyEnvironment;
@@ -704,6 +714,7 @@ export function startGameSession(container, car, engine, controls, callbacks, no
       playerCarSpec = `player|${e.color}|${e.shape}`;
     },
     dispose() {
+      disposed = true;
       cancelAnimationFrame(frameId);
       removeInteractionDoor();
       canvas.removeEventListener("pointerdown", startCameraDrag);

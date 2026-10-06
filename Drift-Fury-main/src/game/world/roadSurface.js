@@ -120,7 +120,11 @@ export function createRoadSurfaceMaterial(base, roadWidth) {
   cached = base.clone();
   cached.onBeforeCompile = (shader) => {
     shader.uniforms.roadWear = { value: wearMap };
-    shader.uniforms.roadWearScale = { value: new Vector2(tile / roadWidth, tile / ROAD_TEXTURE_LENGTH) };
+    // vMapUv carries the colour map's repeat; divide it out to get back to tile units.
+    const repeat = base.map ? base.map.repeat : new Vector2(1, 1);
+    shader.uniforms.roadWearScale = {
+      value: new Vector2(tile / roadWidth / repeat.x, tile / ROAD_TEXTURE_LENGTH / repeat.y),
+    };
     shader.fragmentShader = shader.fragmentShader
       .replace(
         "#include <common>",

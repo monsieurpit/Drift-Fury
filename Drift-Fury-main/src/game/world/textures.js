@@ -1,5 +1,6 @@
 import { CanvasTexture, RepeatWrapping, MeshPhysicalMaterial, Vector2 } from "three";
 import { createRandom } from "../util/random.js";
+import { scannedSet } from "./scannedTextures.js";
 /**
  * Fractal value noise on a size x size grid: `octaves` layers of smoothly interpolated random lattices,
  * each twice as fine and `persistence` times as strong as the previous one. Returns the summed grid and
@@ -77,7 +78,38 @@ export function normalMapFromHeight(heightMap, strength = 2.4) {
   normalMap.anisotropy = 8;
   return normalMap;
 }
-export function createAsphaltMaterial(variant = 6) {
+/**
+ * Road asphalt from a photo-scanned set (Poly Haven "asphalt_02": aggregate, cracks and patches captured from
+ * a real road), with a light clearcoat. Box UVs are in units of `userData.tile` metres; the scan covers
+ * about 3 m, so it repeats ~3.3 times per tile. (The previous procedural asphalt is kept below as
+ * createProceduralAsphaltMaterial.)
+ */
+export function createAsphaltMaterial() {
+  const set = scannedSet("asphalt_02", [0.06, 0.06, 0.06]);
+  const tile = 10;
+  const metresPerScan = 3;
+  for (const texture of [set.map, set.normalMap, set.armMap])
+    texture.repeat.set(tile / metresPerScan, tile / metresPerScan);
+  const material = new MeshPhysicalMaterial({
+    map: set.map,
+    normalMap: set.normalMap,
+    normalScale: new Vector2(0.9, 0.9),
+    roughnessMap: set.armMap,
+    aoMap: set.armMap,
+    aoMapIntensity: 0.8,
+    roughness: 1,
+    metalness: 0,
+    clearcoat: 0.2,
+    clearcoatRoughness: 0.4,
+    envMapIntensity: 0.85,
+    // The scan was shot in daylight on a pale, sun-bleached road; tint it to fresh dark asphalt.
+    color: "#6b6f75",
+  });
+  material.userData.tile = tile;
+  return material;
+}
+
+export function createProceduralAsphaltMaterial(variant = 6) {
   const size = 512;
   const makeCanvas = () => {
     const cv = document.createElement("canvas");

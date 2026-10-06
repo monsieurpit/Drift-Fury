@@ -65,3 +65,10 @@ serve this folder, so Railway works with its default settings (Root Directory le
 Directory to `Drift-Fury-main` also works: Railway then uses this folder's `package.json` directly
 (`npm ci`, `npm run build`, `npm start`). Node 22 is pinned through `engines` and `.nvmrc`; the server
 listens on Railway's `PORT` and answers health checks on `/health`.
+
+## Texture credits
+
+`public/textures/` holds photo-scanned PBR texture sets from [Poly Haven](https://polyhaven.com), released
+under CC0 (public domain, no attribution required): `asphalt_02`, `concrete_floor_worn_001`,
+`rock_face_03`, `leafy_grass`, `snow_02`. Each folder has `diff.jpg` (colour), `nor.jpg` (OpenGL normal)
+and `arm.jpg` (ambient occlusion / roughness / metalness), recompressed for the web.

@@ -1,6 +1,7 @@
 import { MeshStandardMaterial, BoxGeometry, Mesh, Matrix4, Vector3, Vector4, Quaternion } from "three";
 import { CITY_REFLECTION_BOX, CITY_REFLECTION_PROBE, makeWet } from "../render/wetSurface.js";
 import { getTerrainTextures } from "./terrainTextures.js";
+import { scannedSet } from "./scannedTextures.js";
 import { concreteTexture, createAsphaltMaterial, grassTexture } from "./textures.js";
 /** Shared materials, the box/solid helpers and scratch math objects used by every part of the map. */
 export function createWorldContext(world) {
@@ -8,18 +9,23 @@ export function createWorldContext(world) {
   const solids = [];
   const lampPositions = [];
   // City streets after rain: puddles, wet gutters and reflections of the lit city (see wetSurface.js).
-  const roadMaterial = makeWet(createAsphaltMaterial(6), {
+  const roadMaterial = makeWet(createAsphaltMaterial(), {
     noise: getTerrainTextures().macro,
     probe: CITY_REFLECTION_PROBE,
     box: CITY_REFLECTION_BOX,
     grid: new Vector4(60, 50, -80, 9),
   });
-  const highwayMaterial = createAsphaltMaterial(10);
+  const highwayMaterial = createAsphaltMaterial();
+  // Sidewalks, curbs and trim: photo-scanned worn concrete (Poly Haven "concrete_floor_worn_001").
+  const concreteScan = scannedSet("concrete_floor_worn_001", [0.3, 0.3, 0.3]);
   const sidewalkMaterial = new MeshStandardMaterial({
-    map: concreteTexture(),
-    roughness: 0.82,
-    metalness: 0.05,
-    color: "#aab0b6",
+    map: concreteScan.map,
+    normalMap: concreteScan.normalMap,
+    roughnessMap: concreteScan.armMap,
+    aoMap: concreteScan.armMap,
+    roughness: 1,
+    metalness: 0,
+    color: "#c4c8cc",
   });
   const concreteMaterial = new MeshStandardMaterial({
     map: concreteTexture(2),
@@ -65,13 +71,12 @@ export function createWorldContext(world) {
     emissive: "#fff4d0",
     emissiveIntensity: 1.6,
   });
-  for (const [mt, tl] of [
-    [sidewalkMaterial, 4],
-    [concreteMaterial, 4],
-  ]) {
-    mt.map.repeat.set(1, 1);
-    mt.userData.tile = tl;
-  }
+  // Box UVs are in units of `tile` metres; the concrete scan covers about 3 m.
+  for (const texture of [concreteScan.map, concreteScan.normalMap, concreteScan.armMap])
+    texture.repeat.set(4 / 3, 4 / 3);
+  sidewalkMaterial.userData.tile = 4;
+  concreteMaterial.map.repeat.set(1, 1);
+  concreteMaterial.userData.tile = 4;
   function addBox(width, height, depth, x, y, z, material, solid = false) {
     const geometry = new BoxGeometry(width, height, depth);
     if (material && material.userData && material.userData.tile) {

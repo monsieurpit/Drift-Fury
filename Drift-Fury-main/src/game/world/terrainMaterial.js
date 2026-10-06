@@ -3,6 +3,7 @@
 // (high and not too steep), all broken up by large-scale variation so the tiling never shows.
 import { MeshStandardMaterial, Vector2, Vector3 } from "three";
 import { getTerrainTextures } from "./terrainTextures.js";
+import { scannedSet } from "./scannedTextures.js";
 
 const SHADER_DECLARATIONS = /* glsl */ `
 uniform sampler2D terrainRock;
@@ -16,6 +17,7 @@ uniform vec2 terrainSnowLine;
 uniform float terrainRockBias;
 uniform vec3 terrainRockAverage;
 uniform vec3 terrainGrassAverage;
+uniform vec3 terrainGrassTarget;
 uniform vec3 terrainSnowAverage;
 varying vec3 vTerrainPosition;
 varying vec3 vTerrainNormal;
@@ -108,21 +110,24 @@ const COLOR_CHUNK = /* glsl */ `
   bool detail = terrainDetail > 0.002;
   if (rockAmount > 0.002) {
     vec3 rock = terrainRockAverage * (1.0 - terrainRockDetail);
-    if (terrainRockMix < 0.998) rock += triplanarColor(terrainRock, p, terrainDx, terrainDy, terrainWeights, 1.0 / 13.0) * (1.0 - terrainRockMix) * terrainRockDetail;
-    if (terrainRockMix > 0.002 && terrainRockDetail > 0.002) rock += triplanarColor(terrainRock, p.zyx + vec3(31.0, 0.0, 17.0), terrainDx.zyx, terrainDy.zyx, terrainWeights.zyx, 1.0 / 57.0) * terrainRockMix * terrainRockDetail;
+    if (terrainRockMix < 0.998) rock += triplanarColor(terrainRock, p, terrainDx, terrainDy, terrainWeights, 1.0 / 6.0) * (1.0 - terrainRockMix) * terrainRockDetail;
+    if (terrainRockMix > 0.002 && terrainRockDetail > 0.002) rock += triplanarColor(terrainRock, p.zyx + vec3(31.0, 0.0, 17.0), terrainDx.zyx, terrainDy.zyx, terrainWeights.zyx, 1.0 / 26.0) * terrainRockMix * terrainRockDetail;
     rock *= mix(0.78, 1.12, macro.b) * mix(0.9, 1.06, macroFine.r);
     color += rock * rockAmount;
   }
   if (grassAmount > 0.002) {
-    vec3 grass = terrainGrassAverage * (1.0 - terrainDetail);
-    if (detail) grass += antiTile(terrainGrass, p.xz, terrainDx.xz, terrainDy.xz, 1.0 / 7.5, smoothstep(0.38, 0.62, macro.g)).rgb * terrainDetail;
+    // The grass scan is rescaled so its average matches the alpine meadow's colour (it was shot in bright,
+    // dry daylight); the scan provides the detail.
+    vec3 grassScale = terrainGrassTarget / max(terrainGrassAverage, vec3(1e-3));
+    vec3 grass = terrainGrassTarget * (1.0 - terrainDetail);
+    if (detail) grass += antiTile(terrainGrass, p.xz, terrainDx.xz, terrainDy.xz, 1.0 / 3.0, smoothstep(0.38, 0.62, macro.g)).rgb * grassScale * terrainDetail;
     grass *= mix(0.72, 1.18, macro.r) * mix(0.88, 1.08, macroFine.g);
     grass = mix(grass, grass * vec3(1.18, 1.05, 0.78), smoothstep(0.55, 0.8, macro.b) * 0.6);
     color += grass * grassAmount;
   }
   if (terrainSnowAmount > 0.002) {
     vec3 snow = terrainSnowAverage * (1.0 - terrainDetail);
-    if (detail) snow += antiTile(terrainSnow, p.xz, terrainDx.xz, terrainDy.xz, 1.0 / 6.0, smoothstep(0.38, 0.62, macro.b)).rgb * terrainDetail;
+    if (detail) snow += antiTile(terrainSnow, p.xz, terrainDx.xz, terrainDy.xz, 1.0 / 3.0, smoothstep(0.38, 0.62, macro.b)).rgb * terrainDetail;
     color += snow * terrainSnowAmount;
   }
   diffuseColor.rgb *= color;
@@ -142,8 +147,8 @@ const NORMAL_CHUNK = /* glsl */ `
   vec3 rockN = n;
   if (rockAmount > 0.002 && terrainRockDetail > 0.002) {
     vec3 detailN = vec3(0.0);
-    if (terrainRockMix < 0.998) detailN += triplanarNormal(terrainRockNormal, p, terrainDx, terrainDy, n, terrainWeights, 1.0 / 13.0, mix(1.4, 0.5, terrainFar)) * (1.0 - terrainRockMix);
-    if (terrainRockMix > 0.002) detailN += triplanarNormal(terrainRockNormal, p.zyx + vec3(31.0, 0.0, 17.0), terrainDx.zyx, terrainDy.zyx, n.zyx, terrainWeights.zyx, 1.0 / 57.0, 1.6).zyx * terrainRockMix;
+    if (terrainRockMix < 0.998) detailN += triplanarNormal(terrainRockNormal, p, terrainDx, terrainDy, n, terrainWeights, 1.0 / 6.0, mix(1.4, 0.5, terrainFar)) * (1.0 - terrainRockMix);
+    if (terrainRockMix > 0.002) detailN += triplanarNormal(terrainRockNormal, p.zyx + vec3(31.0, 0.0, 17.0), terrainDx.zyx, terrainDy.zyx, n.zyx, terrainWeights.zyx, 1.0 / 26.0, 1.6).zyx * terrainRockMix;
     rockN = normalize(mix(n, normalize(detailN), terrainRockDetail));
   }
   vec3 groundN = n;
@@ -151,8 +156,8 @@ const NORMAL_CHUNK = /* glsl */ `
     vec2 dx = terrainDx.xz;
     vec2 dy = terrainDy.xz;
     vec3 groundTex = vec3(0.0, 0.0, 1.0);
-    if (terrainSnowAmount < 0.998) groundTex = sampleGrad(terrainGrassNormal, p.xz / 7.5, dx / 7.5, dy / 7.5).xyz * 2.0 - 1.0;
-    if (terrainSnowAmount > 0.002) groundTex = mix(groundTex, sampleGrad(terrainSnowNormal, p.xz / 6.0, dx / 6.0, dy / 6.0).xyz * 2.0 - 1.0, terrainSnowAmount);
+    if (terrainSnowAmount < 0.998) groundTex = sampleGrad(terrainGrassNormal, p.xz / 3.0, dx / 3.0, dy / 3.0).xyz * 2.0 - 1.0;
+    if (terrainSnowAmount > 0.002) groundTex = mix(groundTex, sampleGrad(terrainSnowNormal, p.xz / 3.0, dx / 3.0, dy / 3.0).xyz * 2.0 - 1.0, terrainSnowAmount);
     groundTex.xy *= 0.9;
     groundN = normalize(mix(n, normalize(vec3(groundTex.x + n.x, abs(groundTex.z) * n.y, groundTex.y + n.z)), terrainDetail));
   }
@@ -164,20 +169,27 @@ const NORMAL_CHUNK = /* glsl */ `
 /** Creates the mountain ground material. `snowLine` = [altitude, random spread]. */
 export function createTerrainMaterial({ snowLine = [135, 70], rockBias = 0 } = {}) {
   const textures = getTerrainTextures();
+  // Photo-scanned ground (Poly Haven, CC0): cliff rock, leafy meadow grass and snow. The procedural macro
+  // variation still breaks up their tiling over large areas.
+  const rock = scannedSet("rock_face_03", textures.rock.average);
+  const grass = scannedSet("leafy_grass", textures.grass.average);
+  const snow = scannedSet("snow_02", textures.snow.average);
   const material = new MeshStandardMaterial({ color: "#ffffff", roughness: 1, metalness: 0 });
   const uniforms = {
-    terrainRock: { value: textures.rock.map },
-    terrainRockNormal: { value: textures.rock.normalMap },
-    terrainGrass: { value: textures.grass.map },
-    terrainGrassNormal: { value: textures.grass.normalMap },
-    terrainSnow: { value: textures.snow.map },
-    terrainSnowNormal: { value: textures.snow.normalMap },
+    terrainRock: { value: rock.map },
+    terrainRockNormal: { value: rock.normalMap },
+    terrainGrass: { value: grass.map },
+    terrainGrassNormal: { value: grass.normalMap },
+    terrainSnow: { value: snow.map },
+    terrainSnowNormal: { value: snow.normalMap },
     terrainMacro: { value: textures.macro },
     terrainSnowLine: { value: new Vector2(snowLine[0], snowLine[1]) },
     terrainRockBias: { value: rockBias },
-    terrainRockAverage: { value: new Vector3(...textures.rock.average) },
-    terrainGrassAverage: { value: new Vector3(...textures.grass.average) },
-    terrainSnowAverage: { value: new Vector3(...textures.snow.average) },
+    // Shared vectors, filled in with each scan's real average colour once its image has loaded.
+    terrainRockAverage: { value: rock.average },
+    terrainGrassAverage: { value: grass.average },
+    terrainGrassTarget: { value: new Vector3(...textures.grass.average) },
+    terrainSnowAverage: { value: snow.average },
   };
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
