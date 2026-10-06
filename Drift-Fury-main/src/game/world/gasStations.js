@@ -10,6 +10,8 @@ import {
   MeshPhysicalMaterial,
   InstancedMesh,
   PointLight,
+  CatmullRomCurve3,
+  TubeGeometry,
 } from "three";
 import { FUEL_STATIONS } from "../data/stations.js";
 import { terrainHeight } from "./terrain.js";
@@ -170,15 +172,9 @@ export function buildGasStations(world) {
   const stationShelfFrames = new InstancedMesh(new BoxGeometry(0.72, 2.05, 0.55), stationShelfMat, 18);
   const stationShelfBoards = new InstancedMesh(new BoxGeometry(0.82, 0.055, 0.68), stationSteel, 72);
   const stationCoolerShelves = new InstancedMesh(new BoxGeometry(1.12, 0.035, 0.42), stationSteel, 36);
-  const stationHoseSegments = new InstancedMesh(
-    new CylinderGeometry(0.035, 0.035, 1, 8),
-    stationDarkSteel,
-    48,
-  );
   let stationShelfFrameCount = 0;
   let stationShelfBoardCount = 0;
   let stationCoolerShelfCount = 0;
-  let stationHoseCount = 0;
   const stationShelfProducts = stationProductMats.map(
     (material) => new InstancedMesh(new BoxGeometry(0.17, 0.27, 0.2), material, 216),
   );
@@ -203,70 +199,204 @@ export function buildGasStations(world) {
     tmpMatrix.compose(tmpPosition, tmpRotation, tmpScale);
     mesh.setMatrixAt(instance, tmpMatrix);
   };
-  const stationPumpFace = (x, y, z, side) => {
-    const face = new Mesh(new PlaneGeometry(0.42, 0.3), stationScreenMat);
-    face.position.set(x, y, z + side * 0.317);
-    if (side < 0) {
-      face.rotation.y = Math.PI;
-    }
-    scene.add(face);
-    const bezel = addBox(0.5, 0.38, 0.035, x, y, z + side * 0.295, stationDarkSteel);
-    bezel.renderOrder = 2;
-    face.renderOrder = 3;
-    addBox(0.22, 0.12, 0.025, x, y - 0.34, z + side * 0.323, stationDarkSteel);
-    for (let row = 0; row < 2; row++) {
-      for (let column = 0; column < 3; column++) {
-        const button = new Mesh(
-          new CylinderGeometry(0.025, 0.025, 0.022, 10),
-          column === 0 ? stationRed : stationSteel,
+  /* --- fuel dispensers --- */
+  // Front panel of a modern dispenser, drawn once: brand header, backlit price display, three grade
+  // buttons with prices, card reader, keypad. A matching glow map lights only what is backlit.
+  const pumpPanel = (() => {
+    const W = 384;
+    const H = 704;
+    const color = document.createElement("canvas");
+    const glow = document.createElement("canvas");
+    color.width = glow.width = W;
+    color.height = glow.height = H;
+    const c = color.getContext("2d");
+    const g = glow.getContext("2d");
+    const both = (fn) => {
+      fn(c, false);
+      fn(g, true);
+    };
+    c.fillStyle = "#e9eaE5";
+    c.fillRect(0, 0, W, H);
+    g.fillStyle = "#000";
+    g.fillRect(0, 0, W, H);
+    // Brand band.
+    both((ctx, lit) => {
+      ctx.fillStyle = lit ? "#c6dc77" : "#2a3a1c";
+      ctx.fillRect(0, 0, W, 86);
+      ctx.fillStyle = lit ? "#000" : "#f5f1e6";
+      ctx.font = "bold 46px Helvetica, Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      if (!lit) ctx.fillText("NORTHLINE", W / 2, 46);
+    });
+    // Price display: dark LCD with green digits.
+    c.fillStyle = "#14191c";
+    c.fillRect(30, 110, W - 60, 190);
+    both((ctx, lit) => {
+      ctx.fillStyle = lit ? "#000" : "#081208";
+      ctx.fillRect(44, 124, W - 88, 162);
+      ctx.fillStyle = lit ? "#5dff8a" : "#3ad46a";
+      ctx.font = "bold 40px Courier New, monospace";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText("$  0.00", W - 60, 180);
+      ctx.fillText("L  0.000", W - 60, 228);
+      ctx.font = "bold 26px Courier New, monospace";
+      ctx.fillText("$/L 1.699", W - 60, 270);
+    });
+    // Grade buttons.
+    const grades = [
+      ["RÉGULIER", "87", "1.699", "#2d8f3c"],
+      ["PLUS", "89", "1.849", "#d8a018"],
+      ["SUPER", "91", "1.999", "#b22a2a"],
+    ];
+    grades.forEach(([name, octane, price, tint], index) => {
+      const x = 22 + index * 116;
+      both((ctx, lit) => {
+        ctx.fillStyle = lit ? tint : tint;
+        ctx.globalAlpha = lit ? 0.55 : 1;
+        ctx.fillRect(x, 322, 108, 128);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = lit ? "#000" : "#ffffff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        if (!lit) {
+          ctx.font = "bold 44px Helvetica, Arial, sans-serif";
+          ctx.fillText(octane, x + 54, 364);
+          ctx.font = "bold 17px Helvetica, Arial, sans-serif";
+          ctx.fillText(name, x + 54, 404);
+          ctx.font = "15px Helvetica, Arial, sans-serif";
+          ctx.fillText(price + " $/L", x + 54, 430);
+        }
+      });
+    });
+    // Card reader and keypad.
+    c.fillStyle = "#1c2226";
+    c.fillRect(40, 482, 140, 168);
+    c.fillStyle = "#0a0d0f";
+    c.fillRect(60, 500, 100, 10);
+    c.fillStyle = "#2a3238";
+    c.fillRect(56, 528, 108, 40);
+    both((ctx, lit) => {
+      ctx.fillStyle = lit ? "#1b6fd6" : "#123a6a";
+      ctx.fillRect(62, 534, 96, 28);
+    });
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 3; col++) {
+        c.fillStyle = "#c9ced2";
+        c.fillRect(214 + col * 46, 486 + row * 42, 38, 34);
+        c.fillStyle = "#2a2f33";
+        c.font = "bold 18px Helvetica, Arial, sans-serif";
+        c.textAlign = "center";
+        c.textBaseline = "middle";
+        c.fillText(
+          String(row * 3 + col + 1)
+            .replace("10", "*")
+            .replace("11", "0")
+            .replace("12", "#"),
+          233 + col * 46,
+          503 + row * 42,
         );
-        button.position.set(x - 0.13 + column * 0.13, y - 0.48 - row * 0.095, z + side * 0.326);
-        scene.add(button);
       }
     }
-    addBox(0.35, 0.12, 0.03, x, y - 0.75, z + side * 0.327, stationDarkSteel);
+    c.fillStyle = "#d4d6d0";
+    c.fillRect(0, H - 30, W, 30);
+    const map = new CanvasTexture(color);
+    map.colorSpace = "srgb";
+    map.anisotropy = 8;
+    const emissiveMap = new CanvasTexture(glow);
+    emissiveMap.colorSpace = "srgb";
+    return new MeshStandardMaterial({
+      map,
+      emissiveMap,
+      emissive: "#ffffff",
+      emissiveIntensity: 1,
+      roughness: 0.35,
+      metalness: 0.1,
+    });
+  })();
+  const pumpPanelGeometry = new PlaneGeometry(0.74, 1.36);
+  const holsterMat = new MeshStandardMaterial({ color: "#1d2226", roughness: 0.5, metalness: 0.4 });
+  const hoseMat = new MeshStandardMaterial({ color: "#121416", roughness: 0.62, metalness: 0.05 });
+  const gripMats = ["#2d8f3c", "#d8a018", "#1a1a1a"].map(
+    (color) => new MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.05 }),
+  );
+  const bollardYellow = new MeshStandardMaterial({ color: "#e8b818", roughness: 0.45, metalness: 0.2 });
+  const reflectiveBand = new MeshStandardMaterial({
+    color: "#f2f2ea",
+    emissive: "#ffffff",
+    emissiveIntensity: 0.12,
+    roughness: 0.3,
+  });
+  const spoutGeometry = new CylinderGeometry(0.012, 0.014, 0.2, 8);
+  const bollardGeometry = new CylinderGeometry(0.09, 0.09, 0.9, 14);
+  const bandGeometry = new CylinderGeometry(0.093, 0.093, 0.07, 14);
+
+  /** A nozzle resting in its holster on the dispenser's side: grip, trigger guard and spout. */
+  const addNozzle = (x, y, z, outward, grip) => {
+    addBox(0.06, 0.32, 0.12, x, y, z, holsterMat);
+    const handle = new Mesh(new BoxGeometry(0.05, 0.2, 0.07), grip);
+    handle.position.set(x + outward * 0.05, y + 0.02, z);
+    handle.rotation.z = outward * 0.25;
+    scene.add(handle);
+    const guard = new Mesh(new BoxGeometry(0.012, 0.12, 0.07), holsterMat);
+    guard.position.set(x + outward * 0.1, y - 0.02, z);
+    scene.add(guard);
+    const spout = new Mesh(spoutGeometry, stationSteel);
+    spout.position.set(x + outward * 0.02, y - 0.17, z);
+    spout.rotation.z = -outward * 0.35;
+    scene.add(spout);
   };
+
   const addFuelPump = (x, z, groundY) => {
+    // Raised concrete island with a steel curb edge.
     addBox(1.55, 0.14, 3.8, x, groundY + 0.12, z, stationSteel);
-    addBox(1.46, 0.055, 3.68, x, groundY + 0.218, z, stationDarkSteel);
-    addBox(0.82, 0.2, 0.72, x, groundY + 0.34, z, stationDarkSteel);
-    addBox(0.76, 1.34, 0.62, x, groundY + 1.11, z, stationWhite);
-    addBox(0.765, 0.17, 0.625, x, groundY + 1.72, z, stationRed);
-    addBox(0.79, 0.105, 0.65, x, groundY + 1.86, z, stationSteel);
+    addBox(1.46, 0.055, 3.68, x, groundY + 0.218, z, concreteMaterial);
+    // Dispenser cabinet: plinth, body, lit canopy-style header.
+    addBox(0.86, 0.22, 0.74, x, groundY + 0.35, z, stationDarkSteel);
+    addBox(0.8, 1.38, 0.66, x, groundY + 1.15, z, stationWhite);
+    addBox(0.84, 0.24, 0.7, x, groundY + 1.96, z, stationDarkSteel);
     addSolid(x, z, 0.42, 0.38);
     for (const side of [-1, 1]) {
-      stationPumpFace(x, groundY + 1.36, z, side);
+      const panel = new Mesh(pumpPanelGeometry, pumpPanel);
+      panel.position.set(x, groundY + 1.18, z + side * 0.332);
+      if (side < 0) panel.rotation.y = Math.PI;
+      scene.add(panel);
     }
+    // Three nozzles per side (grades), hoses looping down from the top of the cabinet to each.
     for (const side of [-1, 1]) {
-      const hoseX = x + side * 0.39;
-      const hoseZ = z + 0.05;
-      const points = [
-        [hoseX, groundY + 1.48, hoseZ],
-        [x + side * 0.62, groundY + 1.52, hoseZ],
-        [x + side * 0.7, groundY + 1.35, hoseZ + 0.08],
-        [x + side * 0.7, groundY + 0.83, hoseZ + 0.13],
-        [x + side * 0.55, groundY + 0.7, hoseZ + 0.18],
-      ];
-      for (let segment = 0; segment < points.length - 1; segment++) {
-        const from = new Vector3(...points[segment]);
-        const to = new Vector3(...points[segment + 1]);
-        const delta = new Vector3().subVectors(to, from);
-        const length = delta.length();
-        tmpPosition.copy(from).add(to).multiplyScalar(0.5);
-        tmpRotation.setFromUnitVectors(new Vector3(0, 1, 0), delta.normalize());
-        tmpScale.set(1, length, 1);
-        tmpMatrix.compose(tmpPosition, tmpRotation, tmpScale);
-        stationHoseSegments.setMatrixAt(stationHoseCount++, tmpMatrix);
+      for (let grade = 0; grade < 3; grade++) {
+        const nz = z + (grade - 1) * 0.2;
+        const nx = x + side * 0.43;
+        addNozzle(nx, groundY + 1.25, nz, side, gripMats[grade]);
+        const curve = new CatmullRomCurve3([
+          new Vector3(x + side * 0.3, groundY + 2.0, nz),
+          new Vector3(x + side * 0.62, groundY + 1.85, nz + 0.04),
+          new Vector3(x + side * 0.72, groundY + 1.2, nz + 0.1),
+          new Vector3(x + side * 0.62, groundY + 0.62, nz + 0.12),
+          new Vector3(x + side * 0.5, groundY + 1.0, nz + 0.06),
+          new Vector3(nx + side * 0.03, groundY + 1.12, nz),
+        ]);
+        const hose = new Mesh(new TubeGeometry(curve, 28, 0.016, 6, false), hoseMat);
+        scene.add(hose);
       }
-      addBox(0.075, 0.28, 0.075, x + side * 0.4, groundY + 1.56, z - 0.17, stationSteel);
-      addBox(0.075, 0.34, 0.075, x + side * 0.4, groundY + 1.4, z + 0.22, stationDarkSteel);
-      addBox(0.12, 0.08, 0.1, x + side * 0.4, groundY + 1.56, z + 0.3, stationRed);
     }
-    const bollardMat = stationRed;
+    // Crash-protection bollards: yellow steel with reflective bands.
     for (const side of [-1, 1]) {
-      addBox(0.12, 0.62, 0.12, x + side * 0.91, groundY + 0.43, z + 1.44, bollardMat);
-      addBox(0.14, 0.08, 0.14, x + side * 0.91, groundY + 0.76, z + 1.44, stationWhite);
-      addSolid(x + side * 0.91, z + 1.44, 0.1, 0.1);
+      for (const end of [-1, 1]) {
+        const bx = x + side * 0.62;
+        const bz = z + end * 1.5;
+        const bollard = new Mesh(bollardGeometry, bollardYellow);
+        bollard.position.set(bx, groundY + 0.7, bz);
+        bollard.castShadow = true;
+        scene.add(bollard);
+        for (const by of [0.85, 1.0]) {
+          const band = new Mesh(bandGeometry, reflectiveBand);
+          band.position.set(bx, groundY + by, bz);
+          scene.add(band);
+        }
+        addSolid(bx, bz, 0.1, 0.1);
+      }
     }
   };
   // Dépanneur walls: photo-scanned painted plaster (Poly Haven "beige_wall_001", CC0, ~3 m per tile).
@@ -555,7 +685,6 @@ export function buildGasStations(world) {
     [stationShelfFrames, stationShelfFrameCount],
     [stationShelfBoards, stationShelfBoardCount],
     [stationCoolerShelves, stationCoolerShelfCount],
-    [stationHoseSegments, stationHoseCount],
   ]) {
     mesh.count = count;
     mesh.instanceMatrix.needsUpdate = true;
