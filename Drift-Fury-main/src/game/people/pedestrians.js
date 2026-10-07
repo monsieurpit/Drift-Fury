@@ -403,13 +403,15 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
             hitBy = { car, speed, side };
             break;
           }
-          if (speed > 5) {
-            // Where the car passes closest, and how soon.
+          if (speed > 6) {
+            // Only a car actually on course to hit them (its path passes through where they stand, within
+            // about a second) is a threat: a car driving past, even close, is not.
             const time = (dx * car.vx + dz * car.vz) / (speed * speed);
-            if (time > 0 && time < 1.6) {
+            if (time > 0 && time < 1.1) {
               const missX = dx - car.vx * time;
               const missZ = dz - car.vz * time;
-              if (Math.hypot(missX, missZ) < 2.6) threat = { car, missX, missZ };
+              const miss = Math.hypot(missX, missZ);
+              if (miss < CAR_HALF_WIDTH + 0.45) threat = { car, missX, missZ, miss };
             }
           }
         }
@@ -425,15 +427,19 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           threat = { car: hitBy.car, missX: Math.cos(hitBy.car.heading) * sideSign, missZ: -Math.sin(hitBy.car.heading) * sideSign };
           if (!ped.scared) events.push({ type: "hurt", ped, x: ped.x, z: ped.z });
         }
-        if (threat && ped.mode !== "flee") {
+        // People take a moment to notice and react (about a third of a second), then jump out of the way:
+        // a quick dodge, not a run, and a scream only for a really close call.
+        ped.alarm = threat ? (ped.alarm || 0) + dt : 0;
+        if (threat && ped.mode !== "flee" && (ped.alarm > 0.3 || hitBy)) {
           endTalk(ped);
           const length = Math.hypot(threat.missX, threat.missZ) || 1;
           ped.mode = "flee";
           ped.fleeX = threat.missX / length;
           ped.fleeZ = threat.missZ / length;
-          ped.panic = 1.4 + random() * 1.4;
-          if (ped.scared <= 0 && random() < 0.6) events.push({ type: "scream", ped, x: ped.x, z: ped.z });
-          ped.scared = 5;
+          ped.panic = 0.55 + random() * 0.35;
+          const closeCall = hitBy || (threat.miss ?? 0) < 0.9;
+          if (closeCall && ped.scared <= 0 && random() < 0.5) events.push({ type: "scream", ped, x: ped.x, z: ped.z });
+          ped.scared = 4;
         }
         ped.scared = Math.max(0, ped.scared - dt);
         ped.talkCooldown -= dt;
@@ -533,9 +539,13 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           const distance = Math.hypot(dx, dz);
           speed = ped.mode === "cross" ? Math.max(ped.speed * 1.25, 1.6) : ped.speed;
           if (ped.mode === "cross") {
-            // Hurry if a car is coming.
+            // Walk a little faster if a car is coming toward them.
             for (const car of cars) {
-              if (Math.hypot(car.x - ped.x, car.z - ped.z) < 30 && Math.hypot(car.vx, car.vz) > 4) speed = 3.4;
+              const dx = ped.x - car.x;
+              const dz = ped.z - car.z;
+              if (Math.hypot(dx, dz) < 22 && Math.hypot(car.vx, car.vz) > 4 && dx * car.vx + dz * car.vz > 0) {
+                speed = Math.max(speed, 2.2);
+              }
             }
           }
           if (distance < 0.15) {

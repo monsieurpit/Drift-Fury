@@ -492,7 +492,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         if (killed) {
           audio.hurt?.(female, distance, pan);
           // Everyone around runs away screaming.
-          pedestrians.frighten(event.x, event.z, 30, events);
+          pedestrians.frighten(event.x, event.z, 22, events);
           if (event.car.player) {
             const witnessed = state.police.some((officer) => Math.hypot(officer.x - event.x, officer.z - event.z) < 90);
             state.wanted = Math.min(5, (state.wanted || 0) + (witnessed ? 1 : 0.5));
