@@ -12,6 +12,7 @@ import { buildRoadClosure } from "./roadClosure.js";
 import { buildSky } from "./sky.js";
 import { createLampLighting } from "../render/lampLighting.js";
 import { LIGHT_LAMP, createClusteredLights } from "../render/clusteredLights.js";
+import { brokenFeatures } from "../render/quality.js";
 import { t } from "../../i18n.js";
 /**
  * Builds the whole map into `scene`: city grid, gas stations, highway and the mountain.
@@ -60,7 +61,9 @@ export function* buildWorldInSteps(scene) {
   // Every street lamp lights the city's ground in its shaders (see lampLighting.js).
   const lampLighting = createLampLighting(world.lampPositions);
   // Every light of the world (lamps, gas stations, shops) is a real light (see clusteredLights.js).
-  const clusteredLights = createClusteredLights();
+  // (A device whose GPU failed to compile them falls back to the nearest lamps only, as before.)
+  const clusteredFallback = brokenFeatures().has("lights");
+  const clusteredLights = createClusteredLights({ enabled: !clusteredFallback });
   for (const light of world.lights) clusteredLights.addStatic(light);
   // The ground (road, sidewalks and the paint on them) takes the lamps' light from a map baked once, so
   // it never changes as the player moves or turns; the other lights it takes like everything else.
@@ -70,7 +73,7 @@ export function* buildWorldInSteps(scene) {
     clusteredLights.patch(material, { skipFlags: LIGHT_LAMP });
   }
   for (const material of world.buildingMaterials?.() ?? []) {
-    if (material) clusteredLights.patch(material);
+    if (material) (clusteredFallback ? lampLighting.patch : clusteredLights.patch)(material);
   }
   return {
     solids: world.solids,
@@ -93,7 +96,8 @@ export function* buildWorldInSteps(scene) {
       clusteredLights.setEnabled(false);
     },
     /** Adds the lights to another material (effects, props). */
-    lightByLamps: (material) => clusteredLights.patch(material),
+    lightByLamps: (material) =>
+      clusteredFallback ? lampLighting.patch(material) : clusteredLights.patch(material),
     /** Per-frame animation of world details (summit beacon, sky); `time` in seconds. */
     update: (time) => {
       updateMountain(world, time);

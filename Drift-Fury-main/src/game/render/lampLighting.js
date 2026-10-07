@@ -18,6 +18,7 @@ import {
   Vector3,
   Vector4,
 } from "three";
+import { useWorldVarying } from "./worldVarying.js";
 
 export const LAMP_COUNT = 16;
 // The ground (road, sidewalks, paint) takes its lamp light from a map baked once, and only adds the wet
@@ -35,13 +36,6 @@ uniform int streetLampCount; // lamps in use: the first streetLampCount entries
 
 // The ground: lamp light from the baked map (every lamp, no selection, nothing that can pop) plus the
 // specular glints of the nearest lamps in the wet asphalt, faded in and out with distance.
-const GROUND_VERTEX_DECLARATIONS = /* glsl */ `
-varying vec3 vLampWorld;
-`;
-const GROUND_VERTEX = /* glsl */ `
-#include <project_vertex>
-vLampWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
-`;
 const GROUND_DECLARATIONS = /* glsl */ `
 uniform vec4 streetLamps[${LAMP_COUNT}];
 uniform float streetLampGlint[${LAMP_COUNT}];
@@ -49,7 +43,6 @@ uniform vec3 streetLampColor;
 uniform int streetLampCount;
 uniform sampler2D streetLampMap;
 uniform vec4 streetLampMapRect; // x0, z0, width, depth (metres)
-varying vec3 vLampWorld;
 `;
 const GROUND_LIGHTING = /* glsl */ `
 #if defined( RE_Direct )
@@ -210,12 +203,10 @@ export function createLampLighting(positions, { intensity = 450, color = "#ffcf9
       material.onBeforeCompile = (shader, renderer) => {
         previous?.call(material, shader, renderer);
         Object.assign(shader.uniforms, uniforms);
-        shader.vertexShader = shader.vertexShader
-          .replace("#include <common>", "#include <common>\n" + GROUND_VERTEX_DECLARATIONS)
-          .replace("#include <project_vertex>", GROUND_VERTEX);
         shader.fragmentShader = shader.fragmentShader
           .replace("#include <common>", "#include <common>\n" + GROUND_DECLARATIONS)
           .replace("#include <lights_fragment_end>", GROUND_LIGHTING);
+        useWorldVarying(shader, "vLampWorld");
       };
       const key = material.customProgramCacheKey?.() ?? "";
       material.customProgramCacheKey = () => key + "|ground-lamps";

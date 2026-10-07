@@ -9,6 +9,7 @@ import { animatePerson, createPerson } from "../people/person.js";
 import { createRenderer, gamePixelRatio } from "../render/renderer.js";
 import {
   QUALITY_LEVELS,
+  brokenFeatures,
   markFeatureBroken,
   resolveQuality,
   storeQuality,
@@ -107,19 +108,21 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   // browser takes the graphics context away (out of graphics memory) or a shader fails to compile, the
   // screen would just stay black. Instead, step down one quality level, remember it, and restart.
   let graphicsFailed = false;
-  const graphicsFailure = (reason) => {
+  const graphicsFailure = (reason, detail = "") => {
     if (graphicsFailed) return;
     graphicsFailed = true;
     const level = QUALITY_LEVELS.indexOf(view.quality);
     const lower = QUALITY_LEVELS[Math.max(0, level - 1)];
     storeQuality(lower);
-    callbacks.current.onGraphicsFailure?.({ reason, from: view.quality, to: lower });
+    callbacks.current.onGraphicsFailure?.({ reason, from: view.quality, to: lower, detail });
   };
+  // A lost graphics context is restored by the browser (and three.js) rather than ending the session.
   const onContextLost = (event) => {
     event.preventDefault();
-    graphicsFailure("memory");
+    console.warn("WebGL context lost; waiting for the browser to restore it.");
   };
   view.renderer.domElement.addEventListener("webglcontextlost", onContextLost);
+  // (No automatic restart or quality change on a shader error: it is only logged.)
   view.renderer.debug.onShaderError = (gl, program, vertexShader, fragmentShader) => {
     console.error(
       "Shader error:",
@@ -127,8 +130,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       gl.getShaderInfoLog(vertexShader),
       gl.getShaderInfoLog(fragmentShader),
     );
-    graphicsFailure("shader");
   };
+
   const { scene, renderer, camera, sun, touchDevice, composer } = view;
   const worldSteps = buildWorldInSteps(scene);
   let worldStep = worldSteps.next();
@@ -994,7 +997,6 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     composer.taa?.beginFrame(camera);
     composer.render();
     composer.taa?.endFrame(camera);
-    checkForBlackScreen();
   }
   // Black-screen watchdog: a short while after the session starts or the quality changes, look at the
   // finished image. A night city always has lit windows and lamps; an image with no light at all means an

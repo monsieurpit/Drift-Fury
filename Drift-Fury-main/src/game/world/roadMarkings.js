@@ -1,3 +1,4 @@
+import { useWorldVarying } from "../render/worldVarying.js";
 // Road markings painted in the road's own shader instead of modelled as thin strips of geometry.
 //
 // A 15 cm line a few centimetres above the asphalt is thinner than a pixel a few dozen metres away: from one
@@ -26,7 +27,6 @@ export function addRoadMarkings(material, { roadXs, roadZs }) {
   const nx = roadXs.length;
   const nz = roadZs.length;
   const declarations = /* glsl */ `
-varying vec3 vMarkWorld;
 const float ROAD_XS[${nx}] = float[${nx}](${glslArray(roadXs)});
 const float ROAD_ZS[${nz}] = float[${nz}](${glslArray(roadZs)});
 float roadPaint;
@@ -112,12 +112,6 @@ void paintRoad(float across, float along, float centre, float wAcross, float wAl
   const previous = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
     previous?.call(material, shader, renderer);
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vMarkWorld;")
-      .replace(
-        "#include <project_vertex>",
-        "#include <project_vertex>\nvMarkWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;",
-      );
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", "#include <common>\n" + declarations)
       .replace("#include <roughnessmap_fragment>", paint)
@@ -126,6 +120,7 @@ void paintRoad(float across, float along, float centre, float wAcross, float wAl
         // A little self-lighting so markings stay readable in the dark between lamps, as before.
         "#include <emissivemap_fragment>\ntotalEmissiveRadiance += roadPaintColor * roadPaint * 0.05;",
       );
+    useWorldVarying(shader, "vMarkWorld");
   };
   const key = material.customProgramCacheKey?.() ?? "";
   material.customProgramCacheKey = () => key + "|road-markings";

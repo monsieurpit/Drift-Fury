@@ -11,6 +11,7 @@
 // The light list and the cells are two small float textures, rebuilt on the CPU: the world's lights when
 // the camera has moved by a cell, the moving lights (cars) every frame on top of those.
 import { DataTexture, FloatType, NearestFilter, RGBAFormat, Vector2 } from "three";
+import { useWorldVarying } from "./worldVarying.js";
 
 const CELL = 8; // metres
 const GRID = 36; // cells per side: 288 m around the camera
@@ -30,27 +31,8 @@ uniform sampler2D clusterLights; // ${MAX_LIGHTS} x ${ROWS}: position+range, col
 uniform sampler2D clusterCells; // ${GRID * TEXELS_PER_CELL} x ${GRID}: light indices, 4 per texel, -1 ends the list
 uniform vec2 clusterOrigin; // world x, z of the grid's corner
 uniform float clusterEnabled;
-varying vec3 vClusterWorld;
 `;
 
-const VERTEX_DECLARATIONS = /* glsl */ `
-varying vec3 vClusterWorld;
-`;
-// (Before fog_vertex rather than after project_vertex: some materials replace project_vertex, like the
-// tyre smoke's billboards.)
-const VERTEX = /* glsl */ `
-{
-  vec4 clusterWorld = vec4(transformed, 1.0);
-  #ifdef USE_BATCHING
-    clusterWorld = batchingMatrix * clusterWorld;
-  #endif
-  #ifdef USE_INSTANCING
-    clusterWorld = instanceMatrix * clusterWorld;
-  #endif
-  vClusterWorld = (modelMatrix * clusterWorld).xyz;
-}
-#include <fog_vertex>
-`;
 
 // `skipFlags`: lights with any of these flags are left out (the ground skips the lamps it has baked).
 function lighting(skipFlags) {
@@ -100,7 +82,8 @@ if (clusterEnabled > 0.5) {
  * A light: { x, y, z, color (three Color, linear), intensity, range, flags = 0,
  *            direction: [x, y, z] (a spot light) or null (a point light), cosOuter, cosInner }.
  */
-export function createClusteredLights() {
+/** `enabled: false`: a device whose GPU could not compile these shaders (patching does nothing). */
+export function createClusteredLights({ enabled = true } = {}) {
   const lightData = new Float32Array(MAX_LIGHTS * ROWS * 4);
   const lightTexture = new DataTexture(lightData, MAX_LIGHTS, ROWS, RGBAFormat, FloatType);
   const cellData = new Float32Array(GRID * TEXELS_PER_CELL * GRID * 4).fill(-1);
@@ -283,18 +266,16 @@ export function createClusteredLights() {
      * some lights out (the ground passes LIGHT_LAMP: it has the lamps baked in).
      */
     patch(material, { skipFlags = 0 } = {}) {
-      if (patched.has(material)) return material;
+      if (!enabled || patched.has(material)) return material;
       patched.add(material);
       const previous = material.onBeforeCompile;
       material.onBeforeCompile = (shader, renderer) => {
         previous?.call(material, shader, renderer);
         Object.assign(shader.uniforms, uniforms);
-        shader.vertexShader = shader.vertexShader
-          .replace("#include <common>", "#include <common>\n" + VERTEX_DECLARATIONS)
-          .replace("#include <fog_vertex>", VERTEX);
         shader.fragmentShader = shader.fragmentShader
           .replace("#include <common>", "#include <common>\n" + DECLARATIONS)
           .replace("#include <lights_fragment_end>", lighting(skipFlags));
+        useWorldVarying(shader, "vClusterWorld");
       };
       const key = material.customProgramCacheKey?.() ?? "";
       material.customProgramCacheKey = () => key + "|cluster" + skipFlags;

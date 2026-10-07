@@ -34,6 +34,11 @@ function GraphicsFailure({ failure, onRestart }) {
           {failure.reason === "memory" ? t("failure.memory", { from }) : t("failure.unsupported", { from })}
           {from === to ? t("failure.restarting") : t("failure.stepDown", { to })}
         </p>
+        {failure.detail && (
+          <p className="mt-4 max-w-2xl break-words text-[10px] leading-5 text-[#8f989b]">
+            {t("failure.detail")} {String(failure.detail).slice(0, 400)}
+          </p>
+        )}
         <button onClick={onRestart} className="lime-button mt-6 px-5 py-4 text-[13px]">
           {t("failure.restartNow")}
         </button>

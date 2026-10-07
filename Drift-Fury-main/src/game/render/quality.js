@@ -101,7 +101,8 @@ export function resolveQuality(choice = storedQuality()) {
 // Effects found to break rendering on this device (a black image), so they stay off here. Found by the
 // session's black-screen watchdog, which turns suspects off one at a time until the image comes back.
 // (v2: marks made before a lamp-lighting bug that blacked out frames was fixed are discarded.)
-const BROKEN_KEY = "drift-fury-broken-features-v2";
+// (v3: forgets the features the old black-screen watchdog had turned off.)
+const BROKEN_KEY = "drift-fury-broken-features-v3";
 
 /** Suspects, in the order the watchdog tries them, with how the pause menu names them. */
 export const FEATURE_LABELS = {
@@ -110,6 +111,7 @@ export const FEATURE_LABELS = {
   ao: t("feature.ao"),
   grading: t("feature.grading"),
   shadows: t("feature.shadows"),
+  lights: t("feature.lights"),
 };
 
 /** The set of features marked broken on this device. */

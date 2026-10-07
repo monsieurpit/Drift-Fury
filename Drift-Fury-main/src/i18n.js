@@ -6,6 +6,8 @@
 // falls back to English. LOCALE formats numbers the local way.
 
 const en = {
+  "feature.lights": "Many real lights (back to the nearest street lamps)",
+  "failure.detail": "Error reported by the graphics chip:",
   "lang.name": "English",
   // Garage
   "garage.eyebrow": "THE GARAGE / FREE ROAM",
@@ -199,6 +201,8 @@ const en = {
 };
 
 const fr = {
+  "feature.lights": "Éclairage multiple (retour aux lampadaires les plus proches)",
+  "failure.detail": "Erreur signalée par la puce graphique :",
   "lang.name": "Français",
   "garage.eyebrow": "LE GARAGE / SESSION LIBRE",
   "garage.title1": "LA NUIT VOUS ",
@@ -380,6 +384,8 @@ const fr = {
 };
 
 const es = {
+  "feature.lights": "Muchas luces reales (vuelta a las farolas más cercanas)",
+  "failure.detail": "Error indicado por el chip gráfico:",
   "lang.name": "Español",
   "garage.eyebrow": "EL GARAJE / MODO LIBRE",
   "garage.title1": "LA NOCHE ES ",
@@ -556,6 +562,8 @@ const es = {
 };
 
 const de = {
+  "feature.lights": "Viele echte Lichter (zurück zu den nächsten Laternen)",
+  "failure.detail": "Vom Grafikchip gemeldeter Fehler:",
   "lang.name": "Deutsch",
   "garage.eyebrow": "DIE GARAGE / FREIES SPIEL",
   "garage.title1": "DIE NACHT ",
@@ -732,6 +740,8 @@ const de = {
 };
 
 const pt = {
+  "feature.lights": "Muitas luzes reais (volta aos postes mais próximos)",
+  "failure.detail": "Erro informado pelo chip gráfico:",
   "lang.name": "Português",
   "garage.eyebrow": "A GARAGEM / MODO LIVRE",
   "garage.title1": "A NOITE É ",
@@ -908,6 +918,8 @@ const pt = {
 };
 
 const it = {
+  "feature.lights": "Molte luci reali (ritorno ai lampioni più vicini)",
+  "failure.detail": "Errore segnalato dal chip grafico:",
   "lang.name": "Italiano",
   "garage.eyebrow": "IL GARAGE / MODALITÀ LIBERA",
   "garage.title1": "LA NOTTE È ",
