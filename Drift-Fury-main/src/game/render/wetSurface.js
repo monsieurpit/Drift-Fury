@@ -39,7 +39,7 @@ const MASK = /* glsl */ `
 
 const ROUGHNESS = /* glsl */ `
 #include <roughnessmap_fragment>
-roughnessFactor = mix(roughnessFactor, 0.32, wetness);
+roughnessFactor = mix(roughnessFactor, 0.4, wetness);
 `;
 
 const NORMAL = /* glsl */ `
@@ -50,9 +50,11 @@ normal = normalize(mix(normal, nonPerturbedNormal, wetPuddle));
 
 const FILM = /* glsl */ `
 #include <lights_physical_fragment>
-// The water film: a clear coat that is glassy in puddles and a soft sheen where the road is only damp.
-material.clearcoat = max(material.clearcoat, wetness);
-material.clearcoatRoughness = mix(material.clearcoatRoughness, 0.0525 + geometryRoughness, max(wetPuddle, wetness * 0.6));
+// The water film: a clear coat that reflects softly in puddles (a little blurred, like real rain water
+// with its ripples and grime, not a mirror) and gives a soft sheen where the road is only damp.
+material.clearcoat = max(material.clearcoat, wetness * 0.7);
+material.clearcoatRoughness = mix(material.clearcoatRoughness, 0.15 + geometryRoughness, wetPuddle);
+material.clearcoatRoughness = mix(material.clearcoatRoughness, 0.3, (wetness - wetPuddle) * 0.6);
 // Specular antialiasing: where one pixel covers many bumps of the asphalt's normal map (any distance past a
 // few metres), its reflection is widened by how much the normal varies across the pixel, so the shiny wet
 // road shows a stable sheen instead of single sparkling pixels that blink from frame to frame (and that the
