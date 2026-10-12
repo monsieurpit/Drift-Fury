@@ -32,9 +32,9 @@ function stainTexture(seed, satellites) {
   const context = canvas.getContext("2d");
   const blob = (x, y, radius, alpha) => {
     const gradient = context.createRadialGradient(x, y, 0, x, y, radius);
-    gradient.addColorStop(0, `rgba(92, 4, 6, ${alpha})`);
-    gradient.addColorStop(0.7, `rgba(120, 8, 10, ${alpha})`);
-    gradient.addColorStop(1, "rgba(120, 8, 10, 0)");
+    gradient.addColorStop(0, `rgba(150, 10, 12, ${alpha})`);
+    gradient.addColorStop(0.7, `rgba(178, 16, 18, ${alpha})`);
+    gradient.addColorStop(1, "rgba(178, 16, 18, 0)");
     context.fillStyle = gradient;
     context.beginPath();
     context.arc(x, y, radius, 0, Math.PI * 2);
@@ -53,8 +53,8 @@ function stainTexture(seed, satellites) {
   }
   // Clotting: a darker, thicker middle.
   const core = context.createRadialGradient(c, c, 0, c, c, size * 0.2);
-  core.addColorStop(0, "rgba(40, 0, 2, 0.55)");
-  core.addColorStop(1, "rgba(40, 0, 2, 0)");
+  core.addColorStop(0, "rgba(70, 0, 3, 0.45)");
+  core.addColorStop(1, "rgba(70, 0, 3, 0)");
   context.fillStyle = core;
   context.fillRect(0, 0, size, size);
   const texture = new CanvasTexture(canvas);
@@ -68,12 +68,15 @@ function decalMaterial(map) {
     color: "#ffffff",
     transparent: true,
     depthWrite: false,
-    roughness: 0.12,
+    // Glossy like fresh blood, but not a mirror: reflecting the city as strongly as the wet asphalt
+    // around it, it vanished into the road from low angles.
+    roughness: 0.22,
     metalness: 0,
+    envMapIntensity: 0.3,
     // Drawn over the road and sidewalk without fighting them for depth.
     polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -4,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -8,
   });
 }
 
@@ -82,7 +85,7 @@ function decalMaterial(map) {
  * Returns { spray(position, velocity, amount), pool(x, z), update(dt) }.
  */
 export function createBlood(scene, groundAt, { patch } = {}) {
-  const dropMaterial = new MeshStandardMaterial({ color: "#5a0306", roughness: 0.2, metalness: 0 });
+  const dropMaterial = new MeshStandardMaterial({ color: "#8a0a0c", roughness: 0.22, metalness: 0, envMapIntensity: 0.3 });
   patch?.(dropMaterial);
   const drops = new InstancedMesh(new IcosahedronGeometry(0.022, 0), dropMaterial, MAX_DROPS);
   drops.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -118,7 +121,7 @@ export function createBlood(scene, groundAt, { patch } = {}) {
   const matrix = new Matrix4();
 
   function addSplat(x, z, size) {
-    dummy.position.set(x, groundAt(x, z) + 0.004, z);
+    dummy.position.set(x, groundAt(x, z) + 0.012, z);
     dummy.rotation.set(0, Math.random() * Math.PI * 2, 0);
     dummy.scale.set(size * (0.7 + Math.random() * 0.6), 1, size);
     dummy.updateMatrix();
@@ -190,7 +193,7 @@ export function createBlood(scene, groundAt, { patch } = {}) {
         pool.size += (pool.target - pool.size) * (1 - Math.exp(-0.35 * dt));
         matrix.makeRotationY(pool.angle);
         matrix.scale(new Vector3(pool.size * 1.25, 1, pool.size));
-        matrix.setPosition(pool.x, groundAt(pool.x, pool.z) + 0.003, pool.z);
+        matrix.setPosition(pool.x, groundAt(pool.x, pool.z) + 0.009, pool.z);
         pools.setMatrixAt(i, matrix);
       }
       pools.count = poolList.length;

@@ -12,6 +12,7 @@ import { Color, Frustum, InstancedMesh, Matrix4, Object3D, Sphere, Box3 } from "
 
 const LIGHT_NAMES = new Set(["blue", "red"]);
 const WHITE = new Color(1, 1, 1);
+const MAX_DISTANCE = 200; // metres
 
 export function createCarInstancer(scene, { onMesh } = {}) {
   const looks = new Map(); // template -> { parts, handles, sphere, capacity }
@@ -21,6 +22,7 @@ export function createCarInstancer(scene, { onMesh } = {}) {
   const sphere = new Sphere();
 
   function makeParts(look) {
+    look.dirty = true;
     for (const part of look.parts) {
       if (part.mesh) {
         scene.remove(part.mesh);
@@ -40,7 +42,7 @@ export function createCarInstancer(scene, { onMesh } = {}) {
       if (part.paint) mesh.setColorAt(0, WHITE);
       part.mesh = mesh;
       scene.add(mesh);
-      onMesh?.(mesh);
+      onMesh?.(mesh, look.template);
     }
   }
 
@@ -69,7 +71,7 @@ export function createCarInstancer(scene, { onMesh } = {}) {
     });
     const bounds = new Box3().setFromObject(template);
     const local = bounds.applyMatrix4(rootInverse).getBoundingSphere(new Sphere());
-    look = { parts, handles: new Set(), sphere: local, capacity: 4 };
+    look = { template, parts, handles: new Set(), sphere: local, capacity: 4, seen: [], dirty: true };
     makeParts(look);
     looks.set(template, look);
     return look;
@@ -109,13 +111,48 @@ export function createCarInstancer(scene, { onMesh } = {}) {
         frustum.setFromProjectionMatrix(viewProjection);
       }
       for (const look of looks.values()) {
-        for (const part of look.parts) part.mesh.count = 0;
+        // Parked cars rarely move: a look is only rewritten (and its instances re-uploaded) when one of
+        // its cars moved, came into or went out of view, or switched its lights.
+        let changed = look.dirty || !camera;
+        look.dirty = !camera; // (a capture keeps every car: rewrite again on the next frame)
+        const seen = look.seen;
+        let entries = 0;
         for (const handle of look.handles) {
           if (!handle.visible) continue;
           handle.updateMatrix();
+          const elements = handle.matrix.elements;
+          const last = (handle.userData.lastMatrix ||= new Float64Array(16).fill(NaN));
+          for (let k = 0; k < 16; k++) {
+            if (last[k] !== elements[k]) {
+              last[k] = elements[k];
+              changed = true;
+            }
+          }
           handle.matrixWorld.copy(handle.matrix);
           sphere.copy(look.sphere).applyMatrix4(handle.matrix);
-          const inView = !camera || frustum.intersectsSphere(sphere);
+          // (Not drawn beyond MAX_DISTANCE: a few pixels there.)
+          const inView =
+            !camera ||
+            (frustum.intersectsSphere(sphere) &&
+              sphere.center.distanceToSquared(camera.position) < MAX_DISTANCE * MAX_DISTANCE);
+          const code = (inView ? 1 : 0) | (handle.userData.blue ? 2 : 0) | (handle.userData.red ? 4 : 0);
+          if (seen[entries] !== handle || seen[entries + 1] !== code) {
+            seen[entries] = handle;
+            seen[entries + 1] = code;
+            changed = true;
+          }
+          entries += 2;
+          handle.userData.inView = inView;
+        }
+        if (seen.length !== entries) {
+          seen.length = entries;
+          changed = true;
+        }
+        if (!changed) continue;
+        for (const part of look.parts) part.mesh.count = 0;
+        for (const handle of look.handles) {
+          if (!handle.visible) continue;
+          const inView = handle.userData.inView;
           for (const part of look.parts) {
             if (!part.proxy && !inView) continue;
             if (part.light && !handle.userData[part.light]) continue;

@@ -87,7 +87,7 @@ export function trafficTemplate(color, shape, police = false) {
   let template = trafficTemplates.get(key);
   if (!template) {
     template = buildCar("#ffffff", shape, police);
-    template.userData = {};
+    template.userData = { police };
     batchStaticMeshes(template, new Set(), Infinity);
     const proxy = shadowProxy(template);
     template.traverse((object) => {

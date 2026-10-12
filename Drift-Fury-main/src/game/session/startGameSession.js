@@ -247,8 +247,10 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   // Moving things get motion vectors for the temporal antialiasing (taaPass.js).
   const trackMotion = (object) => composer.taa?.track(object);
   const carInstancer = createCarInstancer(scene, {
-    onMesh: (mesh) => {
-      trackMotion(mesh);
+    onMesh: (mesh, template) => {
+      // Only the police cruisers move: parked cars need no motion vectors (their motion on screen is the
+      // camera's, which the antialiasing reprojects from depth), and so no second draw every frame.
+      if (template?.userData?.police) trackMotion(mesh);
       clusteredLights.patchAll(mesh);
     },
   });

@@ -18,6 +18,7 @@ const GRID = 36; // cells per side: 288 m around the camera
 const PER_CELL = 16; // lights per cell at most (the strongest at the cell are kept)
 const TEXELS_PER_CELL = PER_CELL / 4;
 const MAX_LIGHTS = 512;
+const MIN_VISIBLE = 0.012; // irradiance below which a light makes no visible difference (a lamp pool is ~9)
 const ROWS = 4; // texels per light, one row each
 // Lights fade out with distance from the camera, so the edge of the grid never shows.
 const FADE_START = 80;
@@ -48,9 +49,11 @@ if (clusterEnabled > 0.5) {
         float id = ids[k];
         if (id < 0.0) { listEnded = true; break; }
         int index = int(id);
-        vec4 positionRange = texelFetch(clusterLights, ivec2(index, 0), 0);
+        // The cheap tests first (a lamp the ground has baked in, a light out of range), before reading
+        // the rest of the light.
         vec4 colourFlags = texelFetch(clusterLights, ivec2(index, 1), 0);
         ${skipFlags ? `if ((int(colourFlags.w) & ${skipFlags}) != 0) continue;` : ""}
+        vec4 positionRange = texelFetch(clusterLights, ivec2(index, 0), 0);
         vec3 toLight = (viewMatrix * vec4(positionRange.xyz, 1.0)).xyz - geometryPosition;
         float distanceSquared = dot(toLight, toLight);
         float range = positionRange.w;
@@ -176,7 +179,12 @@ export function createClusteredLights({ enabled = true } = {}) {
         const cx = Math.max(x0 + i * CELL, Math.min(light.x, x0 + (i + 1) * CELL)) - light.x;
         const d2 = cx * cx + cz * cz;
         if (d2 > range2) continue;
-        insert(ids, scores, j * GRID + i, id, light.intensity / Math.max(d2 + 1, 1));
+        // Its strongest possible light in this cell (falloff and range window as in the shader); a light
+        // too faint to see anywhere in the cell is left out, so no pixel there spends time on it.
+        const window = 1 - (d2 * d2) / (range2 * range2);
+        const score = (light.intensity * window * window) / Math.max(d2, 1);
+        if (score < MIN_VISIBLE) continue;
+        insert(ids, scores, j * GRID + i, id, score);
       }
     }
   }
