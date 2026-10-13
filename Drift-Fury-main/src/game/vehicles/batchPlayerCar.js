@@ -28,7 +28,9 @@ export function batchPlayerCar(car) {
 
   car.updateMatrixWorld(true);
   const parts = [];
-  for (const axle of [data.wheels.slice(0, 2), data.wheels.slice(2, 4)]) {
+  // (Model cars' left and right wheels are different meshes: they keep their own, drawn as they are.)
+  const axles = data.separateWheels ? [] : [data.wheels.slice(0, 2), data.wheels.slice(2, 4)];
+  for (const axle of axles) {
     if (axle.length < 2) continue;
     const [first] = axle;
     const firstInverse = first.matrixWorld.clone().invert();

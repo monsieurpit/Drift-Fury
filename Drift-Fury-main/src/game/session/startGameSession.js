@@ -31,6 +31,7 @@ import { batchPlayerCar } from "../vehicles/batchPlayerCar.js";
 import { buildCar } from "../vehicles/carModel.js";
 import { trafficTemplate, trafficTemplates } from "../vehicles/trafficCars.js";
 import { createCarInstancer } from "../vehicles/carInstancing.js";
+import { buildModelCar, carModelKey, loadCarModels } from "../vehicles/carModels.js";
 import { buildWorldInSteps } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
 import { loadStreetProps, placeStreetProps } from "../world/streetProps.js";
@@ -175,6 +176,13 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     lightByLamps,
     heightAt: terrainHeight,
   });
+  // Real 3D car models for the parked and police cars (carModels.js).
+  await stage(0.36, t("stage.vehicles"));
+  await loadCarModels();
+  if (loading.cancelled()) {
+    cleanup.forEach((dispose) => dispose());
+    throw CANCELLED;
+  }
   await stage(0.36, t("stage.geometry"));
   const staticBatch = batchStaticMeshes(scene, new Set(signals.flatMap((signal) => signal.lenses)), 96);
   // Everything in the scene so far is the world, which never moves: its shadows can be cached.
@@ -277,7 +285,14 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       e.geometry?.dispose();
       e.material?.dispose();
     });
-    playerCar = batchPlayerCar(buildCar(vehicle.color, vehicle.shape, vehicle.kind === "police", true));
+    // A parked or police car taken by the player keeps its real model (carModels.js); the garage cars are
+    // the ones built from code.
+    const modelKey = vehicle.kind === "player" ? null : carModelKey(vehicle.shape, vehicle.kind === "police");
+    playerCar = batchPlayerCar(
+      modelKey
+        ? buildModelCar(modelKey, { player: true, color: vehicle.color })
+        : buildCar(vehicle.color, vehicle.shape, vehicle.kind === "police", true),
+    );
     clusteredLights.patchAll(playerCar);
     scene.add(playerCar);
     trackMotion(playerCar);

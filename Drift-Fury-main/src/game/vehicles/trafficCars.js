@@ -3,6 +3,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
 import { SHADOW_ONLY_LAYER } from "../render/shadowCache.js";
 import { buildCar } from "./carModel.js";
+import { buildModelCar, carModelKey } from "./carModels.js";
 /* traffic and police cars never animate their parts, so each look is built and batched once, then cloned */
 export const trafficTemplates = new Map();
 
@@ -86,7 +87,9 @@ export function trafficTemplate(color, shape, police = false) {
   const key = (police ? "police" : "traffic") + "|" + shape;
   let template = trafficTemplates.get(key);
   if (!template) {
-    template = buildCar("#ffffff", shape, police);
+    // The real 3D model for this shape (carModels.js) when there is one, else the car built from code.
+    const modelKey = carModelKey(shape, police);
+    template = modelKey ? buildModelCar(modelKey) : buildCar("#ffffff", shape, police);
     template.userData = { police };
     batchStaticMeshes(template, new Set(), Infinity);
     const proxy = shadowProxy(template);
