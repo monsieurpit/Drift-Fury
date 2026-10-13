@@ -120,6 +120,6 @@ export function buildStreetLights(world) {
     }
   }
   // Warm LED glow in the humid night air.
-  addHalos(scene, heads, { color: "#ffd9a8", size: 2.6, intensity: 0.5 });
-  addLightCones(scene, heads, { color: "#ffd9a8", height: 7.2, radius: 3.6, intensity: 0.2 });
+  addHalos(scene, heads, { color: "#ffd9a8", size: 2.9, intensity: 0.6 });
+  addLightCones(scene, heads, { color: "#ffd9a8", height: 7.2, radius: 3.6, intensity: 0.26 });
 }

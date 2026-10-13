@@ -724,5 +724,5 @@ export function buildGasStations(world) {
     coolerProducts.instanceMatrix.needsUpdate = true;
     scene.add(coolerProducts);
   }
-  addHalos(scene, lightHalos, { color: "#ffe7b5", size: 1.8, intensity: 0.35 });
+  addHalos(scene, lightHalos, { color: "#ffe7b5", size: 2.0, intensity: 0.42 });
 }

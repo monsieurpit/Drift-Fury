@@ -23,6 +23,8 @@ import {
   ShaderMaterial,
   UniformsUtils,
   WebGLRenderTarget,
+  FogExp2,
+  ShaderChunk,
 } from "three";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { VignetteShader } from "three/addons/shaders/VignetteShader.js";
@@ -203,6 +205,19 @@ export function gamePixelRatio(width, height, touchDevice = false, quality = res
   const fit = Math.sqrt(budget / Math.max(1, width * height));
   return Math.max(0.75, Math.min(window.devicePixelRatio || 1, cap, fit));
 }
+/*
+ * Night mist: the city's humid night air. Light fades into it exponentially with distance (a few metres
+ * clear around the camera, about a third of the way to the mist colour at 100 m, never quite all the way,
+ * so the mountain's silhouette stays faintly visible), coloured by the city's glow. It replaces three.js's
+ * exponential-fog formula (no new shader inputs: phones and tablets have few to spare).
+ */
+const MIST_COLOUR = "#2a3b49";
+const MIST_DENSITY = 0.0042; // per metre
+ShaderChunk.fog_fragment = ShaderChunk.fog_fragment.replace(
+  "float fogFactor = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );",
+  "float fogFactor = 0.9 * ( 1.0 - exp( - fogDensity * max( vFogDepth - 6.0, 0.0 ) ) );",
+);
+
 export function createRenderer(container, inGame = false) {
   let quality = resolveQuality();
   const lowPower = inGame
@@ -210,7 +225,8 @@ export function createRenderer(container, inGame = false) {
     : !!(navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
   const scene = new Scene();
   scene.background = new Color(inGame ? "#070b14" : "#0d1520");
-  scene.fog = new Fog(inGame ? "#223a4d" : "#35506b", inGame ? 130 : 74, inGame ? 1050 : 980);
+  // In the game: the humid night air (see NIGHT_MIST); the garage keeps its plain distance fog.
+  scene.fog = inGame ? new FogExp2(MIST_COLOUR, MIST_DENSITY) : new Fog("#35506b", 74, 980);
   const renderer = new WebGLRenderer({
     // every frame goes through the composer, whose render targets are multisampled; the canvas only
     // receives a fullscreen copy, so a multisampled default framebuffer would cost bandwidth for nothing
