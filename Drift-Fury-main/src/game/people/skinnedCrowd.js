@@ -135,8 +135,8 @@ export function createSkinnedCrowd(scene, capacity, { onMesh } = {}) {
   const people = [];
   let frame = 0;
   return {
-    add(random) {
-      const type = types[Math.floor(random() * types.length)];
+    add(random, file = null) {
+      const type = types.find((t) => t.file === file) || types[Math.floor(random() * types.length)];
       const rig = new Group();
       const model = cloneSkinned(type.scene);
       rig.add(model);
@@ -146,12 +146,7 @@ export function createSkinnedCrowd(scene, capacity, { onMesh } = {}) {
       model.traverse((object) => {
         if (object.isBone) bones.set(object.name, object);
         if (object.isSkinnedMesh) {
-          // Culled with a generous sphere around the standing (bind) pose, wide enough for a person
-          // lying in the street, so nobody off-screen is skinned and drawn (in the view or the shadows).
-          object.geometry.boundingSphere || object.geometry.computeBoundingSphere();
-          const bind = object.geometry.boundingSphere;
-          object.boundingSphere = new Sphere(bind.center.clone(), bind.radius * 1.8);
-          object.frustumCulled = true;
+          object.frustumCulled = false; // (until its whole-person sphere is set, below)
           object.castShadow = true;
           object.receiveShadow = true;
           onMesh?.(object);
@@ -172,6 +167,16 @@ export function createSkinnedCrowd(scene, capacity, { onMesh } = {}) {
       model.position.z -= centre.z;
       model.position.y -= box.min.y;
       model.updateMatrixWorld(true);
+      // Every part of the person (body, hair, clothes) is culled with the same sphere around the whole
+      // person, wide enough for them lying in the street or flung: no part is ever hidden on its own.
+      const personSphere = new Sphere(new Vector3(0, 0.9, 0), 2.4);
+      model.traverse((object) => {
+        if (!object.isSkinnedMesh) return;
+        const toLocal = object.matrixWorld.clone().invert();
+        const sphere = personSphere.clone().applyMatrix4(toLocal);
+        object.boundingSphere = sphere;
+        object.frustumCulled = true;
+      });
 
       // The controls, and for each controlled bone its rest rotation and its parent's rest orientation in
       // the person's frame (to turn a control rotation into a bone rotation).

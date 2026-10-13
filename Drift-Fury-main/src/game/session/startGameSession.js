@@ -270,7 +270,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const policeCars = game.state.police.map(() => {
     return carInstancer.add(trafficTemplate("#ffffff", "coupe", true));
   });
-  const playerPerson = createPerson("#2f3b4c");
+  let playerPerson = createPerson("#2f3b4c");
   playerPerson.visible = false;
   scene.add(playerPerson);
   trackMotion(playerPerson);
@@ -479,6 +479,15 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     count: pedestrianCount,
   });
   if (debugSession) debugSession.pedestrians = pedestrians;
+  // The player is a scanned person too (the one built from shapes if the scans could not load).
+  if (peopleModels) {
+    const scanned = crowd.add(Math.random, "eric");
+    scanned.visible = false;
+    scene.remove(playerPerson);
+    composer.taa?.untrack(playerPerson);
+    playerPerson = scanned;
+    trackMotion(playerPerson);
+  }
   // The player's low beams shine from above the car (see carModel.js), which throws a broad pool down the
   // road but also floods a wall right in front of the car far brighter than real headlights would (they
   // sit at bumper height and aim down). With a wall close ahead the beams are turned down smoothly.

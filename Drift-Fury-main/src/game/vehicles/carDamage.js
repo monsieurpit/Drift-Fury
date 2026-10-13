@@ -15,7 +15,7 @@ import {
   Vector3,
 } from "three";
 
-const MAX_DENT = 0.24; // m: a panel is never pushed in further than this in total
+const MAX_DENT = 0.4; // m: a panel is never pushed in further than this in total
 const MAX_CRACKS = 4;
 
 let crackMaterial = null;
@@ -180,7 +180,8 @@ export function createCarDamage(car) {
         p.fromBufferAttribute(positions, i).applyMatrix4(toCar);
         const d = p.distanceTo(point);
         if (d >= radius) continue;
-        const fall = 1 - d / radius;
+        const ratio = d / radius;
+        const fall = 1 - ratio * ratio; // (a wide crumple, fading out at its edge)
         const crumple = 0.7 + 0.6 * hash3(p.x, p.y, p.z);
         let amount = depth * fall * fall * crumple;
         amount = Math.min(amount, MAX_DENT - total[i]);
@@ -208,6 +209,18 @@ export function createCarDamage(car) {
         geometry.computeBoundingSphere();
       }
     }
+  }
+
+  /** The first body surface (car-local) on a ray going in along `direction` through `point`'s line. */
+  function surfaceToward(point, direction) {
+    car.updateMatrixWorld(true);
+    const from = point.clone().addScaledVector(direction, -4);
+    const origin = car.localToWorld(from.clone());
+    const towards = car.localToWorld(from.clone().add(direction)).sub(origin).normalize();
+    raycaster.set(origin, towards);
+    raycaster.far = 4 + half.length() * 2;
+    const hit = raycaster.intersectObjects(bodies, false).find((h) => !isGlass(h.object.material) && h.object.visible);
+    return hit ? car.worldToLocal(hit.point.clone()) : null;
   }
 
   function breakLights(end, side) {
@@ -269,12 +282,14 @@ export function createCarDamage(car) {
       if (length < 1e-6 || strength < 0.12) return { lights: [], glass: false };
       const dx = sideX / length;
       const dz = sideZ / length;
-      // Where the impact meets the body's outline.
+      const direction = new Vector3(-dx, 0, -dz);
+      // Where the impact meets the bodywork: the first surface on the way in from that side.
       const t = Math.min(half.x / Math.max(Math.abs(dx), 1e-3), half.z / Math.max(Math.abs(dz), 1e-3));
       const point = new Vector3(centre.x + dx * t, centre.y - half.y * 0.15, centre.z + dz * t);
-      const direction = new Vector3(-dx, 0, -dz);
+      const surface = surfaceToward(point, direction);
+      if (surface) point.copy(surface);
       const s = Math.min(strength, 1.5);
-      dent(point, direction, 0.04 + s * 0.11, 0.55 + s * 0.4);
+      dent(point, direction, 0.07 + s * 0.17, 0.55 + s * 0.45);
       const lights = [];
       // Corners: front (-Z) or rear, and which side.
       const end = point.z < centre.z - half.z * 0.6 ? "front" : point.z > centre.z + half.z * 0.6 ? "rear" : null;
