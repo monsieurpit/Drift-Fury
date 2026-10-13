@@ -125,7 +125,7 @@ export function createHelicopter(scene) {
   const beamGeometry = new ConeGeometry(1, 1, 32, 1, true);
   beamGeometry.translate(0, -0.5, 0); // apex at the origin, opening down -Y
   const beamMaterial = new ShaderMaterial({
-    uniforms: { colour: { value: BEAM_COLOUR }, strength: { value: 0.16 } },
+    uniforms: { colour: { value: BEAM_COLOUR }, strength: { value: 0.2 } },
     vertexShader: /* glsl */ `
       varying vec3 vNormalView;
       varying vec3 vToEye;
@@ -208,7 +208,7 @@ export function createHelicopter(scene) {
         direction: [axis.x, axis.y, axis.z],
         cosOuter: Math.cos(Math.atan((radius + 0.8) / 14)),
         cosInner: Math.cos(Math.atan((radius * 0.55) / 14)),
-        intensity: 1400,
+        intensity: 480,
         range: 24,
         colour: BEAM_COLOUR,
       };
