@@ -223,6 +223,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         sun,
         staticBatch,
         solids,
+        controls,
         get state() {
           return game.state;
         },
