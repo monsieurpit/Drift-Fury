@@ -407,7 +407,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
             // Only a car actually on course to hit them (its path passes through where they stand, within
             // about a second) is a threat: a car driving past, even close, is not.
             const time = (dx * car.vx + dz * car.vz) / (speed * speed);
-            if (time > 0 && time < 1.1) {
+            if (time > 0 && time < 2.0) {
               const missX = dx - car.vx * time;
               const missZ = dz - car.vz * time;
               const miss = Math.hypot(missX, missZ);
@@ -427,17 +427,31 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           threat = { car: hitBy.car, missX: Math.cos(hitBy.car.heading) * sideSign, missZ: -Math.sin(hitBy.car.heading) * sideSign };
           if (!ped.scared) events.push({ type: "hurt", ped, x: ped.x, z: ped.z });
         }
-        // People take a moment to notice and react (about a third of a second), then jump out of the way:
-        // a quick dodge, not a run, and a scream only for a really close call.
+        // Like real people, they need time to notice a car coming at them and react: 0.75 to 1.35 s (longer
+        // in the middle of a conversation). Then about a third freeze in the headlights; the others step
+        // hurriedly out of the way (not an instant sprint), screaming only on a really close call. A car
+        // seen coming from far off can be avoided; a fast one out of nowhere usually can't.
         ped.alarm = threat ? (ped.alarm || 0) + dt : 0;
-        if (threat && ped.mode !== "flee" && (ped.alarm > 0.3 || hitBy)) {
+        if (!threat) ped.reaction = undefined;
+        if (threat && ped.reaction === undefined) {
+          ped.reaction = 0.75 + random() * 0.6 + (ped.mode === "talk" ? 0.4 : 0);
+          ped.freezes = random() < 0.33;
+        }
+        if (threat && ped.mode !== "flee" && ped.mode !== "frozen" && (ped.alarm > ped.reaction || hitBy)) {
           endTalk(ped);
-          const length = Math.hypot(threat.missX, threat.missZ) || 1;
-          ped.mode = "flee";
-          ped.fleeX = threat.missX / length;
-          ped.fleeZ = threat.missZ / length;
-          ped.panic = 0.55 + random() * 0.35;
           const closeCall = hitBy || (threat.miss ?? 0) < 0.9;
+          if (ped.freezes && !hitBy) {
+            ped.mode = "frozen";
+            ped.panic = 1.2 + random() * 0.8;
+          } else {
+            const length = Math.hypot(threat.missX, threat.missZ) || 1;
+            ped.mode = "flee";
+            ped.dodging = true;
+            ped.fleeSpeed = 0;
+            ped.fleeX = threat.missX / length;
+            ped.fleeZ = threat.missZ / length;
+            ped.panic = 0.8 + random() * 0.4;
+          }
           if (closeCall && ped.scared <= 0 && random() < 0.5) events.push({ type: "scream", ped, x: ped.x, z: ped.z });
           ped.scared = 4;
         }
@@ -447,9 +461,15 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
         let moveX = 0;
         let moveZ = 0;
         let speed = 0;
-        if (ped.mode === "flee") {
+        if (ped.mode === "frozen") {
+          // Rooted to the spot, staring at the car.
           ped.panic -= dt;
-          speed = 4.6;
+          if (ped.panic <= 0) rejoin(ped);
+        } else if (ped.mode === "flee") {
+          ped.panic -= dt;
+          // A dodge gets going over a few tenths of a second, to a hurried 3 m/s; running from a death, 4.6.
+          ped.fleeSpeed = Math.min(ped.dodging ? 3 : 4.6, (ped.fleeSpeed ?? 4.6) + dt * 7);
+          speed = ped.fleeSpeed;
           moveX = ped.fleeX;
           moveZ = ped.fleeZ;
           if (blocked(ped.x + moveX * 0.6, ped.z + moveZ * 0.6, RADIUS)) {
@@ -635,6 +655,8 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
         const distance = Math.hypot(dx, dz);
         if (distance > radius || distance < 0.01) continue;
         ped.mode = "flee";
+        ped.dodging = false;
+        ped.fleeSpeed = 1.5;
         ped.fleeX = dx / distance;
         ped.fleeZ = dz / distance;
         ped.panic = 2.5 + random() * 3;
