@@ -125,6 +125,8 @@ export function createPerson(clothingColor) {
 }
 export function animatePerson(person, dt, x, z) {
   const data = person.userData;
+  // A scanned, skinned person (skinnedCrowd.js) plays its motion-captured walk and idle instead.
+  if (data.animate) return data.animate(dt, x, z);
   const limbs = data.L;
   if (!limbs || dt <= 0) {
     return;

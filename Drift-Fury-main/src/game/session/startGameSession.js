@@ -3,6 +3,7 @@ import { createAudio } from "../audio/createAudio.js";
 import { createEffects } from "../effects/effects.js";
 import { createBlood } from "../effects/blood.js";
 import { createCrowd } from "../people/crowd.js";
+import { createSkinnedCrowd, loadPeopleModels } from "../people/skinnedCrowd.js";
 import { createPedestrians } from "../people/pedestrians.js";
 import { buildSolidGrid } from "../simulation/collisions.js";
 import { animatePerson, createPerson } from "../people/person.js";
@@ -178,7 +179,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   });
   // Real 3D car models for the parked and police cars (carModels.js).
   await stage(0.36, t("stage.vehicles"));
-  await loadCarModels();
+  const [, peopleModels] = await Promise.all([loadCarModels(), loadPeopleModels()]);
   if (loading.cancelled()) {
     cleanup.forEach((dispose) => dispose());
     throw CANCELLED;
@@ -421,12 +422,17 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   };
   const pedestrianCount = { low: 14, medium: 20, high: 28, ultra: 34 }[view.quality] ?? 20;
   const blood = createBlood(scene, groundAt, { patch: lightByLamps });
-  const crowd = createCrowd(scene, pedestrianCount, {
-    onMesh: (mesh) => {
-      trackMotion(mesh);
-      clusteredLights.patchAll(mesh);
-    },
-  });
+  // Scanned, animated people (skinnedCrowd.js); the people built from shapes if they could not load.
+  const crowd = peopleModels
+    ? createSkinnedCrowd(scene, pedestrianCount, {
+        onMesh: (mesh) => clusteredLights.patchAll(mesh),
+      })
+    : createCrowd(scene, pedestrianCount, {
+        onMesh: (mesh) => {
+          trackMotion(mesh);
+          clusteredLights.patchAll(mesh);
+        },
+      });
   const pedestrians = createPedestrians({
     roadXs: ROAD_XS,
     roadZs: ROAD_ZS,
