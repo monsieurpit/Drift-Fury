@@ -7,7 +7,7 @@
 // through the same limb "controls" as before (body, head, arms, forearms, thighs, shins: rotations in the
 // person's own frame, facing -Z); here they are applied to the matching bones on top of the animation (a
 // nod, a gesture, a look around) or, for a body lying in the street, on top of the standing pose.
-import { AnimationMixer, Box3, Group, Object3D, Quaternion, Vector3 } from "three";
+import { AnimationMixer, Box3, Frustum, Group, Matrix4, Object3D, Quaternion, Sphere, Vector3 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneSkinned } from "three/addons/utils/SkeletonUtils.js";
 
@@ -118,6 +118,11 @@ function retarget(clip, sourceHip, targetHip) {
 }
 
 const q = new Quaternion();
+const viewFrustum = new Frustum();
+const viewMatrix = new Matrix4();
+const eye = new Vector3();
+const near = new Sphere(new Vector3(), 2);
+let viewSet = false;
 const qControl = new Quaternion();
 const qInverse = new Quaternion();
 
@@ -141,7 +146,12 @@ export function createSkinnedCrowd(scene, capacity, { onMesh } = {}) {
       model.traverse((object) => {
         if (object.isBone) bones.set(object.name, object);
         if (object.isSkinnedMesh) {
-          object.frustumCulled = false; // (its bounds are the bind pose's)
+          // Culled with a generous sphere around the standing (bind) pose, wide enough for a person
+          // lying in the street, so nobody off-screen is skinned and drawn (in the view or the shadows).
+          object.geometry.boundingSphere || object.geometry.computeBoundingSphere();
+          const bind = object.geometry.boundingSphere;
+          object.boundingSphere = new Sphere(bind.center.clone(), bind.radius * 1.8);
+          object.frustumCulled = true;
           object.castShadow = true;
           object.receiveShadow = true;
           onMesh?.(object);
@@ -187,6 +197,8 @@ export function createSkinnedCrowd(scene, capacity, { onMesh } = {}) {
       let lastX;
       let lastZ;
       let speed = 0;
+      let pending = 0; // animation time not played yet (person out of view, or far and on an off frame)
+      const slot = people.length;
       // Called by animatePerson (person.js) for a person walking or standing: the animation, by speed.
       rig.userData.animate = (dt, x, z) => {
         if (lastX === undefined || rig.userData.lx === undefined) {
@@ -202,12 +214,29 @@ export function createSkinnedCrowd(scene, capacity, { onMesh } = {}) {
         walk.setEffectiveWeight(walking);
         idle.setEffectiveWeight(1 - walking);
         walk.setEffectiveTimeScale(Math.max(0.4, speed / WALK_SPEED));
-        mixer.update(dt);
+        pending += dt;
+        // Out of view: not animated at all (caught up when seen again). Far away: every other frame.
+        if (viewSet) {
+          near.center.set(x, 0.9, z);
+          const distance = Math.hypot(x - eye.x, z - eye.z);
+          const skip =
+            (distance > 12 && !viewFrustum.intersectsSphere(near)) || (distance > 45 && (frame + slot) % 2 === 1);
+          if (skip) {
+            entry.skipped = true;
+            for (const control of Object.values(L)) control.rotation.set(0, 0, 0);
+            rig.userData.animatedFrame = frame;
+            return;
+          }
+        }
+        entry.skipped = false;
+        mixer.update(pending);
+        pending = 0;
         // The AI's controls this frame start from nothing (gestures are set after this).
         for (const control of Object.values(L)) control.rotation.set(0, 0, 0);
         rig.userData.animatedFrame = frame;
       };
-      people.push({ rig, mixer, walk, idle, controlled });
+      const entry = { rig, mixer, walk, idle, controlled, skipped: false };
+      people.push(entry);
       scene.add(rig);
       return rig;
     },
@@ -215,10 +244,19 @@ export function createSkinnedCrowd(scene, capacity, { onMesh } = {}) {
       const index = people.findIndex((person) => person.rig === rig);
       if (index >= 0) people.splice(index, 1);
     },
+    /** The camera this frame (people out of its view are not animated). */
+    setView(camera) {
+      viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      viewFrustum.setFromProjectionMatrix(viewMatrix);
+      eye.copy(camera.position);
+      viewSet = true;
+    },
     update() {
       for (const person of people) {
         const { rig, mixer, walk, idle, controlled } = person;
         if (!rig.visible) continue;
+        // Not animated this frame: its bones keep last frame's pose (controls included).
+        if (person.skipped && rig.userData.animatedFrame === frame) continue;
         if (rig.userData.animatedFrame !== frame) {
           // Not walking or standing this frame (a body): the standing pose, held, under the controls.
           walk.setEffectiveWeight(0);

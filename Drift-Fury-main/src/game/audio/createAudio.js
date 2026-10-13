@@ -2,6 +2,8 @@ import { createSampleEngine, loadEngineSamples } from "./samples.js";
 import { createSoundEffects } from "./soundEffects.js";
 import { createWorkletEngine } from "./workletEngine.js";
 import { createVoices } from "./voices.js";
+import { createPoliceSounds } from "./policeSounds.js";
+import { createDamageSounds } from "./damageSounds.js";
 export function createAudio(engine) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) {
@@ -13,6 +15,10 @@ export function createAudio(engine) {
       hurt() {},
       murmur() {},
       bodyHit() {},
+      police() {},
+      cuffs() {},
+      scrape() {},
+      glass() {},
       startEngine() {},
       resume() {},
       close() {},
@@ -47,6 +53,14 @@ export function createAudio(engine) {
     }
   }
   const voices = createVoices(context, master, voiceNoise);
+  const policeSounds = createPoliceSounds(context, master, voiceNoise);
+  // (Metal and glass need the high frequencies: white noise.)
+  const whiteNoise = context.createBuffer(1, context.sampleRate, context.sampleRate);
+  {
+    const data = whiteNoise.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  }
+  const damageSounds = createDamageSounds(context, master, whiteNoise);
   let engineVoice = null;
   let closed = false;
   let lastShiftSerial = 0;
@@ -99,6 +113,7 @@ export function createAudio(engine) {
     crash(strength = 1) {
       if (!closed && !muted) {
         soundEffects.crash(strength);
+        damageSounds.crunch(strength);
       }
     },
     /** Pedestrian voices and impacts at `distance` metres, `pan` -1 (left) .. 1 (right). */
@@ -111,6 +126,22 @@ export function createAudio(engine) {
     bodyHit(strength, distance, pan) {
       if (!closed && !muted) voices.bodyHit(strength, distance, pan);
     },
+    /** The siren of the nearest chasing cruiser and the helicopter: { distance, pan } each, or null. */
+    police(sirenAt, heliAt) {
+      if (closed) return;
+      if (muted) policeSounds.silence();
+      else policeSounds.update(sirenAt, heliAt);
+    },
+    cuffs() {
+      if (!closed && !muted) policeSounds.cuffs();
+    },
+    /** Bodywork grinding along something, `level` 0..1 (call every frame; 0 when not). */
+    scrape(level) {
+      if (!closed) damageSounds.scrape(muted ? 0 : level);
+    },
+    glass(strength) {
+      if (!closed && !muted) damageSounds.glass(strength);
+    },
     murmur(female, distance, pan) {
       if (!closed && !muted) voices.murmur(female, distance, pan);
     },
@@ -118,6 +149,8 @@ export function createAudio(engine) {
       if (!closed) {
         closed = true;
         engineVoice?.close();
+        policeSounds.close();
+        damageSounds.close();
         soundEffects.close();
         master.disconnect();
         highpass.disconnect();

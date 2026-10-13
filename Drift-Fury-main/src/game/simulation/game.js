@@ -40,6 +40,11 @@ export const TRAFFIC_COLORS = [
 export const CIVILIAN_SHAPES = ["sedan", "suv", "hatch", "coupe"];
 const WALK_SPEED = 4.6;
 const OFFICER_RUN_SPEED = 4.9;
+const BUSTED_TIME = 4.2; // seconds of the arrest scene (hands up, cuffed) before the result screen
+const HELI_ALTITUDE = 38;
+const HELI_MAX_SPEED = 34; // m/s: a car flat out on the highway can outrun it
+const ESCAPE_BASE = 4; // seconds out of sight to lose the police, plus ESCAPE_PER_STAR per star
+const ESCAPE_PER_STAR = 2.5;
 export function createGame(car, engine, solids, noPolice = false) {
   const state = {
     ...INITIAL_HUD,
@@ -68,6 +73,13 @@ export function createGame(car, engine, solids, noPolice = false) {
     store: -1,
     shop: -1,
     arrestTimer: 0,
+    busted: 0,
+    heli: null,
+    roadblock: null,
+    roadblockCooldown: 0,
+    speedingCooldown: 0,
+    stoppedFor: 0,
+    escapeNeeded: ESCAPE_BASE + ESCAPE_PER_STAR,
     _fPrev: false,
     nextVid: 1,
     noPolice: !!noPolice,
@@ -149,10 +161,19 @@ export function createGame(car, engine, solids, noPolice = false) {
     }
     return false;
   };
-  const brain = createPoliceBrain(buildRoadGraph({ roadXs: ROAD_XS, roadZs: ROAD_ZS }), blockedAt);
+  const roadGraph = buildRoadGraph({ roadXs: ROAD_XS, roadZs: ROAD_ZS });
+  const brain = createPoliceBrain(roadGraph, blockedAt);
   const occluders = solids.filter((e) => e.w >= 3);
   const nearbyBuffer = [];
+  // (Asked several times a tick for the same officer: worked out once per tick.)
+  let sightTick = 0;
   function hasLineOfSight(officer) {
+    if (officer._sightTick === sightTick) return officer._sight;
+    officer._sightTick = sightTick;
+    officer._sight = lineOfSight(officer);
+    return officer._sight;
+  }
+  function lineOfSight(officer) {
     if (distance2D(officer, state) > 75) {
       return false;
     }
@@ -168,15 +189,21 @@ export function createGame(car, engine, solids, noPolice = false) {
     }
     return true;
   }
+  /** Bodywork grinding along what it touches (normal nx, nz toward it): sparks and the screech of metal. */
+  function noteScrape(nx, nz) {
+    const along = Math.hypot(state.vx - (state.vx * nx + state.vz * nz) * nx, state.vz - (state.vx * nx + state.vz * nz) * nz);
+    if (along > 3 && (!state._scrape || along > state._scrape.speed)) state._scrape = { nx, nz, speed: along };
+  }
   // Collision damage is applied at most every half second; returns true when it was (crash effects key off that).
-  function takeDamage(amount) {
+  function takeDamage(amount, rammedByPolice = false) {
     if (!(state.collisionTimer <= 0)) {
       return false;
     }
     state.health = clamp(state.health - amount, 0, 100);
     state.collisionTimer = 0.5;
     state.shake = Math.min(state.shake + amount * 0.08, 1.2);
-    if (state.police.some((officer) => distance2D(officer, state) < 85)) {
+    // Reckless driving seen by the police (being rammed by them is not a crime of the player's).
+    if (!rammedByPolice && state.police.some((officer) => distance2D(officer, state) < 85)) {
       state.wanted = clamp(state.wanted + 0.6, 0, 5);
     }
     return true;
@@ -248,22 +275,200 @@ export function createGame(car, engine, solids, noPolice = false) {
           break;
         }
         if (!officer.onFoot && state.wanted > 0.15 && distance2D(officer, state) < 30) {
-          const carId = state.nextVid++;
-          state.vehicles.push({
-            id: carId,
-            x: officer.x,
-            z: officer.z,
-            heading: officer.heading,
-            kind: "police",
-            color: "#ffffff",
-            shape: "coupe",
-          });
-          officer.carId = carId;
-          officer.onFoot = true;
+          leaveCruiser(officer);
           officersLeaving++;
         }
       }
     }
+  }
+  /** The officer gets out: the cruiser stays parked (lights flashing) where it stopped. */
+  function leaveCruiser(officer) {
+    const carId = state.nextVid++;
+    state.vehicles.push({
+      id: carId,
+      x: officer.x,
+      z: officer.z,
+      heading: officer.heading,
+      kind: "police",
+      color: "#ffffff",
+      shape: "coupe",
+    });
+    officer.carId = carId;
+    officer.onFoot = true;
+    officer.speed = 0;
+    // Out of the driver's door, on the cruiser's left.
+    officer.x += -Math.cos(officer.heading) * 1.5;
+    officer.z += Math.sin(officer.heading) * 1.5;
+  }
+
+  /* ----- roadblocks: at 3 stars, cruisers parked across the road ahead, officers behind them ----- */
+  function removeRoadblock() {
+    const ids = state.roadblock.ids;
+    state.vehicles = state.vehicles.filter((vehicle) => !ids.includes(vehicle.id) || !vehicle.roadblock);
+    state.roadblock = null;
+    state.roadblockCooldown = 18;
+  }
+  function updateRoadblock(dt, speed) {
+    state.roadblockCooldown -= dt;
+    const block = state.roadblock;
+    if (block) {
+      const distance = Math.hypot(block.x - state.x, block.z - state.z);
+      // Taken down once the player is far away, or when the chase is over and nobody is looking.
+      if (distance > 230 || (state.wanted <= 0.15 && distance > 90)) removeRoadblock();
+      return;
+    }
+    if (state.wanted <= 2 || state.onFoot || speed < 8 || state.roadblockCooldown > 0) return;
+    // Along the avenue or street the player is driving down, the next block midpoint 80-170 m ahead.
+    const alongZ = Math.abs(state.vz) > Math.abs(state.vx) * 1.5;
+    const alongX = Math.abs(state.vx) > Math.abs(state.vz) * 1.5;
+    if (!alongZ && !alongX) return;
+    const roads = alongZ ? ROAD_XS : ROAD_ZS;
+    const across = alongZ ? state.x : state.z;
+    const road = roads.reduce((best, r) => (Math.abs(r - across) < Math.abs(best - across) ? r : best));
+    if (Math.abs(road - across) > 8) return;
+    const lines = alongZ ? ROAD_ZS : ROAD_XS;
+    const along = alongZ ? state.z : state.x;
+    const direction = Math.sign(alongZ ? state.vz : state.vx);
+    let spot = null;
+    for (let k = 0; k + 1 < lines.length; k++) {
+      const middle = (lines[k] + lines[k + 1]) / 2;
+      const ahead = (middle - along) * direction;
+      if (ahead > 80 && ahead < 170 && (spot === null || ahead < (spot - along) * direction)) spot = middle;
+    }
+    if (spot === null) return;
+    const x = alongZ ? road : spot;
+    const z = alongZ ? spot : road;
+    // Two cruisers nose to nose across the lanes, angled a little like they were thrown there; the
+    // officers stand behind them, on the far side.
+    const acrossHeading = alongZ ? Math.PI / 2 : 0;
+    const ids = [];
+    const officers = [];
+    for (const [offset, tilt] of [
+      [-3.3, 0.22],
+      [3.3, -0.18],
+    ]) {
+      const id = state.nextVid++;
+      ids.push(id);
+      const cx = alongZ ? x + offset : x;
+      const cz = alongZ ? z : z + offset;
+      state.vehicles.push({
+        id,
+        x: cx,
+        z: cz,
+        heading: acrossHeading + tilt,
+        kind: "police",
+        color: "#ffffff",
+        shape: "coupe",
+        roadblock: true,
+      });
+      const behind = 3.2 * direction;
+      const ox = alongZ ? cx + offset * 0.25 : cx + behind;
+      const oz = alongZ ? cz + behind : cz + offset * 0.25;
+      officers.push({ x: ox, z: oz, heading: Math.atan2(-(state.x - ox), -(state.z - oz)) });
+    }
+    state.roadblock = { x, z, ids, officers };
+  }
+
+  /* ----- the helicopter: at 4 stars, circling overhead with its searchlight on the player ----- */
+  function updateHeli(dt) {
+    let heli = state.heli;
+    if (!heli) {
+      if (state.wanted <= 3 || state.noPolice) return;
+      // Comes in from a couple of hundred metres away.
+      const angle = Math.random() * Math.PI * 2;
+      heli = state.heli = {
+        x: state.x + Math.cos(angle) * 220,
+        z: state.z + Math.sin(angle) * 220,
+        y: HELI_ALTITUDE,
+        vx: 0,
+        vz: 0,
+        heading: 0,
+        orbit: angle,
+        beamX: state.x + Math.cos(angle) * 60,
+        beamZ: state.z + Math.sin(angle) * 60,
+        sees: false,
+        leaving: false,
+      };
+    }
+    heli.leaving = state.wanted <= 0.15;
+    let targetX;
+    let targetZ;
+    if (heli.leaving) {
+      // Chase over: flies off and is gone.
+      const away = Math.atan2(heli.z - state.z, heli.x - state.x);
+      targetX = heli.x + Math.cos(away) * 100;
+      targetZ = heli.z + Math.sin(away) * 100;
+      if (Math.hypot(heli.x - state.x, heli.z - state.z) > 320) {
+        state.heli = null;
+        return;
+      }
+    } else {
+      // Circles the player at ~24 m, a little ahead of where they are going.
+      heli.orbit += dt * 0.22;
+      targetX = state.x + Math.cos(heli.orbit) * 24 + state.vx * 1.2;
+      targetZ = state.z + Math.sin(heli.orbit) * 24 + state.vz * 1.2;
+    }
+    let wantX = (targetX - heli.x) * 0.9;
+    let wantZ = (targetZ - heli.z) * 0.9;
+    const want = Math.hypot(wantX, wantZ);
+    if (want > HELI_MAX_SPEED) {
+      wantX *= HELI_MAX_SPEED / want;
+      wantZ *= HELI_MAX_SPEED / want;
+    }
+    const ease = 1 - Math.exp(-1.1 * dt);
+    heli.vx += (wantX - heli.vx) * ease;
+    heli.vz += (wantZ - heli.vz) * ease;
+    heli.x += heli.vx * dt;
+    heli.z += heli.vz * dt;
+    const ground = Math.max(terrainHeight(heli.x, heli.z), terrainHeight(state.x, state.z));
+    heli.y += (ground + HELI_ALTITUDE - heli.y) * (1 - Math.exp(-0.8 * dt));
+    // Nose into its flight, or toward the player when hovering.
+    const faceX = Math.hypot(heli.vx, heli.vz) > 3 ? heli.vx : state.x - heli.x;
+    const faceZ = Math.hypot(heli.vx, heli.vz) > 3 ? heli.vz : state.z - heli.z;
+    const face = Math.atan2(-faceX, -faceZ);
+    heli.heading += Math.atan2(Math.sin(face - heli.heading), Math.cos(face - heli.heading)) * (1 - Math.exp(-1.5 * dt));
+    // The searchlight is swung by hand: it lags behind a fast car (lose it by driving flat out).
+    if (!heli.leaving) {
+      const dx = state.x - heli.beamX;
+      const dz = state.z - heli.beamZ;
+      const gap = Math.hypot(dx, dz);
+      const step = Math.min(gap, 26 * dt + gap * (1 - Math.exp(-2.5 * dt)));
+      if (gap > 0.01) {
+        heli.beamX += (dx / gap) * step;
+        heli.beamZ += (dz / gap) * step;
+      }
+    }
+    heli.sees =
+      !heli.leaving &&
+      Math.hypot(state.x - heli.beamX, state.z - heli.beamZ) < 12 &&
+      Math.hypot(state.x - heli.x, state.z - heli.z) < 110 &&
+      !(state.onFoot && state.store >= 0); // (not inside the store)
+  }
+
+  /* ----- backup: a cruiser left far behind is sent in again from closer (out of sight) ----- */
+  function sendBackup(officer, dt) {
+    officer.backupCooldown = Math.max(0, (officer.backupCooldown || 0) - dt);
+    if (officer.backupCooldown > 0 || state.wanted < 2 || distance2D(officer, state) < 230) return;
+    const candidates = roadGraph.nodes.filter((node) => {
+      const d = Math.hypot(node.x - state.x, node.z - state.z);
+      return (
+        d > 110 &&
+        d < 170 &&
+        !blockedAt(node.x, node.z, 1) &&
+        state.police.every((other) => other === officer || Math.hypot(other.x - node.x, other.z - node.z) > 25)
+      );
+    });
+    if (!candidates.length) return;
+    const node = candidates[Math.floor(Math.random() * candidates.length)];
+    officer.x = node.x;
+    officer.z = node.z;
+    officer.heading = Math.atan2(-(state.x - node.x), -(state.z - node.z));
+    officer.speed = 0;
+    officer.path = null;
+    officer.replan = 0;
+    officer.stuck = 0;
+    officer.reverse = 0;
+    officer.backupCooldown = 12;
   }
   let physics = createCarPhysics(car, engine);
   let carCollisionProfile = getCollisionProfile(car.shape);
@@ -289,6 +494,26 @@ export function createGame(car, engine, solids, noPolice = false) {
       state.elapsed += dt;
       state.collisionTimer -= dt;
       state.shake *= Math.exp(-dt * 5);
+      if (state.busted > 0) {
+        // Busted: everything stops for the arrest (hands up, cuffs), then the result screen.
+        state.busted += dt;
+        state.vx = 0;
+        state.vz = 0;
+        state.u = 0;
+        state.w = 0;
+        state.yaw = 0;
+        state.speed = 0;
+        state.throttle = 0;
+        state.brake = 0;
+        state.pedal = 0;
+        state.drifting = false;
+        state.rpm = 900;
+        if (state.busted >= BUSTED_TIME) {
+          state.ended = true;
+          state.reason = "arrested";
+        }
+        return state;
+      }
       const throttle = keys.ArrowUp || keys.KeyW || keys.KeyZ ? 1 : 0;
       const brake = keys.ArrowDown || keys.KeyS ? 1 : 0;
       const steer =
@@ -383,14 +608,17 @@ export function createGame(car, engine, solids, noPolice = false) {
           state.x -= collision.nx * (collision.depth + 0.02);
           state.z -= collision.nz * (collision.depth + 0.02);
           const impactSpeed = Math.max(0, state.vx * collision.nx + state.vz * collision.nz);
+          noteScrape(collision.nx, collision.nz);
           if (impactSpeed > 0.6) {
             state.vx -= collision.nx * impactSpeed * 1.3;
             state.vz -= collision.nz * impactSpeed * 1.3;
-            if (takeDamage(4 + impactSpeed * 0.8)) {
+            if (impactSpeed > 2.5 && takeDamage(4 + impactSpeed * 0.8)) {
               state._crash = {
                 x: state.x,
                 y: state.y || 0,
                 z: state.z,
+                nx: collision.nx,
+                nz: collision.nz,
                 intensity: Math.min(impactSpeed * 0.08, 1.5),
               };
             }
@@ -416,14 +644,36 @@ export function createGame(car, engine, solids, noPolice = false) {
           state.x -= collision.nx * (collision.depth + 0.02);
           state.z -= collision.nz * (collision.depth + 0.02);
           const impactSpeed = Math.max(0, state.vx * collision.nx + state.vz * collision.nz);
-          if (impactSpeed > 0.6) {
-            state.vx -= collision.nx * impactSpeed * 1.3;
-            state.vz -= collision.nz * impactSpeed * 1.3;
-            if (takeDamage(4 + impactSpeed * 0.8)) {
+          noteScrape(collision.nx, collision.nz);
+          if (vehicle.roadblock && impactSpeed > 6) {
+            // Ramming through a roadblock: the cruiser is shoved aside and spun, the player loses speed.
+            vehicle.x += collision.nx * (collision.depth + impactSpeed * 0.12);
+            vehicle.z += collision.nz * (collision.depth + impactSpeed * 0.12);
+            vehicle.heading += (Math.random() < 0.5 ? -1 : 1) * Math.min(0.9, impactSpeed * 0.035);
+            state.vx -= collision.nx * impactSpeed * 0.55;
+            state.vz -= collision.nz * impactSpeed * 0.55;
+            if (takeDamage(5 + impactSpeed * 0.6)) {
               state._crash = {
                 x: state.x,
                 y: state.y || 0,
                 z: state.z,
+                nx: collision.nx,
+                nz: collision.nz,
+                intensity: Math.min(impactSpeed * 0.08, 1.5),
+              };
+            }
+            break;
+          }
+          if (impactSpeed > 0.6) {
+            state.vx -= collision.nx * impactSpeed * 1.3;
+            state.vz -= collision.nz * impactSpeed * 1.3;
+            if (impactSpeed > 2.5 && takeDamage(4 + impactSpeed * 0.8)) {
+              state._crash = {
+                x: state.x,
+                y: state.y || 0,
+                z: state.z,
+                nx: collision.nx,
+                nz: collision.nz,
                 intensity: Math.min(impactSpeed * 0.08, 1.5),
               };
             }
@@ -486,21 +736,62 @@ export function createGame(car, engine, solids, noPolice = false) {
       if (!state.onFoot && state.station >= 0) {
         state.fuel = clamp(state.fuel + dt * 14, 0, 100);
       }
+      sightTick++;
       const playerBox = orientedBox(state.x, state.z, state.heading, PLAYER_HALF_WIDTH, PLAYER_HALF_LENGTH);
       let rammed = false;
       let seen = false;
       let grabbed = false;
       // Whether any officer can see the player right now (shared over the radio: everyone knows).
+      if (!state.noPolice) {
+        updateHeli(dt);
+        updateRoadblock(dt, speed);
+      }
+      state.stoppedFor = !state.onFoot && speed < 2.5 ? state.stoppedFor + dt : 0;
+      state.speedingCooldown = Math.max(0, state.speedingCooldown - dt);
+      // The helicopter's searchlight and the officers at a roadblock see the player too.
+      const roadblockSees =
+        state.wanted > 0.15 && !!state.roadblock && state.roadblock.officers.some((o) => hasLineOfSight(o));
+      const heliSees = state.wanted > 0.15 && !!state.heli?.sees;
+      if (heliSees || roadblockSees) seen = true;
       const officerSeesPlayer =
-        state.wanted > 0.15 && state.police.some((officer) => hasLineOfSight(officer));
+        state.wanted > 0.15 &&
+        (heliSees || roadblockSees || state.police.some((officer) => !officer.down && hasLineOfSight(officer)));
       brain.observe(state, officerSeesPlayer);
+      let officersOnFoot = state.police.filter((officer) => officer.onFoot).length;
       state.police.forEach((officer, index) => {
         if (officer.onFoot) {
+          // Knocked down by a car: lies in the street a while, then gets up.
+          if (officer.down > 0) {
+            officer.down -= dt;
+            return;
+          }
+          // Hit by the player's car.
+          if (!state.onFoot && speed > 4) {
+            const hit = collideOrientedBoxes(
+              playerBox,
+              orientedBox(officer.x, officer.z, officer.heading, 0.35, 0.35),
+            );
+            if (hit.overlap) {
+              officer.down = 9;
+              officer.x += state.vx * 0.25;
+              officer.z += state.vz * 0.25;
+              state.wanted = clamp(state.wanted + 1.5, 0, 5);
+              state._officerHit = { x: officer.x, z: officer.z, vx: state.vx, vz: state.vz, speed };
+              state.shake = Math.min(state.shake + 0.3, 1.2);
+              return;
+            }
+          }
           let targetX = null;
           let targetZ = null;
+          // The player stopped in their car close by: run to the driver's door and pull them out.
+          const toDoor =
+            !state.onFoot && state.wanted > 0.15 && speed < 4 && distance2D(officer, state) < 25;
           if (state.onFoot || officer.carId == null) {
             targetX = state.x;
             targetZ = state.z;
+          } else if (toDoor) {
+            targetX = state.x - Math.cos(state.heading) * 1.4;
+            targetZ = state.z + Math.sin(state.heading) * 1.4;
           } else {
             const policeCar = state.vehicles.find((e) => e.id === officer.carId);
             if (policeCar) {
@@ -517,7 +808,11 @@ export function createGame(car, engine, solids, noPolice = false) {
               officer.x += (dx / (distance || 1)) * Math.min(distance, OFFICER_RUN_SPEED * dt);
               officer.z += (dz / (distance || 1)) * Math.min(distance, OFFICER_RUN_SPEED * dt);
             }
-            if (!state.onFoot && officer.carId != null) {
+            if (toDoor && distance < 1.2) {
+              state.arrestTimer = Math.min(state.arrestTimer + dt * 2, 5);
+              grabbed = true;
+            }
+            if (!state.onFoot && officer.carId != null && !toDoor) {
               const policeCar = state.vehicles.find((e) => e.id === officer.carId);
               if (policeCar && Math.hypot(policeCar.x - officer.x, policeCar.z - officer.z) < 2.5) {
                 state.vehicles = state.vehicles.filter((e) => e.id !== officer.carId);
@@ -526,6 +821,7 @@ export function createGame(car, engine, solids, noPolice = false) {
                 officer.z = policeCar.z;
                 officer.heading = policeCar.heading;
                 officer.carId = null;
+                officersOnFoot--;
               }
             }
             if (state.onFoot && distance2D(officer, state) < 1.8) {
@@ -568,8 +864,28 @@ export function createGame(car, engine, solids, noPolice = false) {
         }
         officer.x = clamp(officer.x, -200, 250);
         officer.z = clamp(officer.z, -700, 150);
-        if (chasing && hasLineOfSight(officer)) {
+        const sees = hasLineOfSight(officer);
+        if (chasing && sees) {
           seen = true;
+        }
+        if (chasing) sendBackup(officer, dt);
+        // Speeding past a cruiser is a crime of its own.
+        if (speed > 27 && !state.onFoot && state.speedingCooldown <= 0 && sees && distance2D(officer, state) < 30) {
+          state.wanted = clamp(state.wanted + 0.8, 0, 5);
+          state.speedingCooldown = 8;
+        }
+        // The player stopped close by: the officer gets out to arrest them on foot (two at most).
+        if (
+          chasing &&
+          !state.onFoot &&
+          state.stoppedFor > 0.8 &&
+          officer.speed < 1.5 &&
+          distance2D(officer, state) < 16 &&
+          officersOnFoot < 2
+        ) {
+          leaveCruiser(officer);
+          officersOnFoot++;
+          return;
         }
         const contact = collideOrientedBoxes(
           playerBox,
@@ -578,9 +894,16 @@ export function createGame(car, engine, solids, noPolice = false) {
         // A chasing cruiser touching the player's car is pushed out; a fresh contact also rams.
         let ramming = false;
         if (chasing && !state.onFoot && contact.overlap) {
+          noteScrape(contact.nx, contact.nz);
           officer.x += contact.nx * (contact.depth + 0.03);
           officer.z += contact.nz * (contact.depth + 0.03);
           ramming = officer.contactCooldown <= 0;
+        } else if (!chasing && !state.onFoot && contact.overlap && speed > 3 && officer.contactCooldown <= 0) {
+          // The player crashed into a patrolling cruiser: that starts a chase.
+          officer.x += contact.nx * (contact.depth + 0.03);
+          officer.z += contact.nz * (contact.depth + 0.03);
+          officer.contactCooldown = 2;
+          state.wanted = clamp(state.wanted + 1, 0, 5);
         }
         if (ramming) {
           rammed = true;
@@ -588,11 +911,13 @@ export function createGame(car, engine, solids, noPolice = false) {
             state.vx + Math.sin(officer.heading) * officer.speed,
             state.vz + Math.cos(officer.heading) * officer.speed,
           );
-          if (takeDamage(Math.min(12, 1.5 + impactSpeed * 0.35))) {
+          if (takeDamage(Math.min(12, 1.5 + impactSpeed * 0.35), true)) {
             state._crash = {
               x: state.x,
               y: state.y || 0,
               z: state.z,
+              nx: contact.nx,
+              nz: contact.nz,
               intensity: Math.min(impactSpeed * 0.06, 1.2),
             };
           }
@@ -633,9 +958,13 @@ export function createGame(car, engine, solids, noPolice = false) {
           }
         }
       }
+      // A long chase in sight of the police slowly gets worse (about a star every minute and a half).
+      if (state.wanted >= 1 && seen) state.wanted = clamp(state.wanted + dt * 0.012, 0, 5);
+      // More stars, longer to shake them off.
+      state.escapeNeeded = ESCAPE_BASE + Math.ceil(state.wanted) * ESCAPE_PER_STAR;
       if (state.wanted > 0.15 && !seen) {
         state.escape += dt;
-        if (state.escape >= 5) {
+        if (state.escape >= state.escapeNeeded) {
           state.wanted = 0;
           state.escape = 0;
         }
@@ -659,9 +988,18 @@ export function createGame(car, engine, solids, noPolice = false) {
       state.speed = Math.round(speed * 3.6);
       state.zone = state.z < -160 ? "mountain" : state.x > 130 ? "highway" : "city";
       state.y = terrainHeight(state.x, state.z);
-      if (state.health <= 0 || state.arrest >= 100) {
+      if (state.health <= 0) {
         state.ended = true;
-        state.reason = state.health <= 0 ? "destroyed" : "arrested";
+        state.reason = "destroyed";
+      } else if (state.arrest >= 100) {
+        // Busted: the arrest scene plays (see the top of update), then the game ends.
+        state.busted = 1e-3;
+        let nearest = 0;
+        state.police.forEach((officer, index) => {
+          if (distance2D(officer, state) < distance2D(state.police[nearest], state)) nearest = index;
+        });
+        state.bustedBy = nearest;
+        state.bustedOnFoot = state.onFoot;
       }
       return state;
     },

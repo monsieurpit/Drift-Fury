@@ -33,6 +33,9 @@ import { buildCar } from "../vehicles/carModel.js";
 import { trafficTemplate, trafficTemplates } from "../vehicles/trafficCars.js";
 import { createCarInstancer } from "../vehicles/carInstancing.js";
 import { buildModelCar, carModelKey, loadCarModels } from "../vehicles/carModels.js";
+import { createHelicopter } from "../vehicles/helicopter.js";
+import { crackPrewarm, createCarDamage } from "../vehicles/carDamage.js";
+import { createSparks } from "../effects/sparks.js";
 import { buildWorldInSteps } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
 import { loadStreetProps, placeStreetProps } from "../world/streetProps.js";
@@ -271,13 +274,31 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   playerPerson.visible = false;
   scene.add(playerPerson);
   trackMotion(playerPerson);
-  const officerPeople = game.state.police.map(() => {
+  const newOfficer = () => {
     const officer = createPerson("#1f2f4d");
     officer.visible = false;
+    officer.rotation.order = "YXZ"; // (yaw, then falling over around their own axis)
     scene.add(officer);
     trackMotion(officer);
     return officer;
-  });
+  };
+  const officerPeople = game.state.police.map(newOfficer);
+  // The officers standing behind a roadblock's cruisers, and the one who cuffs the player.
+  const roadblockOfficers = [newOfficer(), newOfficer()];
+  const cuffingOfficer = newOfficer();
+  const helicopter = createHelicopter(scene);
+  let sparkLight = null;
+  const SPARK_COLOUR = new Color("#ff9a3c");
+  // Where the player's car touches something in direction (nx, nz): on the outline of its body.
+  const contactPoint = (state, nx, nz) => {
+    const localX = Math.abs(nx * Math.cos(state.heading) - nz * Math.sin(state.heading));
+    const localZ = Math.abs(nx * Math.sin(state.heading) + nz * Math.cos(state.heading));
+    const reach = Math.min(1.0 / Math.max(localX, 1e-3), 2.25 / Math.max(localZ, 1e-3));
+    return [state.x + nx * reach, state.z + nz * reach];
+  };
+  trackMotion(helicopter.object);
+  let heliLight = null;
+  let cuffsHeard = false;
   const trafficCars = new Map();
   function swapPlayerCar(vehicle) {
     scene.remove(playerCar);
@@ -387,6 +408,19 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     for (const vehicle of state.vehicles) {
       if (vehicle.kind === "police") addBar(vehicle.x, vehicle.z);
     }
+    if (sparkLight) {
+      const light = carLight();
+      Object.assign(light, { x: sparkLight.x, y: sparkLight.y, z: sparkLight.z, intensity: 14 * sparkLight.flicker, range: 7, flags: 0 });
+      light.direction = null;
+      light.color.copy(SPARK_COLOUR);
+      clusteredLights.addDynamic(light);
+    }
+    if (heliLight) {
+      const light = carLight();
+      Object.assign(light, heliLight, { flags: 0 });
+      light.color.copy(heliLight.colour);
+      clusteredLights.addDynamic(light);
+    }
     if (!state.onFoot) {
       const braking = state.brake > 0 || (state.speed > 5 && state.throttle === 0);
       const tail = carLight();
@@ -422,6 +456,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   };
   const pedestrianCount = { low: 14, medium: 20, high: 28, ultra: 34 }[view.quality] ?? 20;
   const blood = createBlood(scene, groundAt, { patch: lightByLamps });
+  const sparks = createSparks(scene, groundAt);
+  scene.add(crackPrewarm());
   // Scanned, animated people (skinnedCrowd.js); the people built from shapes if they could not load.
   const crowd = peopleModels
     ? createSkinnedCrowd(scene, pedestrianCount, {
@@ -469,7 +505,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     beamScale += (target - beamScale) * (1 - Math.exp(-6 * dt));
     for (const beam of playerCar.userData.headlightBeams || []) {
       beam.userData.baseIntensity ??= beam.intensity;
-      beam.intensity = beam.userData.baseIntensity * beamScale;
+      beam.intensity = beam.userData.broken ? 0 : beam.userData.baseIntensity * beamScale;
     }
   }
   const pedestrianCars = [];
@@ -501,6 +537,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         player: false,
       });
     }
+    crowd.setView?.(camera);
     const events = pedestrians.update(dt, { cars: pedestrianCars, camera, phase: signalClock });
     for (let index = 0; index < events.length; index++) {
       const event = events[index];
@@ -537,6 +574,99 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     }
     crowd.update();
     blood.update(dt);
+  }
+  /** The arrest scene: the player out of the car, hands up, then cuffed by an officer behind them. */
+  function updateBusted(state) {
+    cuffingOfficer.visible = state.busted > 0;
+    if (!(state.busted > 0)) return;
+    const t = state.busted;
+    let x;
+    let z;
+    let facing;
+    if (state.bustedOnFoot) {
+      x = state.x;
+      z = state.z;
+      facing = state.footYaw || 0;
+    } else {
+      // Out of the driver's door, facing the car.
+      x = state.x - Math.cos(state.heading) * 1.45;
+      z = state.z + Math.sin(state.heading) * 1.45;
+      facing = state.heading - Math.PI / 2;
+    }
+    const ground = terrainHeight(x, z);
+    playerPerson.visible = true;
+    playerPerson.scale.setScalar(1);
+    playerPerson.position.set(x, ground, z);
+    playerPerson.rotation.y = facing;
+    const limbs = playerPerson.userData.L;
+    for (const key of ["lh", "rh", "lk", "rk", "body"]) limbs[key].rotation.set(0, 0, 0);
+    limbs.body.position.y = 0;
+    if (t < 1.4) {
+      // Hands up.
+      limbs.la.rotation.set(2.75, 0, -0.3);
+      limbs.ra.rotation.set(2.75, 0, 0.3);
+      limbs.le.rotation.set(0.45, 0, 0);
+      limbs.re.rotation.set(0.45, 0, 0);
+      limbs.head.rotation.x = 0;
+    } else {
+      // Hands behind the back, head down.
+      limbs.la.rotation.set(-0.5, 0, 0.12);
+      limbs.ra.rotation.set(-0.5, 0, -0.12);
+      limbs.le.rotation.set(0, 0, 1.35);
+      limbs.re.rotation.set(0, 0, -1.35);
+      limbs.head.rotation.x = -0.35;
+      if (!cuffsHeard && t > 1.6) {
+        cuffsHeard = true;
+        audio.cuffs?.();
+      }
+    }
+    // The officer steps in behind the player and takes their wrists.
+    const forwardX = -Math.sin(facing);
+    const forwardZ = -Math.cos(facing);
+    const step = Math.min(1, t / 1.2);
+    const back = 0.75 + (1 - step) * 2.5;
+    const ox = x - forwardX * back;
+    const oz = z - forwardZ * back;
+    cuffingOfficer.position.set(ox, terrainHeight(ox, oz), oz);
+    cuffingOfficer.rotation.set(0, facing, 0);
+    if (step < 1) {
+      animatePerson(cuffingOfficer, 1 / 60, ox, oz);
+    } else {
+      const officerLimbs = cuffingOfficer.userData.L;
+      for (const key of ["lh", "rh", "lk", "rk", "body"]) officerLimbs[key].rotation.set(0, 0, 0);
+      officerLimbs.la.rotation.set(t < 1.4 ? 1.5 : 0.75, 0, 0.12);
+      officerLimbs.ra.rotation.set(t < 1.4 ? 1.5 : 0.75, 0, -0.12);
+      officerLimbs.le.rotation.set(t < 1.4 ? 0.05 : 0.5, 0, 0);
+      officerLimbs.re.rotation.set(t < 1.4 ? 0.05 : 0.5, 0, 0);
+    }
+  }
+  /** The siren of the nearest chasing cruiser, the helicopter's rotor. */
+  function updatePoliceSounds(state) {
+    let sirenAt = null;
+    if (state.wanted > 0.15 || state.busted > 0) {
+      let nearest = Infinity;
+      let nearestX = 0;
+      let nearestZ = 0;
+      for (const officer of state.police) {
+        if (officer.onFoot) continue;
+        const d = Math.hypot(officer.x - state.x, officer.z - state.z);
+        if (d < nearest) {
+          nearest = d;
+          nearestX = officer.x;
+          nearestZ = officer.z;
+        }
+      }
+      if (nearest < 160) {
+        const [distance, pan] = heard(nearestX, nearestZ);
+        sirenAt = { distance, pan };
+      }
+    }
+    let heliAt = null;
+    if (state.heli) {
+      const [distance, pan] = heard(state.heli.x, state.heli.z);
+      heliAt = { distance: Math.hypot(distance, state.heli.y - (state.y || 0)), pan };
+    }
+    audio.police?.(sirenAt, heliAt);
   }
   const keys = {};
   let frameId;
@@ -828,10 +958,37 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         shadowFrameCounter = 0;
       }
       if (state._crash) {
-        effects.crash(state._crash.x, state._crash.y, state._crash.z, state._crash.intensity);
-        audio.crash(state._crash.intensity);
+        const crash = state._crash;
+        effects.crash(crash.x, crash.y, crash.z, crash.intensity);
+        audio.crash(crash.intensity);
+        if (crash.nx !== undefined && !state.onFoot) {
+          // Visible damage where it hit (carDamage.js), and sparks off the bodywork.
+          const cos = Math.cos(state.heading);
+          const sin = Math.sin(state.heading);
+          const localX = crash.nx * cos - crash.nz * sin;
+          const localZ = crash.nx * sin + crash.nz * cos;
+          playerCar.userData.damage ??= createCarDamage(playerCar);
+          const broke = playerCar.userData.damage.hit(localX, localZ, crash.intensity);
+          if (broke.glass || broke.lights.length) audio.glass?.(crash.intensity);
+          if (crash.intensity > 0.3) {
+            const [px, pz] = contactPoint(state, crash.nx, crash.nz);
+            sparks.emit(px, (state.y || 0) + 0.5, pz, -crash.nx, -crash.nz, state.vx, state.vz, Math.round(crash.intensity * 28));
+          }
+        }
         state._crash = null;
       }
+      // Grinding along a wall or a car: a stream of sparks and the screech of metal.
+      if (state._scrape && !state.onFoot) {
+        const scrape = state._scrape;
+        const [px, pz] = contactPoint(state, scrape.nx, scrape.nz);
+        sparks.emit(px, (state.y || 0) + 0.35 + Math.random() * 0.3, pz, -scrape.nx, -scrape.nz, state.vx, state.vz, Math.min(8, 2 + Math.round(scrape.speed / 5)));
+        audio.scrape?.(Math.min(1, scrape.speed / 18));
+        sparkLight = { x: px, y: (state.y || 0) + 0.5, z: pz, flicker: 0.6 + Math.random() * 0.4 };
+      } else {
+        audio.scrape?.(0);
+        sparkLight = null;
+      }
+      state._scrape = null;
       if (state.playerVeh.spec !== playerCarSpec) {
         swapPlayerCar(state.playerVeh);
       }
@@ -872,13 +1029,41 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       });
       officerPeople.forEach((person, index) => {
         const officer = state.police[index];
-        person.visible = !!officer.onFoot;
+        person.visible = !!officer.onFoot && !(state.busted > 0 && index === state.bustedBy);
         if (officer.onFoot) {
-          person.position.set(officer.x, terrainHeight(officer.x, officer.z), officer.z);
+          const down = officer.down > 0;
+          person.position.set(officer.x, terrainHeight(officer.x, officer.z) + (down ? 0.13 : 0), officer.z);
           person.rotation.y = officer.heading;
-          animatePerson(person, dt, officer.x, officer.z);
+          // Knocked down: face down in the street, until they get up.
+          person.rotation.x = down ? -Math.PI / 2 : 0;
+          if (!down) animatePerson(person, dt, officer.x, officer.z);
         }
       });
+      if (state._officerHit) {
+        const hit = state._officerHit;
+        state._officerHit = null;
+        const [distance, pan] = heard(hit.x, hit.z);
+        impactPoint.set(hit.x, groundAt(hit.x, hit.z) + 1.0, hit.z);
+        impactVelocity.set(hit.vx, 1.5, hit.vz);
+        blood.spray(impactPoint, impactVelocity, Math.round(Math.min(60, 12 + hit.speed * 2.5)));
+        audio.bodyHit?.(hit.speed, distance, pan);
+        audio.hurt?.(false, distance, pan);
+      }
+      // Officers behind a roadblock, weapons drawn on the approaching player.
+      roadblockOfficers.forEach((person, index) => {
+        const spot = state.roadblock?.officers[index];
+        person.visible = !!spot;
+        if (!spot) return;
+        person.position.set(spot.x, terrainHeight(spot.x, spot.z), spot.z);
+        person.rotation.y = Math.atan2(-(state.x - spot.x), -(state.z - spot.z));
+        const limbs = person.userData.L;
+        limbs.la.rotation.set(1.45, 0, 0.18);
+        limbs.ra.rotation.set(1.5, 0, -0.12);
+        limbs.le.rotation.x = 0.05;
+        limbs.re.rotation.x = 0.05;
+      });
+      updateBusted(state);
+      heliLight = helicopter.update(state.heli, dt, state.elapsed, groundAt);
       syncTrafficCars();
       if (interaction) {
         interaction.elapsed += dt;
@@ -978,14 +1163,25 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         state.z - Math.cos(cameraHeading) * lookAhead,
       );
       camera.lookAt(lookTarget);
+      if (state.busted > 0) {
+        // The arrest, seen from beside: the camera slowly circles the player and the officer.
+        const angle = (state.bustedOnFoot ? state.footYaw || 0 : state.heading) + 2.2 + state.busted * 0.18;
+        const px = playerPerson.position.x;
+        const pz = playerPerson.position.z;
+        camera.position.set(px + Math.sin(angle) * 5.2, playerPerson.position.y + 2.1, pz + Math.cos(angle) * 5.2);
+        lookTarget.set(px, playerPerson.position.y + 1.05, pz);
+        camera.lookAt(lookTarget);
+      }
       // Street-lamp lighting uses lamp positions in view space: update them for this frame's camera.
       camera.updateMatrixWorld();
       addCarLights(state, time);
       updateLamps(state.x, state.z, camera);
       effects.update(state, dt, camera);
+      sparks.update(dt);
       updatePedestrians(state, dt);
       updateHeadlights(state, dt);
       audio.update(state.rpm, state.pedal, controls.current.muted, state.drifting, state);
+      updatePoliceSounds(state);
       if (wasOnFoot && !state.onFoot) {
         audio.startEngine();
       }
@@ -1000,6 +1196,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           police: state.police.map((e) => ({
             ...e,
           })),
+          heliActive: !!state.heli && !state.heli.leaving,
+          roadblockActive: !!state.roadblock,
         });
       }
       if (state.ended && !controls.current.finished) {

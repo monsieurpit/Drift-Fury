@@ -38,9 +38,11 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
             </div>
             {hud.escape > 0 && hud.wanted > 0.15 && (
               <p className="mt-2 text-[9px] text-[#c6dc77]">
-                {t("hud.escapeIn", { n: Math.ceil(5 - hud.escape) })}
+                {t("hud.escapeIn", { n: Math.ceil((hud.escapeNeeded || 5) - hud.escape) })}
               </p>
             )}
+            {hud.heliActive && <p className="mt-1 text-[9px] text-[#9fc3ff]">{t("hud.heli")}</p>}
+            {hud.roadblockActive && <p className="mt-1 text-[9px] text-[#ff9b8f]">{t("hud.roadblock")}</p>}
           </div>
         </div>
       </div>
@@ -59,7 +61,13 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
           <p className="mt-2 text-[10px] font-bold tracking-[.3em] text-white">{t("hud.holdAngle")}</p>
         </div>
       )}
-      {hud.arrest > 0 && (
+      {hud.busted > 0 && (
+        <div className="absolute inset-x-0 top-[30%] text-center" style={{ opacity: Math.min(1, hud.busted * 1.5) }}>
+          <div className="race-title text-7xl italic text-[#ff5a4e] drop-shadow-lg sm:text-8xl">{t("hud.busted")}</div>
+          {hud.busted < 1.4 && <p className="mt-3 text-xs font-bold tracking-[.2em] text-white">{t("hud.handsUp")}</p>}
+        </div>
+      )}
+      {hud.arrest > 0 && !(hud.busted > 0) && (
         <div className="absolute left-1/2 top-36 w-60 -translate-x-1/2 rounded-lg bg-[#301c1dee] p-3 text-center">
           <div className="text-[10px] font-bold tracking-widest text-[#ff827a]">
             {t("hud.jailIn", { n: Math.ceil(5 - (hud.arrestTimer || 0)) })}

@@ -228,7 +228,7 @@ export function createEffects(scene, { patch } = {}) {
           piece.mesh.visible = piece.life > 0;
         }
       });
-      if (state.noPolice && state.health < 55) {
+      if (!state.onFoot && state.health < 55) {
         damageSmokeTimer += dt;
         const damage = 1 - Math.max(0, state.health) / 100;
         if (damageSmokeTimer > 0.14 - damage * 0.1) {
