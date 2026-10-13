@@ -13,6 +13,7 @@ import {
   Vector4,
 } from "three";
 import { FUEL_STATIONS } from "../data/stations.js";
+import { addBuildingDetails } from "./buildingDetails.js";
 import { createRandom } from "../util/random.js";
 import { concreteTexture, normalMapFromHeight } from "./textures.js";
 import { scannedSet } from "./scannedTextures.js";
@@ -844,6 +845,19 @@ if (shopInside > 0.5) {
               });
             }
           }
+          // Awnings, fire escapes and balconies lined up with this building's facade (buildingDetails.js).
+          addBuildingDetails(scene, {
+            kind,
+            bxC,
+            bzC,
+            sW,
+            cD,
+            side,
+            podium: POD_H,
+            upperHeight: hs,
+            rows: rY * 4,
+            sign: SIGNS[signIdx],
+          });
           addBox(sW, hs, cD, bxC, POD_H + hs / 2, bzC, [fx, fx, roofMat, roofMat, fz, fz], true);
           // corner pilasters / frame fins
           for (const sx of [-1, 1]) {
