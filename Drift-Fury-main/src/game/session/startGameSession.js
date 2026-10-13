@@ -844,6 +844,21 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   let shadowsDue = true;
   let inCityEnvironment = () => {};
   let disposed = false;
+  const reportedErrors = new Set();
+  function reportFrameError(part, error) {
+    if (reportedErrors.has(part)) return;
+    reportedErrors.add(part);
+    console.error(`Drift Fury: ${part} failed (the game keeps going without it)`, error);
+  }
+  /** Runs one optional part of the frame; if it throws, the rest of the frame still happens. */
+  function safely(part, run) {
+    try {
+      return run();
+    } catch (error) {
+      reportFrameError(part, error);
+      return undefined;
+    }
+  }
   function frame(time) {
     frameId = requestAnimationFrame(frame);
     // Adaptive frame pacing (framePacer.js): skip this screen refresh to keep a steady frame rate.
@@ -906,6 +921,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       windowTime = 0;
       windowFrames = 0;
     }
+    // One part of the frame failing (a sound, an effect) must never stop the rest: the cars, the
+    // people and the picture are always updated and drawn.
+    try {
     const state = game.state;
     if (controls.current.paused) {
       audio.update(state.rpm, 0, true, false, state);
@@ -978,9 +996,11 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           const sin = Math.sin(state.heading);
           const localX = crash.nx * cos - crash.nz * sin;
           const localZ = crash.nx * sin + crash.nz * cos;
-          playerCar.userData.damage ??= createCarDamage(playerCar);
-          const broke = playerCar.userData.damage.hit(localX, localZ, crash.intensity);
-          if (broke.glass || broke.lights.length) audio.glass?.(crash.intensity);
+          safely("car damage", () => {
+            playerCar.userData.damage ??= createCarDamage(playerCar);
+            const broke = playerCar.userData.damage.hit(localX, localZ, crash.intensity);
+            if (broke.glass || broke.lights.length) audio.glass?.(crash.intensity);
+          });
           if (crash.intensity > 0.3) {
             const [px, pz] = contactPoint(state, crash.nx, crash.nz);
             sparks.emit(px, (state.y || 0) + 0.5, pz, -crash.nx, -crash.nz, state.vx, state.vz, Math.round(crash.intensity * 28));
@@ -993,10 +1013,10 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         const scrape = state._scrape;
         const [px, pz] = contactPoint(state, scrape.nx, scrape.nz);
         sparks.emit(px, (state.y || 0) + 0.35 + Math.random() * 0.3, pz, -scrape.nx, -scrape.nz, state.vx, state.vz, Math.min(8, 2 + Math.round(scrape.speed / 5)));
-        audio.scrape?.(Math.min(1, scrape.speed / 18));
+        safely("scrape sound", () => audio.scrape?.(Math.min(1, scrape.speed / 18)));
         sparkLight = { x: px, y: (state.y || 0) + 0.5, z: pz, flicker: 0.6 + Math.random() * 0.4 };
       } else {
-        audio.scrape?.(0);
+        safely("scrape sound", () => audio.scrape?.(0));
         sparkLight = null;
       }
       state._scrape = null;
@@ -1073,8 +1093,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         limbs.le.rotation.x = 0.05;
         limbs.re.rotation.x = 0.05;
       });
-      updateBusted(state);
-      heliLight = helicopter.update(state.heli, dt, state.elapsed, groundAt);
+      safely("arrest scene", () => updateBusted(state));
+      heliLight = safely("helicopter", () => helicopter.update(state.heli, dt, state.elapsed, groundAt)) ?? null;
       syncTrafficCars();
       if (interaction) {
         interaction.elapsed += dt;
@@ -1188,11 +1208,11 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       addCarLights(state, time);
       updateLamps(state.x, state.z, camera);
       effects.update(state, dt, camera);
-      sparks.update(dt);
+      safely("sparks", () => sparks.update(dt));
       updatePedestrians(state, dt);
       updateHeadlights(state, dt);
       audio.update(state.rpm, state.pedal, controls.current.muted, state.drifting, state);
-      updatePoliceSounds(state);
+      safely("police sounds", () => updatePoliceSounds(state));
       if (wasOnFoot && !state.onFoot) {
         audio.startEngine();
       }
@@ -1219,6 +1239,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           credits: Math.floor(state.score / 12 + state.elapsed * 2),
         });
       }
+    }
+    } catch (error) {
+      reportFrameError("frame", error);
     }
     carInstancer.update(camera);
     // Shadows last, once every car and person is in place for this frame (see shadowCache.js).
