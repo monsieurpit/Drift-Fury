@@ -252,7 +252,14 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     }
   }
   let interaction = null;
-  let playerCar = batchPlayerCar(buildCar(car.color, car.shape, false, true));
+  // The player's car: its real 3D model (carModels.js), or the one built from code if it has none.
+  const buildPlayerCar = (color, shape, police = false) => {
+    const modelKey = carModelKey(shape, police);
+    return batchPlayerCar(
+      modelKey ? buildModelCar(modelKey, { player: true, color }) : buildCar(color, shape, police, true),
+    );
+  };
+  let playerCar = buildPlayerCar(car.color, car.shape);
   scene.add(playerCar);
   let playerCarSpec = game.state.playerVeh.spec;
   // Police, parked and traffic cars are instanced per look (carInstancing.js).
@@ -309,12 +316,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     });
     // A parked or police car taken by the player keeps its real model (carModels.js); the garage cars are
     // the ones built from code.
-    const modelKey = vehicle.kind === "player" ? null : carModelKey(vehicle.shape, vehicle.kind === "police");
-    playerCar = batchPlayerCar(
-      modelKey
-        ? buildModelCar(modelKey, { player: true, color: vehicle.color })
-        : buildCar(vehicle.color, vehicle.shape, vehicle.kind === "police", true),
-    );
+    playerCar = buildPlayerCar(vehicle.color, vehicle.shape, vehicle.kind === "police");
     clusteredLights.patchAll(playerCar);
     scene.add(playerCar);
     trackMotion(playerCar);
@@ -1408,7 +1410,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         e.geometry?.dispose();
         e.material?.dispose();
       });
-      playerCar = batchPlayerCar(buildCar(e.color, e.shape, false, true));
+      playerCar = buildPlayerCar(e.color, e.shape);
+      clusteredLights.patchAll(playerCar);
       scene.add(playerCar);
       trackMotion(playerCar);
       playerCarSpec = `player|${e.color}|${e.shape}`;

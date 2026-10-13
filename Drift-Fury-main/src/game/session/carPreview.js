@@ -10,6 +10,7 @@ import {
 } from "three";
 import { createRenderer } from "../render/renderer.js";
 import { buildCar } from "../vehicles/carModel.js";
+import { buildModelCar, carModelKey, loadCarModels } from "../vehicles/carModels.js";
 export function startCarPreview(container, car) {
   if (navigator.webdriver || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)) {
     return () => {};
@@ -18,9 +19,21 @@ export function startCarPreview(container, car) {
   const { scene, renderer, camera, composer } = view;
   camera.position.set(7, 3.2, 8.2);
   camera.lookAt(0, 0.5, 0);
-  const carModel = buildCar(car.color, car.shape);
+  let carModel = buildCar(car.color, car.shape);
   carModel.rotation.y = -0.25;
   scene.add(carModel);
+  let disposed = false;
+  // Swapped for the car's real 3D model once the models have loaded.
+  loadCarModels().then(() => {
+    const key = carModelKey(car.shape, false);
+    if (disposed || !key) return;
+    const model = buildModelCar(key, { player: true, color: car.color });
+    for (const beam of model.userData.headlightBeams || []) beam.visible = false;
+    model.rotation.y = carModel.rotation.y;
+    scene.remove(carModel);
+    carModel = model;
+    scene.add(carModel);
+  });
   const floor = new Mesh(
     new PlaneGeometry(100, 100),
     new MeshStandardMaterial({
@@ -73,6 +86,7 @@ export function startCarPreview(container, car) {
   }
   loop();
   return () => {
+    disposed = true;
     cancelAnimationFrame(frameId);
     view.dispose();
   };

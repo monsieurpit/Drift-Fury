@@ -29,6 +29,11 @@ const MODELS = {
   hatch: { file: "toyama", yaw: Math.PI, length: CAR_SPECS.hatch.L, paint: /^Body_Paint$/, drop: /^Shadow/ },
   coupe: { file: "carter98", yaw: Math.PI / 2, length: CAR_SPECS.coupe.L, paint: /Carter98_Body/ },
   police: { file: "crownvic_police", yaw: Math.PI, length: 5.05, paint: null, lightBar: true },
+  // The player's cars from the garage.
+  porsche: { file: "stinger96", yaw: Math.PI / 2, length: CAR_SPECS.porsche.L, paint: /Boxer96_Body/ },
+  muscle: { file: "phoenix71", yaw: Math.PI / 2, length: CAR_SPECS.muscle.L, paint: /bodymat/i },
+  super: { file: "saba95", yaw: Math.PI / 2, length: CAR_SPECS.super.L, paint: /bodymat/i },
+  hyper: { file: "cheetah84", yaw: Math.PI / 2, length: CAR_SPECS.hyper.L, paint: /bodymat/i },
 };
 
 const loaded = new Map(); // key -> gltf scene
@@ -40,6 +45,7 @@ export async function loadCarModels(onProgress) {
   let done = 0;
   await Promise.all(
     keys.map(async (key) => {
+      if (loaded.has(key)) return onProgress?.(++done / keys.length);
       try {
         const gltf = await loader.loadAsync(`${BASE}${MODELS[key].file}.glb`);
         loaded.set(key, gltf.scene);
@@ -148,6 +154,21 @@ function playerParts(car, model, length) {
       node = node.parent;
     }
   });
+  // Brake lights and headlights: each lamp gets its own copy of the lamp material, so it can glow (and
+  // break) on its own.
+  const brakeLights = [];
+  const headlights = [];
+  model.traverse((object) => {
+    if (!object.isMesh) return;
+    const name = (object.name || "").replace(/_UCB_.*$/, ""); // (without the material's name)
+    const brake = /brakelight|backlight/i.test(name);
+    const head = /headlight/i.test(name) && !/glass|panel/i.test(name);
+    if (!brake && !head) return;
+    object.material = object.material.clone();
+    object.material.emissive?.set(brake ? "#ff2a1a" : "#fff2dc");
+    object.material.emissiveIntensity = brake ? 0.6 : 1.4;
+    (brake ? brakeLights : headlights).push(object);
+  });
   const wheels = [];
   for (const corner of ["FL", "FR", "RL", "RR"]) {
     const meshes = corners[corner];
@@ -177,8 +198,8 @@ function playerParts(car, model, length) {
   return {
     wheels: wheels.length === 4 ? wheels : [],
     separateWheels: true,
-    brakeLights: [],
-    headlights: [],
+    brakeLights,
+    headlights,
     headlightBeams,
   };
 }
