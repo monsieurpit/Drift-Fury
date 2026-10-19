@@ -1,7 +1,7 @@
 import React from "react";
 import { ArrowLeftIcon, ArrowRightIcon, ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { t } from "../../i18n.js";
-export function TouchControls({ controls }) {
+export function TouchControls({ controls, hud }) {
   const pressCounts = React.useRef({});
   const setPressed = (key, pressed) => {
     const counts = pressCounts.current;
@@ -48,9 +48,20 @@ export function TouchControls({ controls }) {
         </div>
       </div>
       <div className="touch-group pointer-events-auto flex gap-1.5">
-        <div className="touch-button !w-12 text-[9px] font-bold" role="button" {...bindButton("Space")}>
-          DRIFT
-        </div>
+        {hud?.onFoot && hud?.rp ? (
+          <div
+            className="touch-button !w-12 !border-[#e8857a]/60 !bg-[#e8857a]/20 text-[9px] font-bold"
+            role="button"
+            aria-label={t("touch.fire")}
+            {...bindButton("KeyG")}
+          >
+            {t("touch.fireLabel")}
+          </div>
+        ) : (
+          <div className="touch-button !w-12 text-[9px] font-bold" role="button" {...bindButton("Space")}>
+            DRIFT
+          </div>
+        )}
         <div
           className="touch-button !w-14 text-[9px] font-bold"
           role="button"

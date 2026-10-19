@@ -54,7 +54,13 @@ export function collideOrientedBoxes(first, second) {
       };
 }
 const collisionProfiles = new Map();
+// The emergency vehicles (real 3D models only, no specs of their own): boxy outlines.
+const EXTRA_PROFILES = {
+  ambulance: { shape: "ambulance", length: 5.9, widths: [[0, 0.95], [0.25, 1.05], [5.65, 1.05], [5.9, 0.98]] },
+  firetruck: { shape: "firetruck", length: 9.5, widths: [[0, 1.1], [0.3, 1.25], [9.2, 1.25], [9.5, 1.15]] },
+};
 export function getCollisionProfile(shape) {
+  if (EXTRA_PROFILES[shape]) return EXTRA_PROFILES[shape];
   if (!collisionProfiles.has(shape)) {
     const spec = CAR_SPECS[shape] || CAR_SPECS.coupe;
     collisionProfiles.set(shape, {

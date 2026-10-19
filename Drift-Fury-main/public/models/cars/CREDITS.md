@@ -15,5 +15,8 @@ in the game they are rotated, scaled to the game's car sizes and repainted per c
 | phoenix71.glb | [Phoenix 455 '71 - Low poly model](https://sketchfab.com/3d-models/phoenix-455-71-low-poly-model-955edc733c6d44fabc0ad7c246a15896) | [Daniel Zhabotinsky](https://sketchfab.com/DanielZhabotinsky) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
 | saba95.glb | [Saba V12 '95 - Low poly model](https://sketchfab.com/3d-models/saba-v12-95-low-poly-model-3ab977050c334c13b6abb5de078b4957) | [Daniel Zhabotinsky](https://sketchfab.com/DanielZhabotinsky) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
 | cheetah84.glb | [Cheetah '84 - Low poly Model](https://sketchfab.com/3d-models/cheetah-84-low-poly-model-c967ab4abbc54ae4b7933fd81a86c99c) | [Daniel Zhabotinsky](https://sketchfab.com/DanielZhabotinsky) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+| shvan92_ambulance.glb | [Shvan '92 Ambulance - Low Poly model](https://sketchfab.com/3d-models/shvan-92-ambulance-low-poly-model-2856dd3c61f940909dced9a5c0379484) | [Daniel Zhabotinsky](https://sketchfab.com/DanielZhabotinsky) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+| firetruck.glb | [Firetruck](https://sketchfab.com/3d-models/firetruck-27a6b95f768d415282e2f5de48ba6d99) | [OzerGokmen](https://sketchfab.com/OzerGokmen) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
 
 The garage cars (Elfen 9R, Outlaw R, Spectre RS, Titan X) use the last four models.
+The ambulance and the fire truck are the emergency services of RP mode.

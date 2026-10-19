@@ -646,6 +646,54 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
       }
       return events;
     },
+    /**
+     * A driver pulled out of their car at (x, z) runs off away from (fromX, fromZ), screaming: one of the
+     * people out of the player's sight is moved there.
+     */
+    ejectDriver(x, z, fromX, fromZ, viewX, viewZ, events) {
+      let pick = null;
+      let pickScore = -Infinity;
+      for (const ped of people) {
+        if (ped.mode === "dead") continue;
+        const dx = ped.x - fromX;
+        const dz = ped.z - fromZ;
+        const distance = Math.hypot(dx, dz);
+        const inView = (dx * viewX + dz * viewZ) / (distance || 1) > 0.3 && distance < 80;
+        const score = distance + (inView ? -1000 : 0);
+        if (score > pickScore) {
+          pickScore = score;
+          pick = ped;
+        }
+      }
+      if (!pick) return;
+      endTalk(pick);
+      spawn(pick, null);
+      pick.x = pick.visualX = x;
+      pick.z = pick.visualZ = z;
+      const awayX = x - fromX;
+      const awayZ = z - fromZ;
+      const away = Math.hypot(awayX, awayZ) || 1;
+      pick.mode = "flee";
+      pick.dodging = false;
+      pick.fleeSpeed = 2.5;
+      pick.fleeX = awayX / away;
+      pick.fleeZ = awayZ / away;
+      pick.panic = 4 + random() * 2;
+      pick.scared = 8;
+      pick.heading = Math.atan2(-pick.fleeX, -pick.fleeZ);
+      pick.rig.position.set(x, groundAt(x, z), z);
+      pick.rig.rotation.set(0, pick.heading, 0);
+      events.push({ type: "scream", ped: pick, x, z });
+    },
+    /** `ped` shot from (fromX, fromZ): collapses where they stand (the "killed" event, its car marked gun). */
+    shoot(ped, fromX, fromZ, events) {
+      if (ped.mode === "dead") return;
+      const dx = ped.x - fromX;
+      const dz = ped.z - fromZ;
+      const d = Math.hypot(dx, dz) || 1;
+      kill(ped, { x: fromX, z: fromZ, vx: (dx / d) * 1.2, vz: (dz / d) * 1.2, heading: Math.atan2(-dx, -dz), player: true, gun: true }, 0.5, events);
+      ped.dead.velocity.y = 0.6;
+    },
     /** People near (x, z) see something terrible and run from it. */
     frighten(x, z, radius, events) {
       for (const ped of people) {

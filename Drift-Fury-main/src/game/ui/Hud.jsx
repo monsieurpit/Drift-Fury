@@ -1,4 +1,4 @@
-import { VolumeXIcon, Volume2Icon, PauseIcon, StarIcon, FuelIcon, ShieldIcon } from "lucide-react";
+import { VolumeXIcon, Volume2Icon, PauseIcon, StarIcon, FuelIcon, ShieldIcon, HeartIcon } from "lucide-react";
 import { GearIndicator } from "./GearIndicator.jsx";
 import { Minimap } from "./Minimap.jsx";
 import { t, formatNumber } from "../../i18n.js";
@@ -61,6 +61,16 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
           <p className="mt-2 text-[10px] font-bold tracking-[.3em] text-white">{t("hud.holdAngle")}</p>
         </div>
       )}
+      {hud.wasted > 0 && (
+        <div className="absolute inset-x-0 top-[34%] text-center" style={{ opacity: Math.min(1, hud.wasted * 1.2) }}>
+          <div className="race-title text-7xl text-[#d8d8d8] drop-shadow-lg sm:text-8xl">{t("hud.wasted")}</div>
+        </div>
+      )}
+      {hud.respawnMessage && (
+        <div className="hud-glass absolute left-1/2 top-24 -translate-x-1/2 px-4 py-2 text-xs text-[#e8eddf]">
+          {t(hud.respawnMessage === "police" ? "hud.releasedPolice" : "hud.leftHospital")}
+        </div>
+      )}
       {hud.busted > 0 && (
         <div className="absolute inset-x-0 top-[30%] text-center" style={{ opacity: Math.min(1, hud.busted * 1.5) }}>
           <div className="race-title text-7xl italic text-[#ff5a4e] drop-shadow-lg sm:text-8xl">{t("hud.busted")}</div>
@@ -98,10 +108,17 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
           </p>
         </button>
       )}
-      {hud.onFoot && (
+      {hud.onFoot && !hud.respawnMessage && (
         <div className="absolute left-1/2 top-24 -translate-x-1/2 rounded-lg bg-[#18251eee] px-4 py-2 text-xs text-[#c6dc77] border border-[#c6dc77]/30">
           {t("hud.onFoot")}
           <kbd className="race-key">F</kbd>
+          {hud.rp && (
+            <>
+              <span className="mx-2 text-[#5d6b5f]">|</span>
+              {t("hud.shoot")}
+              <kbd className="race-key">G</kbd>
+            </>
+          )}
         </div>
       )}
       {hud.onFoot && (hud.shop >= 0 || hud.store >= 0) && (
@@ -160,6 +177,20 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
           </div>
           <span className="w-8 text-right text-[9px]">{Math.round(hud.fuel)}%</span>
         </div>
+        {hud.onFoot && (
+          <div className="mt-3 flex items-center gap-2">
+            <HeartIcon size={13} className={hud.playerHealth < 30 ? "text-[#ed8974]" : "text-[#e89a9a]"} />
+            <div className="game-meter flex-1">
+              <div
+                className={hud.playerHealth < 30 ? "bg-[#ed8974]" : "bg-[#d9797b]"}
+                style={{
+                  width: `${hud.playerHealth}%`,
+                }}
+              />
+            </div>
+            <span className="w-8 text-right text-[9px]">{Math.round(hud.playerHealth)}%</span>
+          </div>
+        )}
         <div className="mt-3 flex items-center gap-2">
           <ShieldIcon size={13} className="text-[#a5b6ac]" />
           <div className="game-meter flex-1">

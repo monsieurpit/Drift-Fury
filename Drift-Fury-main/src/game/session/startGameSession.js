@@ -27,7 +27,7 @@ import {
   scannedTexturesReady,
   scannedTexturesRequested,
 } from "../world/scannedTextures.js";
-import { createGame } from "../simulation/game.js";
+import { CIVILIAN_SHAPES, createGame } from "../simulation/game.js";
 import { batchPlayerCar } from "../vehicles/batchPlayerCar.js";
 import { buildCar } from "../vehicles/carModel.js";
 import { trafficTemplate, trafficTemplates } from "../vehicles/trafficCars.js";
@@ -36,6 +36,7 @@ import { buildModelCar, carModelKey, loadCarModels } from "../vehicles/carModels
 import { createHelicopter } from "../vehicles/helicopter.js";
 import { crackPrewarm, createCarDamage } from "../vehicles/carDamage.js";
 import { createSparks } from "../effects/sparks.js";
+import { createGunfire } from "../effects/gunfire.js";
 import { buildWorldInSteps } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
 import { loadStreetProps, placeStreetProps } from "../world/streetProps.js";
@@ -182,7 +183,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   });
   // Real 3D car models for the parked and police cars (carModels.js).
   await stage(0.36, t("stage.vehicles"));
-  const [, peopleModels] = await Promise.all([loadCarModels(), loadPeopleModels()]);
+  const [, peopleModels] = await Promise.all([loadCarModels(undefined, { emergency: !noPolice }), loadPeopleModels()]);
   if (loading.cancelled()) {
     cleanup.forEach((dispose) => dispose());
     throw CANCELLED;
@@ -224,6 +225,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         staticBatch,
         solids,
         controls,
+        get traffic() {
+          return game.traffic;
+        },
         get state() {
           return game.state;
         },
@@ -268,9 +272,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const trackMotion = (object) => composer.taa?.track(object);
   const carInstancer = createCarInstancer(scene, {
     onMesh: (mesh, template) => {
-      // Only the police cruisers move: parked cars need no motion vectors (their motion on screen is the
+      // Only the police cruisers and the traffic move: parked cars need no motion vectors (their motion on screen is the
       // camera's, which the antialiasing reprojects from depth), and so no second draw every frame.
-      if (template?.userData?.police) trackMotion(mesh);
+      if (template?.userData?.police || template?.userData?.moving) trackMotion(mesh);
       clusteredLights.patchAll(mesh);
     },
   });
@@ -296,6 +300,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const cuffingOfficer = newOfficer();
   const helicopter = createHelicopter(scene);
   let sparkLight = null;
+  let respawnMessageKind = null;
+  let respawnMessageUntil = -1;
+  let baseSaturation = null;
   const SPARK_COLOUR = new Color("#ff9a3c");
   // Where the player's car touches something in direction (nx, nz): on the outline of its body.
   const contactPoint = (state, nx, nz) => {
@@ -322,6 +329,81 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     scene.add(playerCar);
     trackMotion(playerCar);
     playerCarSpec = vehicle.spec;
+  }
+  // City traffic (RP mode, traffic.js): moved here each frame with the light cycle, drawn instanced.
+  const trafficCount = { low: 8, medium: 12, high: 16, ultra: 20 }[view.quality] ?? 12;
+  const trafficHandles = new Map(); // traffic car -> instanced handle
+  const trafficPeople = [];
+  const trafficWorld = {
+    player: { x: 0, z: 0, heading: 0, onFoot: false, vx: 0, vz: 0 },
+    police: [],
+    chasing: false,
+    vehicles: [],
+    people: trafficPeople,
+    phase: 0,
+    camera: { x: 0, z: 0, dirX: 0, dirZ: -1 },
+    count: trafficCount,
+    filling: true,
+  };
+  const trafficView = new Vector3();
+  function updateTraffic(state, dt, filling = false) {
+    const traffic = game.traffic;
+    if (!traffic) return;
+    const world = trafficWorld;
+    Object.assign(world.player, {
+      x: state.x,
+      z: state.z,
+      heading: state.heading,
+      onFoot: state.onFoot,
+      vx: state.vx,
+      vz: state.vz,
+    });
+    world.police = state.police;
+    world.chasing = state.wanted > 0.15;
+    world.vehicles = state.vehicles;
+    world.phase = signalClock;
+    world.filling = filling;
+    camera.getWorldDirection(trafficView);
+    world.camera.x = camera.position.x;
+    world.camera.z = camera.position.z;
+    const flat = Math.hypot(trafficView.x, trafficView.z) || 1;
+    world.camera.dirX = trafficView.x / flat;
+    world.camera.dirZ = trafficView.z / flat;
+    // People in the roadway (crossing, running, lying there): the asphalt is 9 m either side of a road's
+    // centre line.
+    trafficPeople.length = 0;
+    for (const ped of pedestrians.people) {
+      let onRoad = false;
+      for (const x of ROAD_XS) if (Math.abs(ped.x - x) < 9.2) onRoad = true;
+      for (const z of ROAD_ZS) if (Math.abs(ped.z - z) < 9.2) onRoad = true;
+      if (onRoad) trafficPeople.push(ped);
+    }
+    for (const officer of state.police) if (officer.onFoot) trafficPeople.push(officer);
+    traffic.update(dt, world);
+    for (const event of traffic.events) {
+      if (event.type === "horn") {
+        const [distance, pan] = heard(event.x, event.z);
+        if (distance < 70) audio.horn?.(distance, pan);
+      }
+    }
+    // Instanced handles: one per car on the road.
+    const live = new Set(traffic.cars);
+    for (const [car, handle] of trafficHandles) {
+      if (!live.has(car)) {
+        carInstancer.remove(handle);
+        trafficHandles.delete(car);
+      }
+    }
+    for (const car of traffic.cars) {
+      let handle = trafficHandles.get(car);
+      if (!handle) {
+        handle = carInstancer.add(trafficTemplate(car.color, car.shape, false, true), car.color);
+        trafficHandles.set(car, handle);
+      }
+      handle.visible = true;
+      handle.position.set(car.x, terrainHeight(car.x, car.z) + 0.1, car.z);
+      sitOnGround(handle, car.x, car.z, car.heading);
+    }
   }
   function syncTrafficCars() {
     const state = game.state;
@@ -370,6 +452,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     if (carLightCount === carLightPool.length) carLightPool.push({ color: new Color(), direction: [0, 0, 0] });
     return carLightPool[carLightCount++];
   };
+  const nearestTraffic = [];
   const BAR_BLUE = new Color("#3a6bff");
   const BAR_RED = new Color("#ff2a2a");
   const HEADLIGHT = new Color("#fff0d8");
@@ -411,8 +494,44 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     for (const vehicle of state.vehicles) {
       if (vehicle.kind === "police") addBar(vehicle.x, vehicle.z);
     }
-    if (sparkLight) {
+    // Low beams of the nearest traffic (the farther cars' lamps just glow).
+    if (game.traffic) {
+      nearestTraffic.length = 0;
+      for (const car of game.traffic.cars) {
+        const d = Math.hypot(car.x - camera.position.x, car.z - camera.position.z);
+        if (d < 75) nearestTraffic.push([d, car]);
+      }
+      nearestTraffic.sort((a, b) => a[0] - b[0]);
+      for (let k = 0; k < Math.min(6, nearestTraffic.length); k++) {
+        const car = nearestTraffic[k][1];
+        const forwardX = -Math.sin(car.heading);
+        const forwardZ = -Math.cos(car.heading);
+        const beam = carLight();
+        Object.assign(beam, {
+          x: car.x + forwardX * 0.8,
+          y: terrainHeight(car.x, car.z) + 3.4,
+          z: car.z + forwardZ * 0.8,
+          intensity: 450,
+          range: 36,
+          cosOuter: 0.86,
+          cosInner: 0.97,
+          flags: 0,
+        });
+        const length = Math.hypot(22, 3.4);
+        beam.direction = [(forwardX * 22) / length, -3.4 / length, (forwardZ * 22) / length];
+        beam.color.copy(HEADLIGHT);
+        clusteredLights.addDynamic(beam);
+      }
+    }
+    const shotLight = gunfire.light;
+    if (shotLight) {
       const light = carLight();
+      Object.assign(light, { x: shotLight.x, y: shotLight.y, z: shotLight.z, intensity: shotLight.intensity, range: shotLight.range, flags: 0 });
+      light.direction = null;
+      light.color.copy(shotLight.colour);
+      clusteredLights.addDynamic(light);
+    }
+    if (sparkLight) {
       Object.assign(light, { x: sparkLight.x, y: sparkLight.y, z: sparkLight.z, intensity: 14 * sparkLight.flicker, range: 7, flags: 0 });
       light.direction = null;
       light.color.copy(SPARK_COLOUR);
@@ -460,6 +579,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const pedestrianCount = { low: 14, medium: 20, high: 28, ultra: 34 }[view.quality] ?? 20;
   const blood = createBlood(scene, groundAt, { patch: lightByLamps });
   const sparks = createSparks(scene, groundAt);
+  const gunfire = createGunfire(scene);
   scene.add(crackPrewarm());
   // Scanned, animated people (skinnedCrowd.js); the people built from shapes if they could not load.
   const crowd = peopleModels
@@ -491,6 +611,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     playerPerson = scanned;
     trackMotion(playerPerson);
   }
+  playerPerson.rotation.order = "YXZ"; // (yaw, then lying down around its own axis)
   // The player's low beams shine from above the car (see carModel.js), which throws a broad pool down the
   // road but also floods a wall right in front of the car far brighter than real headlights would (they
   // sit at bumper height and aim down). With a wall close ahead the beams are turned down smoothly.
@@ -532,6 +653,229 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     const distance = Math.hypot(dx, dz);
     return [distance, distance > 0.01 ? (dx * cameraRight.x + dz * cameraRight.z) / distance : 0];
   };
+  /* ----- guns (RP mode): the police shoot at 3 stars; the player fires with G (or the touch button) ----- */
+  let playerGunCooldown = 0;
+  let gunDrawn = 0; // seconds the player keeps the gun up after firing
+  let playerAim = null; // where the player is aiming (a Vector3), while the gun is up
+  const handPoint = new Vector3();
+  const aimPoint = new Vector3();
+  const muzzle = new Vector3();
+  const shotEnd = new Vector3();
+  const shotEvents = [];
+  /** World position of a person's right hand (scanned people: the hand bone; others: the forearm's end). */
+  function handPosition(person, out) {
+    const bone = person.userData.handBone;
+    if (bone) return bone.getWorldPosition(out);
+    const forearm = person.userData.L?.re;
+    if (forearm) return forearm.localToWorld(out.set(0, -0.3, 0));
+    return out.copy(person.position).setY(person.position.y + 1.3);
+  }
+  /** Whether a bullet from (x0, z0) reaches (x1, z1) without hitting a wall (where it stops, if not). */
+  function bulletPath(x0, z0, x1, z1, end) {
+    const length = Math.hypot(x1 - x0, z1 - z0);
+    const steps = Math.max(1, Math.ceil(length / 1.5));
+    for (let k = 1; k <= steps; k++) {
+      const x = x0 + ((x1 - x0) * k) / steps;
+      const z = z0 + ((z1 - z0) * k) / steps;
+      if (wallGrid.near(x, z, 2, wallBuffer).some((w) => Math.abs(x - w.x) < w.w && Math.abs(z - w.z) < w.d)) {
+        end.x = x0 + ((x1 - x0) * (k - 0.5)) / steps;
+        end.z = z0 + ((z1 - z0) * (k - 0.5)) / steps;
+        return false;
+      }
+    }
+    end.x = x1;
+    end.z = z1;
+    return true;
+  }
+  /** The player's gun: aims at whoever is in front (people, officers), fires, and what it does. */
+  function updatePlayerGun(state, dt) {
+    playerGunCooldown -= dt;
+    gunDrawn -= dt;
+    if (gunDrawn <= 0) playerAim = null;
+    const pressed = !!(keys.KeyG || controls.current.keys.KeyG);
+    if (state.noPolice || !state.onFoot || state.busted > 0 || state.wasted > 0 || interaction) {
+      playerAim = null;
+      gunDrawn = 0;
+      return;
+    }
+    if (!pressed || playerGunCooldown > 0) return;
+    playerGunCooldown = 0.32;
+    gunDrawn = 3;
+    // The target: the nearest person or officer roughly in front, in plain sight, within 30 m.
+    const yaw = state.footYaw || 0;
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    let best = null;
+    let bestScore = Infinity;
+    const consider = (x, z, target) => {
+      const dx = x - state.x;
+      const dz = z - state.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.6 || d > 30) return;
+      const facing = (dx * fx + dz * fz) / d;
+      if (facing < 0.55) return;
+      if (!bulletPath(state.x, state.z, x, z, shotEnd)) return;
+      const score = d * (2 - facing);
+      if (score < bestScore) {
+        bestScore = score;
+        best = { x, z, d, ...target };
+      }
+    };
+    for (const ped of pedestrians.people) if (ped.mode !== "dead") consider(ped.x, ped.z, { ped });
+    for (const officer of state.police) if (officer.onFoot && !officer.dead) consider(officer.x, officer.z, { officer });
+    if (best) state.footYaw = Math.atan2(-(best.x - state.x), -(best.z - state.z));
+    const aimYaw = state.footYaw || 0;
+    handPosition(playerPerson, muzzle);
+    muzzle.x += -Math.sin(aimYaw) * 0.25;
+    muzzle.z += -Math.cos(aimYaw) * 0.25;
+    const groundHere = state.y || 0;
+    const hit = best && Math.random() < (best.d < 15 ? 0.9 : 0.72);
+    if (best) {
+      aimPoint.set(best.x, groundAt(best.x, best.z) + 1.25, best.z);
+      if (!hit) {
+        aimPoint.x += (Math.random() - 0.5) * 1.6;
+        aimPoint.y += (Math.random() - 0.3) * 0.8;
+        aimPoint.z += (Math.random() - 0.5) * 1.6;
+      }
+    } else {
+      // Nothing to aim at: straight ahead, until a wall.
+      aimPoint.set(state.x - Math.sin(aimYaw) * 30, groundHere + 1.3, state.z - Math.cos(aimYaw) * 30);
+    }
+    if (!hit) {
+      bulletPath(muzzle.x, muzzle.z, aimPoint.x, aimPoint.z, shotEnd);
+      aimPoint.x = shotEnd.x;
+      aimPoint.z = shotEnd.z;
+    }
+    playerAim = (playerAim || new Vector3()).copy(aimPoint);
+    gunfire.fire(muzzle, aimPoint);
+    audio.gunshot?.(4, 0);
+    shotEvents.length = 0;
+    if (hit && best.ped) {
+      pedestrians.shoot(best.ped, state.x, state.z, shotEvents);
+    } else if (hit && best.officer) {
+      // An officer shot dead: the most serious crime there is.
+      const officer = best.officer;
+      officer.dead = true;
+      officer.aiming = false;
+      blood.pool(officer.x, officer.z);
+      impactPoint.set(officer.x, groundAt(officer.x, officer.z) + 1.1, officer.z);
+      impactVelocity.set((officer.x - state.x) * 0.1, 1.2, (officer.z - state.z) * 0.1);
+      blood.spray(impactPoint, impactVelocity, 24);
+      const [distance, pan] = heard(officer.x, officer.z);
+      audio.hurt?.(false, distance, pan);
+      state.wanted = Math.min(5, Math.max(state.wanted, 3) + 1);
+    } else {
+      // A miss: a ricochet where it struck.
+      sparks.emit(aimPoint.x, Math.max(aimPoint.y, groundAt(aimPoint.x, aimPoint.z) + 0.1), aimPoint.z, 0, 0, 0, 0, 4);
+    }
+    // Shots fired: everyone around runs, and the police (if anywhere near) are after an armed suspect.
+    pedestrians.frighten(state.x, state.z, 35, shotEvents);
+    processPedEvents(shotEvents, state);
+    state.gunfire = 15;
+    if (state.police.some((o) => !o.dead && Math.hypot(o.x - state.x, o.z - state.z) < 80) || state.heli) {
+      state.wanted = Math.min(5, Math.max(state.wanted, 1) + 0.15);
+    }
+  }
+  /** The police's shots this step (game.js): tracers from their pistols, hits on the player or the car. */
+  function processPoliceShots(state) {
+    for (const shot of state.shots) {
+      const unit = shot.unit ?? -1;
+      const person = officerPeople[unit];
+      if (person && person.visible) handPosition(person, muzzle);
+      else muzzle.set(shot.x0, groundAt(shot.x0, shot.z0) + 1.35, shot.z0);
+      const targetHeight = shot.onFoot ? 1.2 : 0.9;
+      aimPoint.set(shot.x1, groundAt(shot.x1, shot.z1) + targetHeight + (shot.hit ? 0 : (Math.random() - 0.3) * 0.8), shot.z1);
+      if (!shot.hit) {
+        bulletPath(muzzle.x, muzzle.z, aimPoint.x, aimPoint.z, shotEnd);
+        aimPoint.x = shotEnd.x;
+        aimPoint.z = shotEnd.z;
+      }
+      gunfire.fire(muzzle, aimPoint);
+      const [distance, pan] = heard(muzzle.x, muzzle.z);
+      audio.gunshot?.(distance, pan);
+      if (shot.hit && shot.onFoot) {
+        impactVelocity.set((aimPoint.x - muzzle.x) * 0.05, 1, (aimPoint.z - muzzle.z) * 0.05);
+        blood.spray(aimPoint, impactVelocity, 10);
+        audio.hurt?.(false, 3, 0);
+      } else if (shot.hit) {
+        // Into the car's bodywork: sparks and a ping.
+        sparks.emit(aimPoint.x, aimPoint.y, aimPoint.z, (muzzle.x - aimPoint.x) * 0.05, (muzzle.z - aimPoint.z) * 0.05, 0, 0, 6);
+        audio.ping?.(3);
+      } else {
+        sparks.emit(aimPoint.x, Math.max(aimPoint.y, groundAt(aimPoint.x, aimPoint.z) + 0.1), aimPoint.z, 0, 0, 0, 0, 3);
+      }
+    }
+    if (state.shots.length) {
+      shotEvents.length = 0;
+      pedestrians.frighten(state.shots[0].x0, state.shots[0].z0, 30, shotEvents);
+      processPedEvents(shotEvents, state);
+    }
+  }
+  /** Arms up and pistols in hand: the officers aiming, and the player while their gun is up. */
+  function poseGuns(state) {
+    const aimArms = (limbs) => {
+      limbs.ra.rotation.set(1.5, 0, -0.08);
+      limbs.la.rotation.set(1.38, 0, 0.42);
+      limbs.re.rotation.set(0.08, 0, 0);
+      limbs.le.rotation.set(0.3, 0, 0);
+    };
+    officerPeople.forEach((person, index) => {
+      const officer = state.police[index];
+      const limbs = person.userData.L;
+      if (!limbs) return;
+      // (The shape-built officers keep their arms' sideways turn: clear it when not aiming.)
+      limbs.ra.rotation.z = 0;
+      limbs.la.rotation.z = 0;
+      if (!person.visible || !officer.onFoot || !officer.aiming || officer.down > 0 || officer.dead) return;
+      aimArms(limbs);
+      handPosition(person, handPoint);
+      aimPoint.set(state.x, (state.y || 0) + (state.onFoot ? 1.2 : 0.9), state.z);
+      gunfire.holdPistol(handPoint, aimPoint);
+    });
+    if (playerAim && state.onFoot && playerPerson.visible && state.wasted <= 0) {
+      const limbs = playerPerson.userData.L;
+      if (limbs) aimArms(limbs);
+      handPosition(playerPerson, handPoint);
+      gunfire.holdPistol(handPoint, playerAim);
+    }
+  }
+  /** Blood, voices and the crimes of the pedestrians' events (hit by cars, shot, screaming). */
+  function processPedEvents(events, state) {
+    for (let index = 0; index < events.length; index++) {
+      const event = events[index];
+      const [distance, pan] = heard(event.x, event.z);
+      const female = event.ped.female;
+      if (event.type === "killed" || event.type === "runOver") {
+        const killed = event.type === "killed";
+        impactPoint.set(event.x, groundAt(event.x, event.z) + (killed ? 1.0 : 0.3), event.z);
+        impactVelocity.set(event.car.vx, killed ? 1.5 : 0.5, event.car.vz);
+        const gun = !!event.car.gun; // (shot, not hit by a car)
+        blood.spray(impactPoint, impactVelocity, gun ? 22 : Math.round(Math.min(70, (killed ? 14 : 6) + event.speed * 2.5)));
+        if (!gun) audio.bodyHit?.(event.speed, distance, pan);
+        if (killed) {
+          audio.hurt?.(female, distance, pan);
+          // Everyone around runs away screaming.
+          pedestrians.frighten(event.x, event.z, 22, events);
+          if (event.car.player) {
+            const witnessed = state.police.some((officer) => Math.hypot(officer.x - event.x, officer.z - event.z) < 90);
+            state.wanted = Math.min(5, (state.wanted || 0) + (witnessed ? 1 : 0.5));
+            if (!gun) state.shake = Math.min((state.shake || 0) + 0.25, 1.2);
+          }
+        }
+      } else if (event.type === "land") {
+        impactPoint.set(event.x, groundAt(event.x, event.z) + 0.2, event.z);
+        impactVelocity.set(0, 0.5, 0);
+        blood.spray(impactPoint, impactVelocity, Math.round(6 + event.strength * 3));
+        audio.bodyHit?.(event.strength * 2, distance, pan);
+      } else if (event.type === "scream") {
+        audio.scream?.(female, distance, pan);
+      } else if (event.type === "hurt") {
+        audio.hurt?.(female, distance, pan);
+      } else if (event.type === "talk") {
+        audio.murmur?.(female, distance, pan);
+      }
+    }
+  }
   function updatePedestrians(state, dt) {
     pedestrianCars.length = 0;
     if (!state.onFoot) {
@@ -550,40 +894,11 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       });
     }
     crowd.setView?.(camera);
-    const events = pedestrians.update(dt, { cars: pedestrianCars, camera, phase: signalClock });
-    for (let index = 0; index < events.length; index++) {
-      const event = events[index];
-      const [distance, pan] = heard(event.x, event.z);
-      const female = event.ped.female;
-      if (event.type === "killed" || event.type === "runOver") {
-        const killed = event.type === "killed";
-        impactPoint.set(event.x, groundAt(event.x, event.z) + (killed ? 1.0 : 0.3), event.z);
-        impactVelocity.set(event.car.vx, killed ? 1.5 : 0.5, event.car.vz);
-        blood.spray(impactPoint, impactVelocity, Math.round(Math.min(70, (killed ? 14 : 6) + event.speed * 2.5)));
-        audio.bodyHit?.(event.speed, distance, pan);
-        if (killed) {
-          audio.hurt?.(female, distance, pan);
-          // Everyone around runs away screaming.
-          pedestrians.frighten(event.x, event.z, 22, events);
-          if (event.car.player) {
-            const witnessed = state.police.some((officer) => Math.hypot(officer.x - event.x, officer.z - event.z) < 90);
-            state.wanted = Math.min(5, (state.wanted || 0) + (witnessed ? 1 : 0.5));
-            state.shake = Math.min((state.shake || 0) + 0.25, 1.2);
-          }
-        }
-      } else if (event.type === "land") {
-        impactPoint.set(event.x, groundAt(event.x, event.z) + 0.2, event.z);
-        impactVelocity.set(0, 0.5, 0);
-        blood.spray(impactPoint, impactVelocity, Math.round(6 + event.strength * 3));
-        audio.bodyHit?.(event.strength * 2, distance, pan);
-      } else if (event.type === "scream") {
-        audio.scream?.(female, distance, pan);
-      } else if (event.type === "hurt") {
-        audio.hurt?.(female, distance, pan);
-      } else if (event.type === "talk") {
-        audio.murmur?.(female, distance, pan);
-      }
+    for (const car of game.traffic ? game.traffic.cars : []) {
+      pedestrianCars.push({ x: car.x, z: car.z, heading: car.heading, vx: car.vx, vz: car.vz, player: false });
     }
+    const events = pedestrians.update(dt, { cars: pedestrianCars, camera, phase: signalClock });
+    processPedEvents(events, state);
     crowd.update();
     blood.update(dt);
   }
@@ -1044,10 +1359,32 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         playerCar.userData.brakeLights.forEach((t) => (t.material.emissiveIntensity = braking ? 2.6 : 0.6));
       }
       playerPerson.visible = !!state.onFoot;
-      if (state.onFoot) {
+      playerPerson.rotation.x = 0;
+      if (state.wasted > 0) {
+        // Shot down: lying face down where they fell.
+        playerPerson.visible = true;
+        playerPerson.position.set(state.wastedX, (state.y || 0) + 0.13, state.wastedZ);
+        playerPerson.rotation.set(-Math.PI / 2, state.footYaw || 0, 0);
+      } else if (state.onFoot) {
         playerPerson.position.set(state.x, state.y || 0, state.z);
         playerPerson.rotation.y = state.footYaw || 0;
         animatePerson(playerPerson, dt, state.x, state.z);
+      }
+      if (state.respawned) {
+        // Back at the hospital or the police station: the camera starts behind the player there.
+        respawnMessageKind = state.respawned;
+        respawnMessageUntil = state.elapsed + 5;
+        interaction = null;
+        footCameraYaw = state.heading;
+        cameraYaw = 0;
+        playerAim = null;
+        gunDrawn = 0;
+        composer.taa?.reset();
+        camera.position.set(
+          state.x + Math.sin(state.heading) * 9,
+          (state.y || 0) + 6,
+          state.z + Math.cos(state.heading) * 9,
+        );
       }
       policeCars.forEach((policeCar, index) => {
         const officer = state.police[index];
@@ -1063,7 +1400,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         const officer = state.police[index];
         person.visible = !!officer.onFoot && !(state.busted > 0 && index === state.bustedBy);
         if (officer.onFoot) {
-          const down = officer.down > 0;
+          const down = officer.down > 0 || officer.dead;
           person.position.set(officer.x, terrainHeight(officer.x, officer.z) + (down ? 0.13 : 0), officer.z);
           person.rotation.y = officer.heading;
           // Knocked down: face down in the street, until they get up.
@@ -1096,7 +1433,26 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       });
       safely("arrest scene", () => updateBusted(state));
       heliLight = safely("helicopter", () => helicopter.update(state.heli, dt, state.elapsed, groundAt)) ?? null;
+      safely("guns", () => {
+        updatePlayerGun(state, dt);
+        processPoliceShots(state);
+        gunfire.update(dt, camera);
+        poseGuns(state);
+      });
       syncTrafficCars();
+      safely("traffic", () => updateTraffic(state, dt));
+      if (state._carjack) {
+        const jack = state._carjack;
+        state._carjack = null;
+        safely("carjack", () => {
+          const events = [];
+          pedestrians.ejectDriver(jack.x, jack.z, jack.fromX, jack.fromZ, trafficWorld.camera.dirX, trafficWorld.camera.dirZ, events);
+          for (const event of events) {
+            const [distance, pan] = heard(event.x, event.z);
+            audio.scream?.(event.ped.female, distance, pan);
+          }
+        });
+      }
       if (interaction) {
         interaction.elapsed += dt;
         const time = Math.min(interaction.elapsed / interaction.duration, 1);
@@ -1158,6 +1514,13 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       updateWorld(state.elapsed);
       inCityEnvironment(state.x, state.z);
       composer.grading?.update(state.elapsed);
+      // WASTED: the colour drains out of the picture.
+      const saturation = composer.grading?.uniforms?.uSaturation;
+      if (saturation) {
+        baseSaturation ??= saturation.value;
+        const target = state.wasted > 0 ? 0.08 : baseSaturation;
+        saturation.value += (target - saturation.value) * (1 - Math.exp(-3 * dt));
+      }
       const driving = !state.onFoot;
       const targetFov = driving ? 55 + speedFactor * 12 : 45;
       if (camera.fov !== targetFov) {
@@ -1195,9 +1558,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         state.z - Math.cos(cameraHeading) * lookAhead,
       );
       camera.lookAt(lookTarget);
-      if (state.busted > 0) {
-        // The arrest, seen from beside: the camera slowly circles the player and the officer.
-        const angle = (state.bustedOnFoot ? state.footYaw || 0 : state.heading) + 2.2 + state.busted * 0.18;
+      if (state.busted > 0 || state.wasted > 0) {
+        // The arrest (or the death), seen from beside: the camera slowly circles the player.
+        const angle = (state.bustedOnFoot || state.wasted > 0 ? state.footYaw || 0 : state.heading) + 2.2 + (state.busted + state.wasted) * 0.18;
         const px = playerPerson.position.x;
         const pz = playerPerson.position.z;
         camera.position.set(px + Math.sin(angle) * 5.2, playerPerson.position.y + 2.1, pz + Math.cos(angle) * 5.2);
@@ -1228,6 +1591,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           police: state.police.map((e) => ({
             ...e,
           })),
+          rp: !state.noPolice,
+          respawnMessage: state.elapsed < respawnMessageUntil ? respawnMessageKind : null,
           heliActive: !!state.heli && !state.heli.leaving,
           roadblockActive: !!state.roadblock,
         });
@@ -1356,6 +1721,14 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   await stage(0.8, t("stage.shaders"));
   // Everything lit is lit by the world's lights too (clusteredLights.js); cars as they are set up.
   clusteredLights.patchAll(scene);
+  // (The looks of the cars driving in traffic, so their shaders compile now too.)
+  if (game.traffic) for (const shape of CIVILIAN_SHAPES) trafficTemplate("#ffffff", shape, false, true);
+  // The streets filled with traffic before the session starts (a few seconds of driving, behind the
+  // loading screen), so no car appears out of nowhere in front of the player.
+  if (game.traffic) {
+    for (let step = 0; step < 10; step++) updateTraffic(game.state, 1 / 30, true);
+    for (let step = 0; step < 150; step++) updateTraffic(game.state, 1 / 30);
+  }
   await warmUpSession(renderer, scene, camera, [car.shape], (template) => carInstancer.prepare(template));
   await stage(0.88, t("stage.sound"));
   await Promise.race([audio.ready.catch(() => {}), sleep(15000)]);

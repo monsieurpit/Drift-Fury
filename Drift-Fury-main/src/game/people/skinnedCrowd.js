@@ -190,7 +190,7 @@ export function createSkinnedCrowd(scene, capacity, { onMesh } = {}) {
         const parent = bone.parent.getWorldQuaternion(new Quaternion());
         controlled.push({ control: L[control], bone, parent: rigInverse.clone().multiply(parent) });
       }
-      rig.userData = { L, female: type.female, longHair: false };
+      rig.userData = { L, female: type.female, longHair: false, handBone: bones.get("hand_r") || null };
 
       const mixer = new AnimationMixer(model);
       const walk = mixer.clipAction(type.clips.walk);

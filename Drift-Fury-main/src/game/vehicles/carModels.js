@@ -28,7 +28,10 @@ const MODELS = {
   suv: { file: "urban10", yaw: Math.PI / 2, length: CAR_SPECS.suv.L, paint: /bodymat/i },
   hatch: { file: "toyama", yaw: Math.PI, length: CAR_SPECS.hatch.L, paint: /^Body_Paint$/, drop: /^Shadow/ },
   coupe: { file: "carter98", yaw: Math.PI / 2, length: CAR_SPECS.coupe.L, paint: /Carter98_Body/ },
-  police: { file: "crownvic_police", yaw: Math.PI, length: 5.05, paint: null, lightBar: true },
+  police: { file: "crownvic_police", yaw: Math.PI, length: 5.05, paint: null, lightBar: ["#3a8eff", "#ff3434"] },
+  // Emergency services (RP mode), in their own liveries, with red and white flashing lights.
+  ambulance: { file: "shvan92_ambulance", yaw: Math.PI / 2, length: 5.9, paint: null, lightBar: ["#ff3030", "#ffffff"], barAt: -0.42 },
+  firetruck: { file: "firetruck", yaw: Math.PI, length: 9.5, paint: null, lightBar: ["#ff3030", "#ffffff"], barAt: -0.34 },
   // The player's cars from the garage.
   porsche: { file: "stinger96", yaw: Math.PI / 2, length: CAR_SPECS.porsche.L, paint: /Boxer96_Body/ },
   muscle: { file: "phoenix71", yaw: Math.PI / 2, length: CAR_SPECS.muscle.L, paint: /bodymat/i },
@@ -38,10 +41,15 @@ const MODELS = {
 
 const loaded = new Map(); // key -> gltf scene
 
-/** Loads every car model (a model that fails to load is left to the cars built from code). */
-export async function loadCarModels(onProgress) {
+const EMERGENCY = new Set(["ambulance", "firetruck"]);
+
+/**
+ * Loads the car models (a model that fails to load is left to the cars built from code); the emergency
+ * vehicles only when `emergency` (RP mode).
+ */
+export async function loadCarModels(onProgress, { emergency = false } = {}) {
   const loader = new GLTFLoader();
-  const keys = Object.keys(MODELS);
+  const keys = Object.keys(MODELS).filter((key) => emergency || !EMERGENCY.has(key));
   let done = 0;
   await Promise.all(
     keys.map(async (key) => {
@@ -118,22 +126,25 @@ export function buildModelCar(key, { player = false, color = "#ffffff" } = {}) {
   });
 
   const length = spec.length;
-  if (spec.lightBar) addLightBar(car, model);
+  if (spec.lightBar) addLightBar(car, model, spec.lightBar, (spec.barAt || 0) * length);
   car.userData = player ? playerParts(car, model, length) : {};
   return car;
 }
 
-/** Flashing halves over the model's roof light bar, named for carInstancing's light switching. */
-function addLightBar(car, model) {
-  const ray = new Raycaster(new Vector3(0, 10, 0), new Vector3(0, -1, 0));
+/**
+ * Flashing halves over the model's roof light bar (at `z` along the car), named for carInstancing's light
+ * switching ("blue" and "red", whatever their colours).
+ */
+function addLightBar(car, model, colours, z = 0) {
+  const ray = new Raycaster(new Vector3(0, 20, z), new Vector3(0, -1, 0));
   const hits = ray.intersectObject(model, true);
   const top = hits.length ? hits[0].point.y : 1.6;
   for (const [name, x, colour] of [
-    ["blue", -0.2, "#3a8eff"],
-    ["red", 0.2, "#ff3434"],
+    ["blue", -0.2, colours[0]],
+    ["red", 0.2, colours[1]],
   ]) {
     const half = new Mesh(new BoxGeometry(0.34, 0.09, 0.22), new MeshBasicMaterial({ color: colour }));
-    half.position.set(x, top + 0.005, 0);
+    half.position.set(x, top + 0.005, z);
     half.name = name;
     car.add(half);
   }
@@ -165,8 +176,10 @@ function playerParts(car, model, length) {
     const head = /headlight/i.test(name) && !/glass|panel/i.test(name);
     if (!brake && !head) return;
     object.material = object.material.clone();
-    object.material.emissive?.set(brake ? "#ff2a1a" : "#fff2dc");
-    object.material.emissiveIntensity = brake ? 0.6 : 1.4;
+    // (Only the lamp areas of the shared lamp texture glow, gently: the bloom makes the rest.)
+    object.material.emissive?.set(brake ? "#ff3020" : "#ffffff");
+    object.material.emissiveMap = object.material.map;
+    object.material.emissiveIntensity = brake ? 0.6 : 0.45;
     (brake ? brakeLights : headlights).push(object);
   });
   const wheels = [];

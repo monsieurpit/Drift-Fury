@@ -19,6 +19,9 @@ export function createAudio(engine) {
       cuffs() {},
       scrape() {},
       glass() {},
+      horn() {},
+      gunshot() {},
+      ping() {},
       startEngine() {},
       resume() {},
       close() {},
@@ -141,6 +144,103 @@ export function createAudio(engine) {
     },
     glass(strength) {
       if (!closed && !muted) damageSounds.glass(strength);
+    },
+    /** A pistol shot at `distance` metres: the crack, the body of the blast and its echo off the buildings. */
+    gunshot(distance, pan) {
+      if (closed || muted) return;
+      const now = context.currentTime;
+      const near = Math.min(1, 10 / Math.max(10, distance));
+      const panner = context.createStereoPanner ? context.createStereoPanner() : null;
+      if (panner) {
+        panner.pan.value = Math.max(-1, Math.min(1, pan * 0.7));
+        panner.connect(master);
+      }
+      const out = panner || master;
+      const nodes = [panner];
+      const burst = (type, frequency, level, start, length) => {
+        const source = context.createBufferSource();
+        source.buffer = whiteNoise;
+        const filter = context.createBiquadFilter();
+        filter.type = type;
+        filter.frequency.value = frequency;
+        const gain = context.createGain();
+        gain.gain.setValueAtTime(level, now + start);
+        gain.gain.exponentialRampToValueAtTime(0.0005, now + start + length);
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(out);
+        source.start(now + start, Math.random() * 0.5);
+        source.stop(now + start + length + 0.02);
+        nodes.push(source, filter, gain);
+        return source;
+      };
+      burst("highpass", 1400, 0.55 * near, 0, 0.08);
+      burst("lowpass", 420, 0.6 * Math.sqrt(near), 0, 0.2);
+      const last = burst("lowpass", 900, 0.12 * Math.sqrt(near), 0.16 + Math.random() * 0.08, 0.45);
+      last.onended = () => {
+        for (const node of nodes) node?.disconnect();
+      };
+    },
+    /** A bullet hitting a car: a short metallic ping. */
+    ping(distance) {
+      if (closed || muted) return;
+      const now = context.currentTime;
+      const tone = context.createOscillator();
+      tone.type = "triangle";
+      tone.frequency.setValueAtTime(2400 + Math.random() * 900, now);
+      tone.frequency.exponentialRampToValueAtTime(1500, now + 0.12);
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(0.06 * Math.min(1, 8 / Math.max(8, distance)), now);
+      gain.gain.exponentialRampToValueAtTime(0.0005, now + 0.14);
+      tone.connect(gain);
+      gain.connect(master);
+      tone.start(now);
+      tone.stop(now + 0.16);
+      tone.onended = () => {
+        tone.disconnect();
+        gain.disconnect();
+      };
+    },
+    /** A car horn at `distance` metres, `pan` -1..1: two reedy tones, a short double honk or one long. */
+    horn(distance, pan) {
+      if (closed || muted) return;
+      const now = context.currentTime;
+      const level = 0.09 * Math.min(1, 8 / Math.max(8, distance));
+      const panner = context.createStereoPanner ? context.createStereoPanner() : null;
+      const filter = context.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 2200;
+      const gain = context.createGain();
+      gain.gain.value = 0;
+      const pattern = Math.random() < 0.5 ? [[0, 0.16], [0.24, 0.16]] : [[0, 0.55]];
+      for (const [start, length] of pattern) {
+        gain.gain.setValueAtTime(0, now + start);
+        gain.gain.linearRampToValueAtTime(level, now + start + 0.015);
+        gain.gain.setValueAtTime(level, now + start + length - 0.03);
+        gain.gain.linearRampToValueAtTime(0, now + start + length);
+      }
+      const end = now + pattern[pattern.length - 1][0] + pattern[pattern.length - 1][1] + 0.05;
+      const base = 380 + Math.random() * 60;
+      const tones = [base, base * 1.26].map((frequency) => {
+        const tone = context.createOscillator();
+        tone.type = "square";
+        tone.frequency.value = frequency;
+        tone.connect(filter);
+        tone.start(now);
+        tone.stop(end);
+        return tone;
+      });
+      filter.connect(gain);
+      if (panner) {
+        panner.pan.value = Math.max(-1, Math.min(1, pan * 0.8));
+        gain.connect(panner);
+        panner.connect(master);
+      } else {
+        gain.connect(master);
+      }
+      tones[0].onended = () => {
+        for (const node of [...tones, filter, gain, panner]) node?.disconnect();
+      };
     },
     murmur(female, distance, pan) {
       if (!closed && !muted) voices.murmur(female, distance, pan);

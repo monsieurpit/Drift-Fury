@@ -13,6 +13,7 @@ import { createCarPhysics } from "./physics.js";
 import { terrainHeight } from "../world/terrain.js";
 import { ROAD_XS, ROAD_ZS } from "../data/roadGrid.js";
 import { buildRoadGraph, createPoliceBrain } from "./policeAI.js";
+import { createTraffic } from "./traffic.js";
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance2D = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const PLAYER_HALF_WIDTH = 1;
@@ -45,6 +46,12 @@ const HELI_ALTITUDE = 38;
 const HELI_MAX_SPEED = 34; // m/s: a car flat out on the highway can outrun it
 const ESCAPE_BASE = 4; // seconds out of sight to lose the police, plus ESCAPE_PER_STAR per star
 const ESCAPE_PER_STAR = 2.5;
+const WASTED_TIME = 4.2; // seconds of the death scene before waking up at the hospital
+const GUN_RANGE = 35; // metres the police open fire from
+// Where the player comes back (RP mode): out of the hospital after dying, out of the police station after
+// an arrest; their own car waits parked at the curb in front.
+export const HOSPITAL = { x: -90, z: 59.75, heading: Math.PI, carX: -84, carZ: 62.65, carHeading: Math.PI / 2 };
+export const POLICE_STATION = { x: 90, z: -19.75, heading: 0, carX: 96, carZ: -22.65, carHeading: -Math.PI / 2 };
 export function createGame(car, engine, solids, noPolice = false) {
   const state = {
     ...INITIAL_HUD,
@@ -74,6 +81,12 @@ export function createGame(car, engine, solids, noPolice = false) {
     shop: -1,
     arrestTimer: 0,
     busted: 0,
+    wasted: 0,
+    playerHealth: 100,
+    sinceHit: 99,
+    gunfire: 0, // seconds left of the police treating the player as armed (after they fire)
+    shots: [], // this step's gunshots (for the session's effects): { x0, z0, x1, z1, hit, by }
+    respawned: null,
     heli: null,
     roadblock: null,
     roadblockCooldown: 0,
@@ -162,6 +175,10 @@ export function createGame(car, engine, solids, noPolice = false) {
     return false;
   };
   const roadGraph = buildRoadGraph({ roadXs: ROAD_XS, roadZs: ROAD_ZS });
+  // City traffic (RP mode): moved by the session (it needs the light cycle), solid here.
+  const traffic = noPolice
+    ? null
+    : createTraffic({ roadXs: ROAD_XS, roadZs: ROAD_ZS, shapes: CIVILIAN_SHAPES, colors: TRAFFIC_COLORS });
   const brain = createPoliceBrain(roadGraph, blockedAt);
   const occluders = solids.filter((e) => e.w >= 3);
   const nearbyBuffer = [];
@@ -218,6 +235,24 @@ export function createGame(car, engine, solids, noPolice = false) {
           nearestDistance = distance;
           nearest = vehicle;
         }
+      }
+      // A car stopped (or nearly) in traffic: pull its driver out and take it.
+      const traffic_car = traffic?.carAt(state.x, state.z, 3.4);
+      if (traffic_car && traffic_car.speed < 4 && (!nearest || distance2D(traffic_car, state) < nearestDistance)) {
+        traffic.remove(traffic_car);
+        nearest = {
+          id: state.nextVid++,
+          x: traffic_car.x,
+          z: traffic_car.z,
+          heading: traffic_car.heading,
+          kind: "civilian",
+          color: traffic_car.color,
+          shape: traffic_car.shape,
+        };
+        state.vehicles.push(nearest);
+        // The driver runs off; stealing a car in front of the police is a crime.
+        state._carjack = { x: traffic_car.x - Math.cos(traffic_car.heading) * 1.6, z: traffic_car.z + Math.sin(traffic_car.heading) * 1.6, fromX: state.x, fromZ: state.z };
+        if (state.police.some((officer) => distance2D(officer, state) < 60)) state.wanted = clamp(state.wanted + 1, 0, 5);
       }
       if (!nearest) {
         return;
@@ -470,10 +505,103 @@ export function createGame(car, engine, solids, noPolice = false) {
     officer.reverse = 0;
     officer.backupCooldown = 12;
   }
+  /**
+   * After an arrest or a death (RP mode): out of the police station or the hospital, on foot, healed,
+   * wanted no more; the police back on patrol; the player's own car parked at the curb in front.
+   */
+  function respawn(where) {
+    const spot = where === "police" ? POLICE_STATION : HOSPITAL;
+    if (state.roadblock) removeRoadblock();
+    if (state.heli) state.heli.leaving = true;
+    for (const officer of state.police) {
+      if (officer.carId != null) state.vehicles = state.vehicles.filter((v) => v.id !== officer.carId);
+      officer.carId = null;
+      officer.onFoot = false;
+      officer.down = 0;
+      officer.dead = false;
+      officer.aiming = false;
+      officer.speed = 0;
+      officer.path = null;
+      // Back on patrol somewhere well away.
+      const far = roadGraph.nodes.filter((n) => Math.hypot(n.x - spot.x, n.z - spot.z) > 120);
+      const node = far[Math.floor(Math.random() * far.length)] || roadGraph.nodes[0];
+      officer.x = node.x;
+      officer.z = node.z;
+    }
+    // The player's own car at the curb (anything parked there is moved off).
+    state.vehicles = state.vehicles.filter((v) => Math.hypot(v.x - spot.carX, v.z - spot.carZ) > 6);
+    state.vehicles.push({
+      id: state.nextVid++,
+      x: spot.carX,
+      z: spot.carZ,
+      heading: spot.carHeading,
+      kind: "player",
+      color: state.car.color,
+      shape: state.car.shape,
+    });
+    Object.assign(state, {
+      onFoot: true,
+      x: spot.x,
+      z: spot.z,
+      heading: spot.heading,
+      footYaw: spot.heading,
+      vx: 0,
+      vz: 0,
+      u: 0,
+      w: 0,
+      yaw: 0,
+      health: 100,
+      playerHealth: 100,
+      sinceHit: 99,
+      fuel: Math.max(state.fuel, 60),
+      wanted: 0,
+      escape: 0,
+      arrestTimer: 0,
+      arrest: 0,
+      busted: 0,
+      wasted: 0,
+      gunfire: 0,
+      stoppedFor: 0,
+      respawned: where,
+    });
+    state.playerVeh = {
+      kind: "player",
+      color: state.car.color,
+      shape: state.car.shape,
+      spec: `player|${state.car.color}|${state.car.shape}`,
+    };
+  }
+  /** An officer fires at the player from `distance` metres: may hit (the player on foot, or their car). */
+  function fireAtPlayer(officer, distance, speed) {
+    const chance = clamp(0.62 - distance * 0.013 - speed * 0.025, 0.06, 0.55);
+    const hit = Math.random() < chance;
+    // Where the bullet goes: the player, or close past them.
+    const missX = hit ? 0 : (Math.random() - 0.5) * 3;
+    const missZ = hit ? 0 : (Math.random() - 0.5) * 3;
+    state.shots.push({
+      x0: officer.x,
+      z0: officer.z,
+      x1: state.x + missX,
+      z1: state.z + missZ,
+      hit,
+      onFoot: state.onFoot,
+      by: "police",
+      unit: state.police.indexOf(officer),
+    });
+    if (!hit) return;
+    state.sinceHit = 0;
+    if (state.onFoot) {
+      state.playerHealth = Math.max(0, state.playerHealth - (7 + Math.random() * 5));
+      state.shake = Math.min(state.shake + 0.25, 1.2);
+    } else {
+      state.health = clamp(state.health - 2.5, 0, 100);
+    }
+  }
   let physics = createCarPhysics(car, engine);
   let carCollisionProfile = getCollisionProfile(car.shape);
   return {
     state,
+    traffic,
     setCar(nextCar) {
       state.car = nextCar;
       physics = createCarPhysics(nextCar, engine);
@@ -493,6 +621,12 @@ export function createGame(car, engine, solids, noPolice = false) {
       }
       state.elapsed += dt;
       state.collisionTimer -= dt;
+      state.shots.length = 0;
+      state.respawned = null;
+      state.gunfire = Math.max(0, state.gunfire - dt);
+      // Health on foot comes back slowly when not hurt for a while.
+      state.sinceHit += dt;
+      if (state.sinceHit > 6) state.playerHealth = Math.min(100, state.playerHealth + dt * 2.5);
       state.shake *= Math.exp(-dt * 5);
       if (state.busted > 0) {
         // Busted: everything stops for the arrest (hands up, cuffs), then the result screen.
@@ -508,10 +642,20 @@ export function createGame(car, engine, solids, noPolice = false) {
         state.pedal = 0;
         state.drifting = false;
         state.rpm = 900;
-        if (state.busted >= BUSTED_TIME) {
-          state.ended = true;
-          state.reason = "arrested";
-        }
+        if (state.busted >= BUSTED_TIME) respawn("police");
+        return state;
+      }
+      if (state.wasted > 0) {
+        // Dead: the death scene, then the hospital.
+        state.wasted += dt;
+        state.vx = 0;
+        state.vz = 0;
+        state.speed = 0;
+        state.throttle = 0;
+        state.brake = 0;
+        state.pedal = 0;
+        state.drifting = false;
+        if (state.wasted >= WASTED_TIME) respawn("hospital");
         return state;
       }
       const throttle = keys.ArrowUp || keys.KeyW || keys.KeyZ ? 1 : 0;
@@ -680,6 +824,58 @@ export function createGame(car, engine, solids, noPolice = false) {
           }
           break;
         }
+        // Traffic is solid too: a crash stops the car (its driver shaken); a big one wrecks it, left
+        // where it stopped (and the player can take it).
+        for (const car of traffic ? traffic.cars : []) {
+          if (Math.abs(car.x - state.x) > 7 || Math.abs(car.z - state.z) > 7) continue;
+          const spec = getCollisionProfile(car.shape);
+          const halfLength = spec.length / 2;
+          const halfWidth = 0.92;
+          const cos = Math.abs(Math.cos(car.heading));
+          const sin = Math.abs(Math.sin(car.heading));
+          const box = {
+            x: car.x,
+            z: car.z,
+            w: halfWidth * cos + halfLength * sin,
+            d: halfWidth * sin + halfLength * cos,
+          };
+          const collision = collideFootprintWithBox(footprint, box);
+          if (!collision) continue;
+          state.x -= collision.nx * (collision.depth + 0.02);
+          state.z -= collision.nz * (collision.depth + 0.02);
+          const relativeX = state.vx - car.vx;
+          const relativeZ = state.vz - car.vz;
+          const impactSpeed = Math.max(0, relativeX * collision.nx + relativeZ * collision.nz);
+          noteScrape(collision.nx, collision.nz);
+          if (impactSpeed > 0.6) {
+            state.vx -= collision.nx * impactSpeed * 1.1;
+            state.vz -= collision.nz * impactSpeed * 1.1;
+            traffic.shake(car, impactSpeed);
+            if (impactSpeed > 2.5 && takeDamage(4 + impactSpeed * 0.8)) {
+              state._crash = {
+                x: state.x,
+                y: state.y || 0,
+                z: state.z,
+                nx: collision.nx,
+                nz: collision.nz,
+                intensity: Math.min(impactSpeed * 0.08, 1.5),
+              };
+            }
+            if (impactSpeed > 9) {
+              traffic.remove(car);
+              state.vehicles.push({
+                id: state.nextVid++,
+                x: car.x + collision.nx * 0.6,
+                z: car.z + collision.nz * 0.6,
+                heading: car.heading + (Math.random() - 0.5) * 0.5,
+                kind: "civilian",
+                color: car.color,
+                shape: car.shape,
+              });
+            }
+          }
+          break;
+        }
         if (state.x < -200 || state.x > 250 || state.z > 150 || state.z < -700) {
           state.x = clamp(state.x, -200, 250);
           state.z = clamp(state.z, -700, 150);
@@ -755,11 +951,23 @@ export function createGame(car, engine, solids, noPolice = false) {
       if (heliSees || roadblockSees) seen = true;
       const officerSeesPlayer =
         state.wanted > 0.15 &&
-        (heliSees || roadblockSees || state.police.some((officer) => !officer.down && hasLineOfSight(officer)));
+        (heliSees || roadblockSees || state.police.some((officer) => !officer.down && !officer.dead && hasLineOfSight(officer)));
       brain.observe(state, officerSeesPlayer);
-      let officersOnFoot = state.police.filter((officer) => officer.onFoot).length;
+      let officersOnFoot = state.police.filter((officer) => officer.onFoot && !officer.dead).length;
+      // The police open fire at 3 stars, or at any level once the player has been shooting.
+      const armed = !state.noPolice && (state.wanted > 2 || (state.wanted > 0.15 && state.gunfire > 0));
       state.police.forEach((officer, index) => {
         if (officer.onFoot) {
+          // Shot dead: lies there; once the player is far away, a new officer takes over the unit.
+          if (officer.dead) {
+            if (distance2D(officer, state) > 110) {
+              if (officer.carId != null) state.vehicles = state.vehicles.filter((v) => v.id !== officer.carId);
+              const far = roadGraph.nodes.filter((n) => Math.hypot(n.x - state.x, n.z - state.z) > 120);
+              const node = far[Math.floor(Math.random() * far.length)] || roadGraph.nodes[0];
+              Object.assign(officer, { dead: false, onFoot: false, carId: null, down: 0, x: node.x, z: node.z, speed: 0, path: null });
+            }
+            return;
+          }
           // Knocked down by a car: lies in the street a while, then gets up.
           if (officer.down > 0) {
             officer.down -= dt;
@@ -780,6 +988,20 @@ export function createGame(car, engine, solids, noPolice = false) {
               state.shake = Math.min(state.shake + 0.3, 1.2);
               return;
             }
+          }
+          // Armed response (3 stars, or once the player has fired): in range and in sight, stand and shoot.
+          const toPlayer = distance2D(officer, state);
+          officer.aiming = armed && toPlayer < GUN_RANGE && hasLineOfSight(officer);
+          if (officer.aiming) {
+            officer.heading = Math.atan2(-(state.x - officer.x), -(state.z - officer.z));
+            officer.fireTimer = (officer.fireTimer ?? Math.random()) - dt;
+            if (officer.fireTimer <= 0) {
+              officer.fireTimer = 0.55 + Math.random() * 0.7;
+              fireAtPlayer(officer, toPlayer, speed);
+            }
+            seen = true;
+            // Close enough: holds position and keeps shooting (further off, closes in while shooting).
+            if (toPlayer < 14) return;
           }
           let targetX = null;
           let targetZ = null;
@@ -840,6 +1062,7 @@ export function createGame(car, engine, solids, noPolice = false) {
         const obstacles = [];
         for (const other of state.police) if (other !== officer && !other.onFoot) obstacles.push(other);
         for (const vehicle of state.vehicles) obstacles.push(vehicle);
+        if (traffic) for (const car of traffic.cars) obstacles.push(car);
         if (!chasing || officer.role !== "pursuer") obstacles.push(state);
         brain.drive(officer, index, state, dt, {
           chasing,
@@ -862,6 +1085,22 @@ export function createGame(car, engine, solids, noPolice = false) {
             break;
           }
         }
+        // Not through a traffic car: slide out of it, losing speed.
+        if (traffic) {
+          for (const car of traffic.cars) {
+            if (Math.abs(car.x - officer.x) > 6 || Math.abs(car.z - officer.z) > 6) continue;
+            const contact = collideOrientedBoxes(
+              orientedBox(officer.x, officer.z, officer.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH),
+              orientedBox(car.x, car.z, car.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH),
+            );
+            if (!contact.overlap) continue;
+            // (The normal points from the first box, the cruiser, toward the second.)
+            officer.x -= contact.nx * (contact.depth + 0.02);
+            officer.z -= contact.nz * (contact.depth + 0.02);
+            if (officer.speed > 4) traffic.shake(car, officer.speed * 0.4);
+            officer.speed *= 0.7;
+          }
+        }
         officer.x = clamp(officer.x, -200, 250);
         officer.z = clamp(officer.z, -700, 150);
         const sees = hasLineOfSight(officer);
@@ -873,6 +1112,12 @@ export function createGame(car, engine, solids, noPolice = false) {
         if (speed > 27 && !state.onFoot && state.speedingCooldown <= 0 && sees && distance2D(officer, state) < 30) {
           state.wanted = clamp(state.wanted + 0.8, 0, 5);
           state.speedingCooldown = 8;
+        }
+        // Armed response: a cruiser close by and slow lets its officer out to shoot (two at most).
+        if (armed && officer.speed < 3 && distance2D(officer, state) < 24 && sees && officersOnFoot < 2) {
+          leaveCruiser(officer);
+          officersOnFoot++;
+          return;
         }
         // The player stopped close by: the officer gets out to arrest them on foot (two at most).
         if (
@@ -988,7 +1233,12 @@ export function createGame(car, engine, solids, noPolice = false) {
       state.speed = Math.round(speed * 3.6);
       state.zone = state.z < -160 ? "mountain" : state.x > 130 ? "highway" : "city";
       state.y = terrainHeight(state.x, state.z);
-      if (state.health <= 0) {
+      if (state.onFoot && state.playerHealth <= 0) {
+        // Shot down: WASTED.
+        state.wasted = 1e-3;
+        state.wastedX = state.x;
+        state.wastedZ = state.z;
+      } else if (state.health <= 0) {
         state.ended = true;
         state.reason = "destroyed";
       } else if (state.arrest >= 100) {

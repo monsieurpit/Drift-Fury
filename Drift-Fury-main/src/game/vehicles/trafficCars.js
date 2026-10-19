@@ -83,14 +83,31 @@ function shadowProxy(template) {
  * each car's colour is applied per instance (carInstancing.js), so every colour of a body shape is drawn
  * together. (`color` is kept for the callers' sake; the template does not depend on it.)
  */
-export function trafficTemplate(color, shape, police = false) {
-  const key = (police ? "police" : "traffic") + "|" + shape;
+export function trafficTemplate(color, shape, police = false, moving = false) {
+  const key = (police ? "police" : moving ? "moving" : "traffic") + "|" + shape;
   let template = trafficTemplates.get(key);
   if (!template) {
     // The real 3D model for this shape (carModels.js) when there is one, else the car built from code.
     const modelKey = carModelKey(shape, police);
     template = modelKey ? buildModelCar(modelKey) : buildCar("#ffffff", shape, police);
-    template.userData = { police };
+    // Cars driving in traffic (a look of their own, apart from the parked ones) have their lamps on:
+    // the lamp material glows in its own colours (white headlights, red tail lights).
+    if (moving) {
+      const lit = new Map();
+      template.traverse((object) => {
+        const material = object.material;
+        if (!object.isMesh || !material || !/Lights_and_Glass$/.test(material.name || "")) return;
+        if (!lit.has(material)) {
+          const glowing = material.clone();
+          glowing.emissive?.set("#ffffff");
+          glowing.emissiveMap = glowing.map;
+          glowing.emissiveIntensity = 0.45;
+          lit.set(material, glowing);
+        }
+        object.material = lit.get(material);
+      });
+    }
+    template.userData = { police, moving };
     batchStaticMeshes(template, new Set(), Infinity);
     const proxy = shadowProxy(template);
     template.traverse((object) => {

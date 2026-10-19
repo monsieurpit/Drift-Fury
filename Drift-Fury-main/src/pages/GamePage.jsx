@@ -187,7 +187,7 @@ export function GamePage() {
             />
           )}
           {!paused && !result && !picker && !(loading && !loading.done) && (
-            <TouchControls controls={controls} />
+            <TouchControls controls={controls} hud={hud} />
           )}
           <div className="pointer-events-none absolute bottom-2 left-1/2 hidden -translate-x-1/2 text-[8px] tracking-widest text-white/50 xl:block">
             {t("game.controls")}
