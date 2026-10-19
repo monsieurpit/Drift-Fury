@@ -53,10 +53,12 @@ export function createPoliceJob({
     await loadPoliceModels();
     if (disposed) return;
     for (const car of FLEET) carInstancer.prepare(trafficTemplate("#ffffff", car.model, true));
-    // A player's copy of each (drawn far below the ground, for the compile only) and the new instanced
-    // looks (shown for the compile): their shaders are ready before the first one appears.
+    // A player's copy of each (far below the ground) compiled with the new instanced looks, all left
+    // hidden: three.js compiles hidden objects too, and nothing hidden is drawn while the shaders are still
+    // compiling (a program drawn before it is ready blocks the game until it is: a stall mid-drive).
     const temp = new Group();
     temp.position.set(0, -500, 0);
+    temp.visible = false;
     for (const car of FLEET) {
       const built = buildPlayerCar("#ffffff", car.shape, true, car.model);
       clusteredLights.patchAll(built);
@@ -65,20 +67,12 @@ export function createPoliceJob({
       });
       temp.add(built);
     }
-    const hidden = [];
-    scene.traverse((object) => {
-      if (object.userData?.carInstances && !object.visible) {
-        object.visible = true;
-        hidden.push(object);
-      }
-    });
     scene.add(temp);
     try {
       await renderer.compileAsync(scene, camera);
     } catch {
       // (compiled when first drawn instead)
     } finally {
-      for (const object of hidden) object.visible = false;
       scene.remove(temp);
     }
     modelsReady = true;
