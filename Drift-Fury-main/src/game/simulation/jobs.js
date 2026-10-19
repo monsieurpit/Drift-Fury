@@ -135,7 +135,8 @@ export function createJobs({ roadXs, roadZs, random = Math.random }) {
         event(state, "checkpoint", { index: job.index });
       } else if (job.stage === "pickup") {
         // The client gets in / the package is loaded: now across town, against the clock.
-        const destination = kerbSpot(marker, 180, 380);
+        // (Across town: as far as the city allows from here, the middle of it being only ~140 m from its edges.)
+        const destination = kerbSpot(marker, 180, 380) || kerbSpot(marker, 120, 380) || kerbSpot(marker, 70, 380);
         if (!destination) {
           fail(state, "noJob");
           return;

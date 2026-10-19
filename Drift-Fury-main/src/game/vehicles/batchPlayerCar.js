@@ -16,6 +16,7 @@ export function batchPlayerCar(car) {
     ...data.brakeLights,
     ...data.headlights,
     ...(data.headlightBeams || []),
+    ...(data.lightBar || []),
   ]);
   if (data.accessDoor) {
     skip.add(data.accessDoor);

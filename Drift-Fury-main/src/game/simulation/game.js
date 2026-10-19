@@ -16,6 +16,7 @@ import { buildRoadGraph, createPoliceBrain } from "./policeAI.js";
 import { createTraffic } from "./traffic.js";
 import { createJobs } from "./jobs.js";
 import { createPackages } from "./packages.js";
+import { FLEET, createPoliceDuty } from "./policeDuty.js";
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance2D = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const PLAYER_HALF_WIDTH = 1;
@@ -221,6 +222,22 @@ export function createGame(car, engine, solids, noPolice = false) {
     }
     return true;
   }
+  /** Whether nothing big (a building) stands between two points. */
+  function clearLine(x0, z0, x1, z1) {
+    for (let occluder of occluders) {
+      if (Math.max(x0, x1) < occluder.x - occluder.w || Math.min(x0, x1) > occluder.x + occluder.w) continue;
+      if (Math.max(z0, z1) < occluder.z - occluder.d || Math.min(z0, z1) > occluder.z + occluder.d) continue;
+      for (let step = 1; step < 9; step++) {
+        const fraction = step / 9;
+        const sampleX = x0 + (x1 - x0) * fraction;
+        const sampleZ = z0 + (z1 - z0) * fraction;
+        if (Math.abs(sampleX - occluder.x) < occluder.w && Math.abs(sampleZ - occluder.z) < occluder.d) return false;
+      }
+    }
+    return true;
+  }
+  // The police job (RP mode, policeDuty.js).
+  const duty = createPoliceDuty({ state, traffic, roadXs: ROAD_XS, roadZs: ROAD_ZS, blockedAt, lineOfSight: clearLine, pay: (amount, reason) => pay(amount, reason) });
   /** Bodywork grinding along what it touches (normal nx, nz toward it): sparks and the screech of metal. */
   function noteScrape(nx, nz) {
     const along = Math.hypot(state.vx - (state.vx * nx + state.vz * nz) * nx, state.vz - (state.vx * nx + state.vz * nz) * nz);
@@ -268,20 +285,23 @@ export function createGame(car, engine, solids, noPolice = false) {
         state.vehicles.push(nearest);
         // The driver runs off; stealing a car in front of the police is a crime.
         state._carjack = { x: traffic_car.x - Math.cos(traffic_car.heading) * 1.6, z: traffic_car.z + Math.sin(traffic_car.heading) * 1.6, fromX: state.x, fromZ: state.z };
-        if (state.police.some((officer) => distance2D(officer, state) < 60)) state.wanted = clamp(state.wanted + 1, 0, 5);
+        if (!duty.duty.on && state.police.some((officer) => distance2D(officer, state) < 60)) state.wanted = clamp(state.wanted + 1, 0, 5);
       }
       if (!nearest) {
         return;
       }
       state.vehicles = state.vehicles.filter((t) => t.id !== nearest.id);
       state.health = nearest.health ?? 100; // (this car's own damage)
+      // A police car of the job's fleet drives like one; any other car, like the player's own.
+      usePhysics(nearest.fleet || null);
       if (nearest.kind === "police") {
         const officer = state.police.find((t) => t.carId === nearest.id);
         if (officer) {
           officer.onFoot = true;
           officer.carId = null;
         }
-        state.wanted = clamp(state.wanted + 1, 0, 5);
+        // (Taking a police car is a crime, except for an officer on duty.)
+        if (!duty.duty.on) state.wanted = clamp(state.wanted + 1, 0, 5);
       }
       state.onFoot = false;
       state.x = nearest.x;
@@ -296,7 +316,10 @@ export function createGame(car, engine, solids, noPolice = false) {
         kind: nearest.kind,
         color: nearest.color,
         shape: nearest.shape,
-        spec: `${nearest.kind}|${nearest.color}|${nearest.shape}`,
+        model: nearest.model,
+        fleet: nearest.fleet,
+        duty: !!nearest.duty,
+        spec: `${nearest.kind}|${nearest.color}|${nearest.model || nearest.shape}`,
       };
     } else {
       if (Math.hypot(state.vx, state.vz) > 3) {
@@ -311,6 +334,9 @@ export function createGame(car, engine, solids, noPolice = false) {
         kind: state.playerVeh.kind,
         color: state.playerVeh.color,
         shape: state.playerVeh.shape,
+        model: state.playerVeh.model,
+        fleet: state.playerVeh.fleet,
+        duty: !!state.playerVeh.duty && duty.duty.on,
         // (Getting out of a burning car: it goes on burning, and blows up, without the player.)
         burning: state.burning,
         health: state.health, // (each car keeps its own damage)
@@ -714,6 +740,7 @@ export function createGame(car, engine, solids, noPolice = false) {
       shape: state.car.shape,
       spec: `player|${state.car.color}|${state.car.shape}`,
     };
+    usePhysics(null);
   }
   /** An officer fires at the player from `distance` metres: may hit (the player on foot, or their car). */
   function fireAtPlayer(officer, distance, speed) {
@@ -743,6 +770,13 @@ export function createGame(car, engine, solids, noPolice = false) {
   }
   let physics = createCarPhysics(car, engine);
   let carCollisionProfile = getCollisionProfile(car.shape);
+  /** The car's handling: a police car of the fleet (`fleetId`), or the player's own (null). */
+  function usePhysics(fleetId) {
+    const spec = FLEET.find((f) => f.id === fleetId);
+    physics = spec
+      ? createCarPhysics({ shape: spec.shape, grip: spec.grip, awd: spec.awd }, { ...engine, max: spec.max, acceleration: spec.acceleration })
+      : createCarPhysics(state.car, engine);
+  }
   /** A GTA-style cheat code, typed on the keyboard. Returns whether `code` is one. */
   function cheat(code) {
     if (state.wasted > 0 || state.busted > 0) return false;
@@ -781,7 +815,16 @@ export function createGame(car, engine, solids, noPolice = false) {
     state,
     traffic,
     packages,
+    duty,
     cheat,
+    /** The police job: on duty in `outfit` with a car of the fleet (from the locker). */
+    startDuty(options) {
+      if (jobs.job) jobs.toggle(state);
+      return duty.startDuty(options);
+    },
+    endDuty() {
+      duty.endDuty();
+    },
     setCar(nextCar) {
       state.car = nextCar;
       physics = createCarPhysics(nextCar, engine);
@@ -862,14 +905,14 @@ export function createGame(car, engine, solids, noPolice = false) {
       // J: take a job (or give it up). R at a gas station: the body shop.
       const jobPressed = !!keys.KeyJ && !state._jPrev;
       state._jPrev = !!keys.KeyJ;
-      if (jobPressed) jobs.toggle(state);
+      if (jobPressed && !duty.duty.on) jobs.toggle(state);
       const repairPressed = !!keys.KeyR && !state._rPrev;
       state._rPrev = !!keys.KeyR;
       if (repairPressed && !state.onFoot && state.station >= 0) repairAndRespray();
       // G in a gas station store: a hold-up (RP mode).
       const robPressed = !!keys.KeyG && !state._gPrev;
       state._gPrev = !!keys.KeyG;
-      if (robPressed && !state.noPolice && state.onFoot && state.store >= 0) robStore();
+      if (robPressed && !state.noPolice && !duty.duty.on && state.onFoot && state.store >= 0) robStore();
       if (state.onFoot) {
         state.throttle = 0;
         state.brake = 0;
@@ -1053,6 +1096,8 @@ export function createGame(car, engine, solids, noPolice = false) {
             state.vx -= collision.nx * impactSpeed * 1.1;
             state.vz -= collision.nz * impactSpeed * 1.1;
             traffic.shake(car, impactSpeed);
+            // Ramming a fleeing suspect's car (a PIT): it spins to a stop, and enough of it disables the car.
+            if (car.flee) duty.rammed(car, impactSpeed);
             if (impactSpeed > 2.5 && takeDamage(4 + impactSpeed * 0.8)) {
               state._crash = {
                 x: state.x,
@@ -1063,7 +1108,7 @@ export function createGame(car, engine, solids, noPolice = false) {
                 intensity: Math.min(impactSpeed * 0.08, 1.5),
               };
             }
-            if (impactSpeed > 9) {
+            if (impactSpeed > 9 && !car.keep && !car.pulled) {
               traffic.remove(car);
               state.vehicles.push({
                 id: state.nextVid++,
@@ -1266,12 +1311,24 @@ export function createGame(car, engine, solids, noPolice = false) {
         for (const vehicle of state.vehicles) obstacles.push(vehicle);
         if (traffic) for (const car of traffic.cars) obstacles.push(car);
         if (!chasing || officer.role !== "pursuer") obstacles.push(state);
-        brain.drive(officer, index, state, dt, {
-          chasing,
-          seen: officerSeesPlayer,
-          maxSpeed: Math.min(engine.max * 0.85, 13 + state.wanted * 3.8),
-          obstacles,
-        });
+        // A unit helping the player (the police job): backup, or a prisoner transport.
+        const assist = officer.assist ? duty.assistTarget(officer) : null;
+        if (assist) {
+          brain.drive(officer, index, assist, dt, { chasing: true, seen: true, maxSpeed: 24, obstacles });
+          if (officer.assist?.transport) {
+            officer.assist.time = (officer.assist.time || 0) + dt;
+            if ((Math.hypot(officer.x - assist.x, officer.z - assist.z) < 10 && Math.abs(officer.speed) < 1.5) || officer.assist.time > 70) {
+              duty.transportArrived(officer);
+            }
+          }
+        } else {
+          brain.drive(officer, index, state, dt, {
+            chasing,
+            seen: officerSeesPlayer,
+            maxSpeed: Math.min(engine.max * 0.85, 13 + state.wanted * 3.8),
+            obstacles,
+          });
+        }
         // Fallback if it still touches a solid (a pole on a tight corner): slide out, lose speed.
         for (let solid of solidGrid.near(officer.x, officer.z, 4, nearbyBuffer)) {
           if (Math.abs(officer.x - solid.x) < solid.w + 1 && Math.abs(officer.z - solid.z) < solid.d + 1) {
@@ -1439,6 +1496,14 @@ export function createGame(car, engine, solids, noPolice = false) {
       }
       jobs.update(state, dt);
       packages.update(state, pay);
+      duty.update(dt, keys, { speed });
+      if (duty.duty.on) {
+        // On duty: the police are colleagues.
+        state.wanted = 0;
+        state.escape = 0;
+        state.arrestTimer = 0;
+        state.arrest = 0;
+      }
       // On foot, hit by a moving car (traffic, a cruiser): hurt, knocked about.
       if (state.onFoot && state.wasted <= 0) {
         const hitBy = (x, z, heading, carSpeed) => {

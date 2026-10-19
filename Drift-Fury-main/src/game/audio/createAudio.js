@@ -26,6 +26,10 @@ export function createAudio(engine) {
       fire() {},
       explosion() {},
       chime() {},
+      playerSiren() {},
+      airhorn() {},
+      radioBeep() {},
+      taser() {},
       radioNext() {
         return null;
       },
@@ -64,13 +68,13 @@ export function createAudio(engine) {
     }
   }
   const voices = createVoices(context, master, voiceNoise);
-  const policeSounds = createPoliceSounds(context, master, voiceNoise);
   // (Metal and glass need the high frequencies: white noise.)
   const whiteNoise = context.createBuffer(1, context.sampleRate, context.sampleRate);
   {
     const data = whiteNoise.getChannelData(0);
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
   }
+  const policeSounds = createPoliceSounds(context, master, voiceNoise, whiteNoise);
   const damageSounds = createDamageSounds(context, master, whiteNoise);
   const radio = createRadio(context, master, whiteNoise);
   let engineVoice = null;
@@ -146,6 +150,19 @@ export function createAudio(engine) {
     },
     cuffs() {
       if (!closed && !muted) policeSounds.cuffs();
+    },
+    /** The player's siren (police job): its tone while on, or null (call every frame). */
+    playerSiren(tone) {
+      if (!closed) policeSounds.playerSiren(muted ? null : tone);
+    },
+    airhorn() {
+      if (!closed && !muted) policeSounds.airhorn();
+    },
+    radioBeep() {
+      if (!closed && !muted) policeSounds.radioBeep();
+    },
+    taser() {
+      if (!closed && !muted) policeSounds.taser();
     },
     /** Bodywork grinding along something, `level` 0..1 (call every frame; 0 when not). */
     scrape(level) {

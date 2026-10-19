@@ -57,6 +57,37 @@ function buildPistol() {
   return pistol;
 }
 
+/** The police job's other weapons: a taser (yellow), a pump shotgun, a carbine; barrel along -Z. */
+function buildWeapon(kind) {
+  const steel = new MeshStandardMaterial({ color: "#1a1c1f", roughness: 0.35, metalness: 0.85 });
+  const polymer = new MeshStandardMaterial({ color: "#121314", roughness: 0.7, metalness: 0.1 });
+  const weapon = new Group();
+  const add = (geometry, material, x, y, z, tilt = 0) => {
+    const part = new Mesh(geometry, material);
+    part.position.set(x, y, z);
+    part.rotation.x = tilt;
+    part.castShadow = false;
+    weapon.add(part);
+  };
+  if (kind === "taser") {
+    const yellow = new MeshStandardMaterial({ color: "#e8c21a", roughness: 0.5, metalness: 0.1 });
+    add(new BoxGeometry(0.035, 0.045, 0.15), yellow, 0, 0.03, -0.06);
+    add(new BoxGeometry(0.03, 0.1, 0.045), polymer, 0, -0.035, 0, -0.25);
+  } else {
+    // Long guns: held at the hand, the stock back past the shoulder.
+    const long = kind === "rifle" ? 0.62 : 0.68;
+    add(new BoxGeometry(0.04, 0.05, long * 0.55), steel, 0, 0.04, -long * 0.3);
+    add(new BoxGeometry(0.022, 0.022, long * 0.45), steel, 0, 0.055, -long * 0.75);
+    add(new BoxGeometry(0.035, 0.07, 0.24), polymer, 0, 0.02, 0.16);
+    add(new BoxGeometry(0.03, 0.09, 0.04), polymer, 0, -0.04, 0.0, -0.3);
+    if (kind === "rifle") add(new BoxGeometry(0.025, 0.11, 0.05), steel, 0, -0.03, -0.12);
+    else add(new BoxGeometry(0.04, 0.035, 0.16), polymer, 0, 0.0, -long * 0.55);
+  }
+  weapon.visible = false;
+  return weapon;
+}
+const TASER_COLOUR = new Color(0.55, 0.75, 1).multiplyScalar(4);
+
 export function createGunfire(scene) {
   const tracerMaterial = new MeshBasicMaterial({
     color: new Color(1, 0.85, 0.55).multiplyScalar(4),
@@ -96,6 +127,17 @@ export function createGunfire(scene) {
     scene.add(pistol);
     return pistol;
   });
+  const others = {};
+  for (const kind of ["taser", "shotgun", "rifle"]) {
+    others[kind] = buildWeapon(kind);
+    scene.add(others[kind]);
+  }
+  // The taser's wires: a separate thin, blue-white tracer that lingers a little.
+  const wireMaterial = new MeshBasicMaterial({ color: TASER_COLOUR, transparent: true, opacity: 0.85, depthWrite: false, blending: AdditiveBlending });
+  const wire = { mesh: new Mesh(tracerGeometry, wireMaterial), life: 0 };
+  wire.mesh.visible = false;
+  wire.mesh.frustumCulled = false;
+  scene.add(wire.mesh);
   let tracerCursor = 0;
   let flashCursor = 0;
   let pistolsUsed = 0;
@@ -113,11 +155,29 @@ export function createGunfire(scene) {
       pistol.lookAt(target);
       pistol.rotateY(Math.PI); // (lookAt points +Z at the target; the barrel is along -Z)
     },
-    /** A shot from the muzzle at `from` to `to` (where the bullet stops). */
-    fire(from, to) {
+    /** The player's weapon of the police job (`kind`: taser, shotgun, rifle; the pistol is holdPistol). */
+    holdWeapon(kind, hand, target) {
+      const weapon = others[kind];
+      if (!weapon) return this.holdPistol(hand, target);
+      weapon.visible = true;
+      weapon.position.copy(hand);
+      weapon.lookAt(target);
+      weapon.rotateY(Math.PI);
+    },
+    /** A shot from the muzzle at `from` to `to` (where the bullet stops); `kind` "taser": the wires. */
+    fire(from, to, kind = "pistol") {
       direction.subVectors(to, from);
       const length = direction.length();
       if (length < 0.01) return;
+      if (kind === "taser") {
+        wire.mesh.position.copy(from);
+        wire.mesh.lookAt(to);
+        wire.mesh.rotateY(Math.PI);
+        wire.mesh.scale.set(0.6, 0.6, length);
+        wire.mesh.visible = true;
+        wire.life = 0.45;
+        return;
+      }
       const tracer = tracers[tracerCursor++ % TRACERS];
       tracer.mesh.position.copy(from);
       tracer.mesh.lookAt(to);
@@ -140,6 +200,11 @@ export function createGunfire(scene) {
     update(dt, camera) {
       pistolsUsed = 0;
       for (const pistol of pistols) pistol.visible = false;
+      for (const weapon of Object.values(others)) weapon.visible = false;
+      if (wire.life > 0) {
+        wire.life -= dt;
+        wire.mesh.visible = wire.life > 0;
+      }
       for (const tracer of tracers) {
         if (tracer.life <= 0) continue;
         tracer.life -= dt;

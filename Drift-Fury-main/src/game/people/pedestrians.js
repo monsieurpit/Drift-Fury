@@ -403,6 +403,23 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           continue;
         }
 
+        // Taken over by the police job (a suspect, posed by the session): only cars still hit them.
+        if (ped.controlled) {
+          for (const car of cars) {
+            const dx = ped.x - car.x;
+            const dz = ped.z - car.z;
+            if (Math.abs(dx) > 6 || Math.abs(dz) > 6) continue;
+            const speed = Math.hypot(car.vx, car.vz);
+            if (speed < 3.2) continue;
+            const forward = -dx * Math.sin(car.heading) - dz * Math.cos(car.heading);
+            const side = dx * Math.cos(car.heading) - dz * Math.sin(car.heading);
+            if (Math.abs(forward) < CAR_HALF_LENGTH + RADIUS && Math.abs(side) < CAR_HALF_WIDTH + RADIUS) {
+              kill(ped, car, speed, events);
+              break;
+            }
+          }
+          continue;
+        }
         // Cars: hit by one, or getting out of its way.
         let hitBy = null;
         let threat = null;
@@ -668,7 +685,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
       let pick = null;
       let pickScore = -Infinity;
       for (const ped of people) {
-        if (ped.mode === "dead") continue;
+        if (ped.mode === "dead" || ped.controlled) continue;
         const dx = ped.x - fromX;
         const dz = ped.z - fromZ;
         const distance = Math.hypot(dx, dz);
@@ -727,10 +744,66 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
       if (ped.mode !== "dead") return;
       spawn(ped, lastNear);
     },
+    /**
+     * A body for a suspect of the police job at (x, z) (`female` preferred): one of the people out of the
+     * player's sight, taken out of the crowd's own life (`controlled`) until released.
+     */
+    claim(x, z, female, strict = false) {
+      let pick = null;
+      let pickScore = -Infinity;
+      for (const ped of people) {
+        if (ped.mode === "dead" || ped.controlled) continue;
+        let score = 0;
+        if (lastNear) {
+          const dx = ped.x - lastNear.x;
+          const dz = ped.z - lastNear.z;
+          const distance = Math.hypot(dx, dz);
+          const inView = (dx * lastNear.viewX + dz * lastNear.viewZ) / (distance || 1) > 0.2 && distance < 90;
+          score = Math.min(distance, 60) + (inView ? -1000 : 0);
+        }
+        if (female !== undefined && ped.female === female) score += strict ? 5000 : 30;
+        if (score > pickScore) {
+          pickScore = score;
+          pick = ped;
+        }
+      }
+      if (!pick) return null;
+      this.claimPed(pick);
+      pick.x = pick.visualX = x;
+      pick.z = pick.visualZ = z;
+      pick.rig.position.set(x, groundAt(x, z), z);
+      return pick;
+    },
+    /** Takes `ped` (someone the player stopped) out of the crowd's own life. */
+    claimPed(ped) {
+      endTalk(ped);
+      ped.controlled = true;
+      ped.mode = "held";
+      ped.panic = 0;
+      ped.scared = 0;
+      ped.rig.visible = true;
+      ped.rig.rotation.order = "YXZ";
+    },
+    /** Back to their own life: walking on from where they are (`away`: somewhere out of sight instead). */
+    release(ped, away = false) {
+      if (!ped.controlled) return;
+      ped.controlled = false;
+      ped.rig.rotation.order = "XYZ";
+      ped.rig.rotation.set(0, ped.heading, 0);
+      ped.rig.visible = true;
+      for (const limb of Object.values(ped.rig.userData.L)) limb.rotation.set(0, 0, 0);
+      if (ped.mode === "dead") return;
+      if (away) spawn(ped, lastNear);
+      else {
+        ped.visualX = ped.x;
+        ped.visualZ = ped.z;
+        rejoin(ped);
+      }
+    },
     /** People near (x, z) see something terrible and run from it. */
     frighten(x, z, radius, events) {
       for (const ped of people) {
-        if (ped.mode === "dead") continue;
+        if (ped.mode === "dead" || ped.controlled) continue;
         const dx = ped.x - x;
         const dz = ped.z - z;
         const distance = Math.hypot(dx, dz);

@@ -30,6 +30,9 @@ const HALF_WIDTH = 1.0;
 const HALF_LENGTHS = { ambulance: 2.95, firetruck: 4.75 }; // (everything else: HALF_LENGTH)
 const EMERGENCY_SHIFT = 0; // (an emergency vehicle keeps to its lane: nothing ever drives side by side)
 const MAKE_WAY_SHIFT = 1.2; // a car with an ambulance or a fire truck behind it moves over this much
+const PULL_SHIFT = 2.3; // a car pulled over by the police, at the curb (traffic squeezes past it)
+const PASS_SHIFT = -0.8; // passing a car stopped at the curb: toward the centre line
+const OVERTAKE_SHIFT = -2 * LANE; // a fleeing car overtaking on the other side of the road
 
 export const TRAFFIC_LIGHT_AXIS = { along_z: 0, along_x: 1 };
 
@@ -189,6 +192,25 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
   const cars = [];
   const events = [];
   let nextId = 1;
+  let lastWorld = null; // (the world of this step, for the fleeing cars' choice of road)
+
+  /** A fleeing car's way on: the road that takes it furthest from the police (with some randomness). */
+  function fleeNext(from, at) {
+    const options = nodes[at].links.filter((n) => n !== from);
+    if (!options.length) return from;
+    const p = lastWorld?.player;
+    if (!p) return options[Math.floor(random() * options.length)];
+    let best = options[0];
+    let bestScore = -Infinity;
+    for (const n of options) {
+      const score = Math.hypot(nodes[n].x - p.x, nodes[n].z - p.z) + random() * 45;
+      if (score > bestScore) {
+        bestScore = score;
+        best = n;
+      }
+    }
+    return best;
+  }
   const scratch = { x: 0, z: 0, tx: 0, tz: 0 };
 
   /** Distance along the roads from every node to the nearer end of the goal's road. */
@@ -226,7 +248,7 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
   function enterEdge(car, from, to) {
     car.from = from;
     car.to = to;
-    car.next = car.mission === "enroute" ? routeNext(car, from, to) : chooseNext(from, to);
+    car.next = car.mission === "enroute" ? routeNext(car, from, to) : car.flee ? fleeNext(from, to) : chooseNext(from, to);
     // On the goal's road: where to stop, on this lane, level with the goal.
     car.stopAt = -1;
     if (car.mission === "enroute") {
@@ -243,6 +265,8 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
       }
     }
     car.piece = edgePiece(from, to);
+    // Pulled over by the police after its turn: it stops a little way down this road, at the curb.
+    if (car.pulled === "stopping") car.stopAt = Math.min(car.piece.length - car.halfLength - 1, car.halfLength + 6 + (car.speed * car.speed) / (2 * COMFORT_BRAKE));
     car.turnAhead = turnPiece(from, to, car.next);
     car.control = controlAt(from, to);
     car.stopDone = false;
@@ -285,6 +309,12 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
       vx: 0,
       vz: 0,
     };
+    // A few drive too fast, and the odd one is drunk (weaving): reasons for the police to stop them.
+    const kind = random();
+    if (kind < 0.08) {
+      car.speeder = true;
+      car.cruise = 16.5 + random() * 3.5;
+    } else if (kind < 0.11) car.drunk = true;
     enterEdge(car, from, to);
     // (Not right at the stop line: room to stop for the light.)
     car.s = random() * Math.max(0, car.piece.length - 16);
@@ -339,6 +369,12 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
     };
     for (const other of cars) {
       if (other === car) continue;
+      // Pulled over at the curb: only in the way of a car not moving over to pass it.
+      if (other.pulled === "stopped") {
+        const side = Math.abs((other.x - car.x) * Math.cos(car.heading) - (other.z - car.z) * Math.sin(car.heading));
+        if (side < 2 * HALF_WIDTH - 0.15) consider(other.x, other.z, other.halfLength, HALF_WIDTH, "traffic", other, other.heading);
+        continue;
+      }
       consider(other.x, other.z, other.halfLength, HALF_WIDTH, "traffic", other, other.heading);
       // Along the road itself (exact on a curve, where a long vehicle's straight look ahead misses the
       // car around the bend): the same lane ahead, the intersection ahead, the road it turns into.
@@ -484,6 +520,8 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
       }
     };
     for (const o of world.police) if (!o.onFoot && world.chasing) check(o.x, o.z, HALF_LENGTH);
+    // The player's police car (the police job) and units on a call, sirens on.
+    for (const o of world.sirens || []) check(o.x, o.z, HALF_LENGTH);
     if (result) return result;
     // An ambulance or a fire truck behind in the lane (it never passes): move over a little and drive on.
     for (const other of cars) {
@@ -494,6 +532,113 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
       if (behind > 0 && behind < 45 && Math.abs(dx * fz - dz * fx) < 3) return 3;
     }
     return 0;
+  }
+
+  /** A car stopped at the curb (pulled over) ahead in this car's lane: move over a little to pass it. */
+  function passingStopped(car) {
+    if (car.piece.kind !== "edge") return false;
+    for (const other of cars) {
+      if (other.pulled !== "stopped" || other.from !== car.from || other.to !== car.to) continue;
+      const ahead = other.s - car.s;
+      if (ahead > -car.halfLength - other.halfLength - 1 && ahead < 30) return true;
+    }
+    return false;
+  }
+
+  /** Whether two cars' boxes overlap (separating axes). */
+  function overlap(a, b) {
+    const axes = [a.heading, a.heading + Math.PI / 2, b.heading, b.heading + Math.PI / 2];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    for (const angle of axes) {
+      const ax = Math.sin(angle);
+      const az = Math.cos(angle);
+      const extent = (car) => {
+        const along = Math.abs(Math.sin(car.heading) * ax + Math.cos(car.heading) * az);
+        const across = Math.abs(Math.cos(car.heading) * ax - Math.sin(car.heading) * az);
+        return car.halfLength * along + HALF_WIDTH * across;
+      };
+      if (Math.abs(dx * ax + dz * az) > extent(a) + extent(b)) return false;
+    }
+    return true;
+  }
+
+  /** The oncoming lane of this car's road, ahead within `range` m: is a car coming? */
+  function oncomingWithin(car, range) {
+    for (const other of cars) {
+      if (other === car || other.piece.kind !== "edge" || other.from !== car.to || other.to !== car.from) continue;
+      const ahead = (car.piece.length - car.s) - other.s;
+      if (ahead > -6 && ahead < range) return true;
+    }
+    return false;
+  }
+
+  /**
+   * A suspect fleeing the police: flat out, through red lights and stop signs (other cars see it as already
+   * in the intersection and wait), overtaking on the other side of the road, crashing into what it hits.
+   */
+  function stepFlee(car, dt, world) {
+    const flight = car.flee;
+    if (flight.disabled) {
+      car.speed = Math.max(0, car.speed - MAX_BRAKE * dt);
+      place(car);
+      return;
+    }
+    const onEdge = car.piece.kind === "edge";
+    let vMax = flight.top;
+    if (onEdge) {
+      car.reserved = true;
+      car.committed = true;
+      const toLine = car.piece.length - car.s;
+      const vTurn = TURN_SPEED[car.turnAhead.turn] + 3.5;
+      if (vTurn < Infinity) vMax = Math.min(vMax, Math.sqrt(vTurn * vTurn + 2 * MAX_BRAKE * 0.7 * toLine));
+      // Back in its lane before the intersection.
+      if (toLine < 16) car.targetShift = 0;
+    } else {
+      vMax = Math.min(vMax, TURN_SPEED[car.piece.turn] + 3.5);
+      car.targetShift = 0;
+    }
+    const ahead = gapAhead(car, world);
+    if (onEdge && car.piece.length - car.s > 22) {
+      if (car.targetShift === 0 && ahead.gap < 26 && ahead.what?.kind === "traffic" && !oncomingWithin(car, 55)) car.targetShift = OVERTAKE_SHIFT;
+      // On the wrong side: back when the way ahead in its lane is clear, or a car is coming.
+      if (car.targetShift < 0 && (oncomingWithin(car, 32) || ahead.gap > 18)) car.targetShift = 0;
+    }
+    if (ahead.gap < Infinity) {
+      const room = ahead.gap - 1.2;
+      const theirs = ahead.what?.ref?.speed ?? 0;
+      vMax = Math.min(vMax, room <= 0 ? theirs * 0.5 : Math.sqrt(2 * MAX_BRAKE * room) + theirs * 0.5);
+    }
+    if (car.speed < vMax) car.speed = Math.min(vMax, car.speed + 4.5 * dt);
+    else car.speed = Math.max(vMax, car.speed - MAX_BRAKE * dt);
+    const shiftSpeed = 5.5 * dt;
+    car.shift += Math.max(-shiftSpeed, Math.min(shiftSpeed, car.targetShift - car.shift));
+    car.s += car.speed * dt;
+    while (car.s > car.piece.length) {
+      car.s -= car.piece.length;
+      if (car.piece.kind === "edge") {
+        car.piece = car.turnAhead;
+        car.targetShift = 0;
+      } else {
+        car.reserved = false;
+        enterEdge(car, car.to, car.next);
+      }
+    }
+    place(car);
+    // Crashing into other cars: both stop dead for a moment; the suspect's car takes damage.
+    for (const other of cars) {
+      if (other === car || Math.abs(other.x - car.x) > 6 || Math.abs(other.z - car.z) > 6) continue;
+      if (!overlap(car, other)) continue;
+      const impact = Math.hypot(car.vx - other.vx, car.vz - other.vz);
+      if (impact < 1) continue;
+      other.crashed = Math.max(other.crashed, 2 + Math.min(4, impact * 0.3));
+      other.speed = 0;
+      car.speed *= 0.35;
+      flight.damage = (flight.damage || 0) + impact * 4;
+      if (flight.damage >= 100) flight.disabled = true;
+      events.push({ type: "crash", x: (car.x + other.x) / 2, z: (car.z + other.z) / 2, speed: impact });
+      place(car);
+    }
   }
 
   function stepCar(car, dt, world) {
@@ -510,6 +655,28 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
       car.speed = Math.max(0, car.speed - MAX_BRAKE * dt);
       car.vx = car.vz = 0;
       return;
+    }
+    if (car.pulled === "stopped") {
+      // Pulled over: waiting at the curb until the officer lets it go.
+      car.speed = 0;
+      car.shift += Math.max(-1.5 * dt, Math.min(1.5 * dt, PULL_SHIFT - car.shift));
+      place(car);
+      car.vx = car.vz = 0;
+      return;
+    }
+    if (car.flee) {
+      stepFlee(car, dt, world);
+      return;
+    }
+    // Pulled over but held up short of its spot (a car stopped ahead): it stops where it is, at the curb.
+    if (car.pulled === "stopping") {
+      car.pullWait = car.speed < 0.3 && car.piece.kind === "edge" && Math.abs(car.shift - PULL_SHIFT) < 0.2 ? (car.pullWait || 0) + dt : 0;
+      if (car.pullWait > 1.5) {
+        car.pulled = "stopped";
+        car.stopAt = -1;
+        car.speed = 0;
+        return;
+      }
     }
     let vMax = car.cruise;
     const onEdge = car.piece.kind === "edge";
@@ -592,7 +759,8 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
         const stopDistance = car.stopAt >= 0 ? car.stopAt - car.s : frontToLine - 0.5;
         vMax = Math.min(vMax, stopDistance < 0.1 ? 0 : Math.sqrt(2 * brake * stopDistance));
         if (car.stopAt >= 0 && stopDistance < 0.5 && car.speed < 0.5) {
-          car.mission = "arrived";
+          if (car.pulled) car.pulled = "stopped";
+          else car.mission = "arrived";
           car.speed = 0;
         }
       }
@@ -617,12 +785,24 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
     const stuckBehind = ahead.gap < 6 && car.speed < 0.3 && ahead.what && ahead.what.kind !== "traffic";
     car.blocked = stuckBehind ? car.blocked + dt : 0;
     car.honkTimer -= dt;
-    if (car.blocked > 1.8 && car.honkTimer <= 0 && ahead.what.kind !== "person") {
+    if (car.blocked > 1.8 && car.honkTimer <= 0 && ahead.what.kind !== "person" && !(ahead.what.kind === "player" && world.player.lights)) {
       car.honkTimer = 3 + random() * 3;
       events.push({ type: "horn", x: car.x, z: car.z });
     }
     car.targetShift =
-      car.mission === "enroute" ? EMERGENCY_SHIFT : siren === 3 ? MAKE_WAY_SHIFT : pullOver ? CURB_SHIFT : 0;
+      car.mission === "enroute"
+        ? EMERGENCY_SHIFT
+        : car.pulled
+          ? PULL_SHIFT
+          : siren === 3
+            ? MAKE_WAY_SHIFT
+            : pullOver
+              ? CURB_SHIFT
+              : passingStopped(car)
+                ? PASS_SHIFT
+                : car.drunk && onEdge
+                  ? Math.sin((car.weave = (car.weave || 0) + dt) * 0.9 + car.id) * 0.95
+                  : 0;
     const shiftSpeed = 2.2 * dt;
     car.shift += Math.max(-shiftSpeed, Math.min(shiftSpeed, car.targetShift - car.shift));
 
@@ -657,6 +837,7 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
      */
     update(dt, world) {
       events.length = 0;
+      lastWorld = world;
       const p = world.player;
       const inCity = p.x > minX - 40 && p.x < maxX + 40 && p.z > minZ - 40 && p.z < maxZ + 40;
       const wanted = inCity ? world.count : 0;
@@ -666,7 +847,7 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
       for (let k = cars.length - 1; k >= 0; k--) {
         const car = cars[k];
         // (An emergency vehicle stays until its job is done; then it goes back to base, out of sight.)
-        if (car.mission === "enroute" || car.mission === "arrived") continue;
+        if (car.mission === "enroute" || car.mission === "arrived" || car.keep) continue;
         const distance = Math.hypot(car.x - p.x, car.z - p.z);
         let gone = distance > 200 || (civilians > wanted && distance > 90);
         if (car.mission === "leaving" && distance > 60) {
@@ -696,7 +877,7 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
       // when the camera is not looking at it).
       for (let k = cars.length - 1; k >= 0; k--) {
         const car = cars[k];
-        if (car.blocked < 25 || car.mission === "enroute" || car.mission === "arrived") continue;
+        if (car.blocked < 25 || car.mission === "enroute" || car.mission === "arrived" || car.keep) continue;
         const cam = world.camera;
         let seen = false;
         if (cam) {
@@ -787,6 +968,25 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
     /** Its job done: the emergency vehicle drives off (and is taken off the road once far away). */
     release(car) {
       if (car.mission) car.mission = "leaving";
+      car.stopAt = -1;
+      car.targetShift = 0;
+    },
+    /** The police (the player, lights on behind it) pull this car over: it stops at the curb ahead. */
+    pullOver(car) {
+      if (car.mission || car.flee) return;
+      car.pulled = "stopping";
+      car.committed = false;
+      if (car.piece.kind === "edge" && !car.reserved) {
+        const needed = (car.speed * car.speed) / (2 * COMFORT_BRAKE) + 4;
+        const last = car.piece.length - car.halfLength - 1;
+        // Stops a little ahead on this road; if there is no room before the intersection, after it.
+        if (car.s + needed <= last) car.stopAt = car.s + needed;
+        else if (last - car.s > (car.speed * car.speed) / (2 * MAX_BRAKE)) car.stopAt = Math.max(car.s, last);
+      }
+    },
+    /** Let go: the car pulls out from the curb and drives on. */
+    releasePull(car) {
+      car.pulled = null;
       car.stopAt = -1;
       car.targetShift = 0;
     },

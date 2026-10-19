@@ -47,6 +47,24 @@ export function Minimap({ hud }) {
         {hud.job && (
           <circle cx={mapX(hud.job.markerX)} cy={mapZ(hud.job.markerZ)} r="4" fill="none" stroke="#ffd23a" strokeWidth="2" />
         )}
+        {/* The police job: the call (or its search area), the suspects, the jail with prisoners aboard. */}
+        {hud.duty?.callout && (
+          <circle
+            cx={mapX(hud.duty.callout.x)}
+            cy={mapZ(hud.duty.callout.z)}
+            r={hud.duty.callout.search ? (hud.duty.callout.search / 395) * 140 : 4}
+            fill={hud.duty.callout.search ? "#ff5a4e" : "none"}
+            opacity={hud.duty.callout.search ? 0.25 : 1}
+            stroke="#ff7a6a"
+            strokeWidth="2"
+          />
+        )}
+        {hud.duty?.suspects?.map((suspect, index) => (
+          <circle key={`s${index}`} cx={mapX(suspect.x)} cy={mapZ(suspect.z)} r="2.4" fill={suspect.hostile ? "#ff3b3b" : "#ffd23a"} />
+        ))}
+        {hud.duty?.seated > 0 && (
+          <text x={mapX(79)} y={mapZ(-23.6) + 3} fontSize="8" fontWeight="bold" fill="#ffd23a" textAnchor="middle">J</text>
+        )}
         <g transform={`translate(${mapX(hud.x)} ${mapZ(hud.z)}) rotate(${(-hud.heading * 180) / Math.PI})`}>
           <circle r="7" fill="#c6dc77" opacity=".15" />
           <path d="M0 -5 L3 4 L0 2 L-3 4Z" fill="#e8f7b8" />

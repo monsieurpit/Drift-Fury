@@ -70,9 +70,40 @@ export function TouchControls({ controls, hud }) {
         >
           {t("touch.footLabel")}
         </div>
-        {!hud?.onFoot && (
+        {hud?.duty?.on && (
+          <>
+            {/* The police job: lights, siren, E (pull over, talk, tackle), backup, weapon, accept a call. */}
+            {!hud.onFoot && (
+              <div className="touch-button !w-11 !border-[#3a6bff]/60 !bg-[#3a6bff]/20 text-[8px] font-bold" role="button" aria-label={t("duty.lights")} {...bindButton("KeyL")}>
+                {t("touch.lights")}
+              </div>
+            )}
+            {!hud.onFoot && (
+              <div className="touch-button !w-11 !border-[#ff3b3b]/60 !bg-[#ff3b3b]/20 text-[8px] font-bold" role="button" aria-label={t("duty.siren")} {...bindButton("KeyK")}>
+                {t("touch.siren")}
+              </div>
+            )}
+            <div className="touch-button !w-10 text-[11px] font-bold" role="button" aria-label="E" {...bindButton("KeyE")}>
+              {t("touch.talk")}
+            </div>
+            {hud.onFoot && (
+              <div className="touch-button !w-11 text-[8px] font-bold" role="button" aria-label={t("duty.weapon")} {...bindButton("KeyX")}>
+                {t("touch.weapon")}
+              </div>
+            )}
+            <div className="touch-button !w-12 text-[8px] font-bold" role="button" aria-label={t("duty.backup")} {...bindButton("KeyB")}>
+              {t("touch.backup")}
+            </div>
+          </>
+        )}
+        {!hud?.onFoot && !hud?.duty?.on && (
           <div className="touch-button !w-11 text-[9px] font-bold" role="button" aria-label={t("job.take")} {...bindButton("KeyJ")}>
             JOB
+          </div>
+        )}
+        {hud?.onFoot && hud?.lockerNear && !hud?.duty?.on && (
+          <div className="touch-button !w-10 text-[11px] font-bold" role="button" aria-label="E" {...bindButton("KeyE")}>
+            E
           </div>
         )}
         {!hud?.onFoot && (

@@ -1,3 +1,4 @@
+import { POLICE_TEXT } from "./i18nPolice.js";
 // The game's interface text in the browser's language: English, French, Spanish, German, Portuguese or
 // Italian, picked from the browser's preferred languages; English when none of them is supported.
 // (The city's own signs stay in French: it is a Quebec city.)
@@ -1378,6 +1379,8 @@ const it = {
 };
 
 const DICTIONARIES = { en, fr, es, de, pt, it };
+// The police job's words (i18nPolice.js).
+for (const [code, dictionary] of Object.entries(DICTIONARIES)) Object.assign(dictionary, POLICE_TEXT[code]);
 
 /** The browser's first preferred language we have, else English. */
 function detectLanguage() {

@@ -7,6 +7,8 @@ import { loadProgress, saveProgress } from "../game/data/progress.js";
 import { GameView } from "../game/ui/GameView.jsx";
 import { GarageScreen } from "../game/ui/GarageScreen.jsx";
 import { Hud } from "../game/ui/Hud.jsx";
+import { PoliceHud } from "../game/ui/PoliceHud.jsx";
+import { LockerModal } from "../game/ui/LockerModal.jsx";
 import { LoadingScreen } from "../game/ui/LoadingScreen.jsx";
 import { PauseMenu } from "../game/ui/PauseMenu.jsx";
 import { PickerModal } from "../game/ui/PickerModal.jsx";
@@ -52,6 +54,8 @@ export function GamePage() {
   const [progress, setProgress] = React.useState(loadProgress);
   const [screen, setScreen] = React.useState("lobby");
   const [picker, setPicker] = React.useState(null);
+  // The police job's locker (at the police station, RP mode).
+  const [locker, setLocker] = React.useState(false);
   const [hud, setHud] = React.useState(INITIAL_HUD);
   const [result, setResult] = React.useState(null);
   const [paused, setPaused] = React.useState(false);
@@ -77,11 +81,11 @@ export function GamePage() {
   const engine = ENGINES.find((t) => t.id === progress.engine) || ENGINES[0];
   React.useEffect(() => saveProgress(progress), [progress]);
   React.useEffect(() => {
-    controls.current.paused = !!(paused || picker || result);
+    controls.current.paused = !!(paused || picker || result || locker);
     if (controls.current.paused) {
       controls.current.keys = {};
     }
-  }, [paused, picker, result]);
+  }, [paused, picker, result, locker]);
   React.useEffect(() => {
     controls.current.muted = muted;
   }, [muted]);
@@ -128,11 +132,16 @@ export function GamePage() {
     setResult(null);
     setPaused(false);
     setPicker(null);
+    setLocker(false);
   };
   const togglePause = () => {
     if (!result && !loadingRef.current) {
       if (picker) {
         setPicker(null);
+        return;
+      }
+      if (locker) {
+        setLocker(false);
         return;
       }
       setPaused((e) => !e);
@@ -161,6 +170,7 @@ export function GamePage() {
             onHud={setHud}
             onFinish={finishSession}
             onStation={() => setPicker("cars")}
+            onLocker={() => setLocker(true)}
             onPause={togglePause}
             onLoading={({ progress, label }) =>
               setLoading((value) => (value ? { ...value, progress, label } : value))
@@ -190,8 +200,27 @@ export function GamePage() {
               }}
             />
           )}
-          {!paused && !result && !picker && !(loading && !loading.done) && (
+          {(!loading || loading.done) && hud.rp && (
+            <div className="pointer-events-none absolute inset-0 z-10 p-4 sm:p-6">
+              <PoliceHud hud={hud} controls={controls} />
+            </div>
+          )}
+          {!paused && !result && !picker && !locker && !(loading && !loading.done) && (
             <TouchControls controls={controls} hud={hud} />
+          )}
+          {locker && (
+            <LockerModal
+              info={hud.policeInfo}
+              onClose={() => setLocker(false)}
+              onStart={(outfit, fleet) => {
+                controls.current.duty?.start(outfit, fleet);
+                setLocker(false);
+              }}
+              onEnd={() => {
+                controls.current.duty?.end();
+                setLocker(false);
+              }}
+            />
           )}
           <div className="pointer-events-none absolute bottom-2 left-1/2 hidden -translate-x-1/2 text-[8px] tracking-widest text-white/50 xl:block">
             {t("game.controls")}

@@ -52,6 +52,7 @@ import { createSparks } from "../effects/sparks.js";
 import { createGunfire } from "../effects/gunfire.js";
 import { createFire } from "../effects/fire.js";
 import { createEmergencyServices } from "./emergencyServices.js";
+import { createPoliceJob } from "./policeJob.js";
 import { buildWorldInSteps } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
 import { loadStreetProps, placeStreetProps } from "../world/streetProps.js";
@@ -273,8 +274,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   }
   let interaction = null;
   // The player's car: its real 3D model (carModels.js), or the one built from code if it has none.
-  const buildPlayerCar = (color, shape, police = false) => {
-    const modelKey = carModelKey(shape, police);
+  const buildPlayerCar = (color, shape, police = false, model = null) => {
+    const modelKey = carModelKey(model || shape, police);
     return batchPlayerCar(
       modelKey ? buildModelCar(modelKey, { player: true, color }) : buildCar(color, shape, police, true),
     );
@@ -342,7 +343,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     });
     // A parked or police car taken by the player keeps its real model (carModels.js); the garage cars are
     // the ones built from code.
-    playerCar = buildPlayerCar(vehicle.color, vehicle.shape, vehicle.kind === "police");
+    playerCar = buildPlayerCar(vehicle.color, vehicle.shape, vehicle.kind === "police", vehicle.model);
     clusteredLights.patchAll(playerCar);
     scene.add(playerCar);
     trackMotion(playerCar);
@@ -353,7 +354,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const trafficHandles = new Map(); // traffic car -> instanced handle
   const trafficPeople = [];
   const trafficWorld = {
-    player: { x: 0, z: 0, heading: 0, onFoot: false, vx: 0, vz: 0 },
+    player: { x: 0, z: 0, heading: 0, onFoot: false, vx: 0, vz: 0, lights: false },
+    sirens: [],
     police: [],
     chasing: false,
     vehicles: [],
@@ -375,7 +377,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       onFoot: state.onFoot,
       vx: state.vx,
       vz: state.vz,
+      lights: !!policeJob?.playerLights,
     });
+    policeJob?.sirens(state, world.sirens);
     world.police = state.police;
     world.chasing = state.wanted > 0.15;
     world.vehicles = state.vehicles;
@@ -402,6 +406,11 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       if (event.type === "horn") {
         const [distance, pan] = heard(event.x, event.z);
         if (distance < 70) audio.horn?.(distance, pan);
+      } else if (event.type === "crash") {
+        // A fleeing suspect's car crashing into traffic.
+        const [distance] = heard(event.x, event.z);
+        effects.crash(event.x, terrainHeight(event.x, event.z) + 0.6, event.z, Math.min(1.2, event.speed * 0.06));
+        if (distance < 90) audio.crash?.(Math.min(1.2, event.speed * 0.06) * Math.min(1, 15 / Math.max(15, distance)));
       }
     }
     // Instanced handles: one per car on the road.
@@ -437,7 +446,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       if (!entry) {
         const carModel =
           vehicle.kind === "police"
-            ? carInstancer.add(trafficTemplate("#ffffff", "coupe", true))
+            ? carInstancer.add(trafficTemplate("#ffffff", vehicle.model && policeJob?.modelsReady ? vehicle.model : "coupe", true))
             : carInstancer.add(trafficTemplate(vehicle.color, vehicle.shape || "coupe"), vehicle.color);
         entry = {
           car: carModel,
@@ -445,6 +454,13 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         trafficCars.set(vehicle.id, entry);
       }
       entry.car.visible = true;
+      if (vehicle.kind === "police") {
+        // (The duty car flashes only with its lights on; other parked cruisers always.)
+        const lit = !policeJob || policeJob.lightsOn(vehicle);
+        const blue = Math.sin(performance.now() * 0.018) > 0;
+        entry.car.userData.blue = lit && (!vehicle.duty || blue);
+        entry.car.userData.red = lit && (!vehicle.duty || !blue);
+      }
       // Burnt out: the paint goes black.
       if ((entry.color ?? vehicle.color) !== vehicle.color) {
         entry.car.userData.paint = new Color(vehicle.color);
@@ -522,8 +538,10 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       clusteredLights.addDynamic(beam);
     }
     for (const vehicle of state.vehicles) {
-      if (vehicle.kind === "police") addBar(vehicle.x, vehicle.z);
+      if (vehicle.kind === "police" && (!policeJob || policeJob.lightsOn(vehicle))) addBar(vehicle.x, vehicle.z);
     }
+    // The player's police car, lights on.
+    if (policeJob?.playerLights) addBar(state.x, state.z);
     // Ambulances and fire trucks on a call: red and white flashes.
     for (const car of game.traffic ? game.traffic.cars : []) {
       if (car.mission !== "enroute" && car.mission !== "arrived") continue;
@@ -707,6 +725,26 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   if (debugSession) debugSession.pedestrians = pedestrians;
   // Ambulances for the dead, fire trucks for burning cars (emergencyServices.js).
   const emergency = createEmergencyServices({ scene, game, pedestrians, fire, groundAt, trackMotion, trafficWorld });
+  // The police job (policeJob.js, policeDuty.js).
+  const policeJob = createPoliceJob({
+    game,
+    pedestrians,
+    gunfire,
+    groundAt,
+    handPosition,
+    audio,
+    controls,
+    callbacks,
+    clusteredLights,
+    composer,
+    carInstancer,
+    renderer,
+    scene,
+    camera,
+    buildPlayerCar,
+  });
+  cleanup.push(() => policeJob.dispose());
+  controls.current.duty = policeJob;
   // The player is a scanned person too (the one built from shapes if the scans could not load).
   if (peopleModels) {
     const scanned = crowd.add(Math.random, "eric");
@@ -793,6 +831,14 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     end.z = z1;
     return true;
   }
+  // The police job's weapons: time between shots, range, and the chance to hit close (and far).
+  const WEAPON_STATS = {
+    pistol: { cooldown: 0.32, range: 30, near: 15, hitNear: 0.9, hitFar: 0.72 },
+    taser: { cooldown: 1.3, range: 10, near: 10, hitNear: 0.85, hitFar: 0.85 },
+    shotgun: { cooldown: 0.95, range: 20, near: 12, hitNear: 0.97, hitFar: 0.7 },
+    rifle: { cooldown: 0.14, range: 45, near: 20, hitNear: 0.9, hitFar: 0.78 },
+  };
+  let playerWeapon = "pistol";
   /** The player's gun: aims at whoever is in front (people, officers), fires, and what it does. */
   function updatePlayerGun(state, dt) {
     playerGunCooldown -= dt;
@@ -804,11 +850,14 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       gunDrawn = 0;
       return;
     }
+    const onDuty = game.duty.duty.on;
+    playerWeapon = onDuty ? game.duty.duty.weapon : "pistol";
+    const stats = WEAPON_STATS[playerWeapon] || WEAPON_STATS.pistol;
     if (!pressed || playerGunCooldown > 0) return;
-    playerGunCooldown = 0.32;
+    playerGunCooldown = stats.cooldown;
     gunDrawn = 3;
     // In a store, the gun is pointed at the clerk: a hold-up (game.js), no shot.
-    if (state.store >= 0) {
+    if (state.store >= 0 && !onDuty) {
       playerAim = (playerAim || new Vector3()).set(
         state.x - Math.sin(state.footYaw || 0) * 3,
         (state.y || 0) + 1.3,
@@ -826,25 +875,29 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       const dx = x - state.x;
       const dz = z - state.z;
       const d = Math.hypot(dx, dz);
-      if (d < 0.6 || d > 30) return;
+      if (d < 0.6 || d > stats.range) return;
       const facing = (dx * fx + dz * fz) / d;
       if (facing < 0.55) return;
       if (!bulletPath(state.x, state.z, x, z, shotEnd)) return;
-      const score = d * (2 - facing);
+      // (On duty, the suspect running or fighting is the one aimed at.)
+      const suspect = target.ped?.suspect;
+      const threat = suspect && (suspect.mode === "fight" || suspect.mode === "fleeFoot" || suspect.mode === "rampage");
+      const score = d * (2 - facing) - (threat ? 8 : 0);
       if (score < bestScore) {
         bestScore = score;
         best = { x, z, d, ...target };
       }
     };
-    for (const ped of pedestrians.people) if (ped.mode !== "dead") consider(ped.x, ped.z, { ped });
-    for (const officer of state.police) if (officer.onFoot && !officer.dead) consider(officer.x, officer.z, { officer });
+    for (const ped of pedestrians.people) if (ped.mode !== "dead" && ped.rig.visible) consider(ped.x, ped.z, { ped });
+    // (On duty, no friendly fire.)
+    if (!onDuty) for (const officer of state.police) if (officer.onFoot && !officer.dead) consider(officer.x, officer.z, { officer });
     if (best) state.footYaw = Math.atan2(-(best.x - state.x), -(best.z - state.z));
     const aimYaw = state.footYaw || 0;
     handPosition(playerPerson, muzzle);
     muzzle.x += -Math.sin(aimYaw) * 0.25;
     muzzle.z += -Math.cos(aimYaw) * 0.25;
     const groundHere = state.y || 0;
-    const hit = best && Math.random() < (best.d < 15 ? 0.9 : 0.72);
+    const hit = best && Math.random() < (best.d < stats.near ? stats.hitNear : stats.hitFar);
     if (best) {
       aimPoint.set(best.x, groundAt(best.x, best.z) + 1.25, best.z);
       if (!hit) {
@@ -862,10 +915,16 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       aimPoint.z = shotEnd.z;
     }
     playerAim = (playerAim || new Vector3()).copy(aimPoint);
-    gunfire.fire(muzzle, aimPoint);
-    audio.gunshot?.(4, 0);
+    const taser = playerWeapon === "taser";
+    gunfire.fire(muzzle, aimPoint, taser ? "taser" : "pistol");
+    if (taser) audio.taser?.();
+    else audio.gunshot?.(playerWeapon === "pistol" ? 4 : 2, 0);
     shotEvents.length = 0;
-    if (hit && best.ped) {
+    if (hit && best.ped && taser) {
+      // The taser: a suspect goes down stunned; anyone else is just frightened (and it is misconduct).
+      game.duty.tased(best.ped.suspect || null);
+      if (!best.ped.suspect) pedestrians.frighten(best.ped.x, best.ped.z, 3, shotEvents);
+    } else if (hit && best.ped) {
       pedestrians.shoot(best.ped, state.x, state.z, shotEvents);
     } else if (hit && best.officer) {
       // An officer shot dead: the most serious crime there is.
@@ -884,8 +943,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       sparks.emit(aimPoint.x, Math.max(aimPoint.y, groundAt(aimPoint.x, aimPoint.z) + 0.1), aimPoint.z, 0, 0, 0, 0, 4);
     }
     // Shots fired: everyone around runs, and the police (if anywhere near) are after an armed suspect.
-    pedestrians.frighten(state.x, state.z, 35, shotEvents);
+    if (!taser) pedestrians.frighten(state.x, state.z, 35, shotEvents);
     processPedEvents(shotEvents, state);
+    if (onDuty) return;
     state.gunfire = 15;
     if (state.police.some((o) => !o.dead && Math.hypot(o.x - state.x, o.z - state.z) < 80) || state.heli) {
       state.wanted = Math.min(5, Math.max(state.wanted, 1) + 0.15);
@@ -951,7 +1011,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       const limbs = playerPerson.userData.L;
       if (limbs) aimArms(limbs);
       handPosition(playerPerson, handPoint);
-      gunfire.holdPistol(handPoint, playerAim);
+      if (playerWeapon === "pistol") gunfire.holdPistol(handPoint, playerAim);
+      else gunfire.holdWeapon(playerWeapon, handPoint, playerAim);
     }
   }
   /** Blood, voices and the crimes of the pedestrians' events (hit by cars, shot, screaming). */
@@ -977,8 +1038,14 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           // Everyone around runs away screaming.
           pedestrians.frighten(event.x, event.z, 22, events);
           if (event.car.player) {
-            const witnessed = state.police.some((officer) => Math.hypot(officer.x - event.x, officer.z - event.z) < 90);
-            state.wanted = Math.min(5, (state.wanted || 0) + (witnessed ? 1 : 0.5));
+            event.ped.killedByPlayer = true;
+            if (game.duty.duty.on) {
+              // On duty: a suspect's death is judged by the job (suspectBodies.js); anyone else's is misconduct.
+              if (!event.ped.suspect) game.duty.civilianKilled(gun);
+            } else {
+              const witnessed = state.police.some((officer) => Math.hypot(officer.x - event.x, officer.z - event.z) < 90);
+              state.wanted = Math.min(5, (state.wanted || 0) + (witnessed ? 1 : 0.5));
+            }
             if (!gun) state.shake = Math.min((state.shake || 0) + 0.25, 1.2);
           }
         }
@@ -1019,6 +1086,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     }
     const events = pedestrians.update(dt, { cars: pedestrianCars, camera, phase: signalClock });
     processPedEvents(events, state);
+    // The police job's suspects: their bodies placed and posed (before the crowd's bones are set).
+    safely("suspects", () => policeJob.updateBodies(dt, state, performance.now()));
     for (const ped of movingBodies) {
       if (ped.mode !== "dead" || ped.dead?.settled) {
         composer.taa?.untrack(ped.rig);
@@ -1096,12 +1165,13 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   /** The siren of the nearest chasing cruiser, the helicopter's rotor. */
   function updatePoliceSounds(state) {
     let sirenAt = null;
-    if (state.wanted > 0.15 || state.busted > 0) {
+    const assisting = state.police.some((officer) => officer.assist);
+    if (state.wanted > 0.15 || state.busted > 0 || assisting) {
       let nearest = Infinity;
       let nearestX = 0;
       let nearestZ = 0;
       for (const officer of state.police) {
-        if (officer.onFoot) continue;
+        if (officer.onFoot || (assisting && !(state.wanted > 0.15) && !officer.assist)) continue;
         const d = Math.hypot(officer.x - state.x, officer.z - state.z);
         if (d < nearest) {
           nearest = d;
@@ -1130,10 +1200,12 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   // The car radio (radio.js): T, or the touch button, goes to the next station.
   let radioShown = null;
   let radioTouchHeld = false;
+  let touchEHeld = false;
   /** H: the player's horn. People just ahead jump out of the way. */
   function honk() {
     const state = game.state;
-    audio.horn?.(2, 0);
+    if (policeJob.playerLights) audio.airhorn?.();
+    else audio.horn?.(2, 0);
     const events = [];
     pedestrians.frighten(state.x - Math.sin(state.heading) * 8, state.z - Math.cos(state.heading) * 8, 7, events);
     processPedEvents(events, state);
@@ -1290,6 +1362,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     if (e.code === "KeyE" && !e.repeat && !game.state.onFoot && game.state.station >= 0) {
       callbacks.current.onStation();
     }
+    if (e.code === "KeyE" && !e.repeat && game.state.onFoot) policeJob.interact();
     if (e.code === "KeyT" && !e.repeat && !game.state.onFoot) switchRadio();
     if (e.code === "KeyH" && !e.repeat && !game.state.onFoot) honk();
     if (e.code === "Escape" && !e.repeat) {
@@ -1404,6 +1477,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     const state = game.state;
     if (controls.current.paused) {
       audio.update(state.rpm, 0, true, false, state);
+      audio.playerSiren?.(null);
     } else {
       const wasOnFoot = state.onFoot;
       const oldX = state.x;
@@ -1519,6 +1593,13 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         // Tail lights are on at night; braking makes them flare.
         playerCar.userData.brakeLights.forEach((t) => (t.material.emissiveIntensity = braking ? 2.6 : 0.6));
       }
+      safely("police job", () => {
+        policeJob.frame(state, playerCar, playerPerson, time);
+        // (The touch button presses E through the controls: the same as the key on foot.)
+        const touchE = !!controls.current.keys.KeyE;
+        if (touchE && !touchEHeld && state.onFoot) policeJob.interact();
+        touchEHeld = touchE;
+      });
       playerPerson.visible = !!state.onFoot;
       playerPerson.rotation.x = 0;
       if (state.wasted > 0) {
@@ -1886,6 +1967,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
               }
             : null,
           burning: state.burning > 0 && !state.onFoot,
+          ...policeJob.hud(state, state.onFoot ? footCameraYaw : state.heading + cameraYaw),
           respawnMessage: state.elapsed < respawnMessageUntil ? respawnMessageKind : null,
           heliActive: !!state.heli && !state.heli.leaving,
           roadblockActive: !!state.roadblock,
@@ -2076,6 +2158,10 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         pacer.calibrate(deltas);
         lastFrameTime = performance.now();
         frameId = requestAnimationFrame(frame);
+        // The police job's cars, in the background now that the session runs.
+        setTimeout(() => {
+          if (!disposed) policeJob.loadModels();
+        }, 2500);
       };
       frameId = requestAnimationFrame(calibrate);
     },
@@ -2124,6 +2210,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      policeJob.dispose();
       audio.close();
       shadowCache.dispose();
       view.dispose();

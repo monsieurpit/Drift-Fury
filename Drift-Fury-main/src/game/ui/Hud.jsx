@@ -179,7 +179,7 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation, onRepair }
           <kbd className="race-key">R</kbd> {t("hud.repairRespray", { n: hud.rp && hud.wanted > 0.15 ? 200 : 60 })}
         </button>
       )}
-      {!hud.onFoot && !hud.job && hud.station < 0 && (
+      {!hud.onFoot && !hud.job && hud.station < 0 && !hud.duty?.on && (
         <div className="absolute bottom-6 left-1/2 hidden -translate-x-1/2 text-[9px] tracking-wider text-white/45 sm:block">
           <kbd className="race-key">J</kbd> {t("job.take")}
         </div>

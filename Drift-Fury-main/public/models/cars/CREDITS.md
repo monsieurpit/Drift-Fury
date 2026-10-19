@@ -17,6 +17,11 @@ in the game they are rotated, scaled to the game's car sizes and repainted per c
 | cheetah84.glb | [Cheetah '84 - Low poly Model](https://sketchfab.com/3d-models/cheetah-84-low-poly-model-c967ab4abbc54ae4b7933fd81a86c99c) | [Daniel Zhabotinsky](https://sketchfab.com/DanielZhabotinsky) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
 | shvan92_ambulance.glb | [Shvan '92 Ambulance - Low Poly model](https://sketchfab.com/3d-models/shvan-92-ambulance-low-poly-model-2856dd3c61f940909dced9a5c0379484) | [Daniel Zhabotinsky](https://sketchfab.com/DanielZhabotinsky) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
 | firetruck.glb | [Firetruck](https://sketchfab.com/3d-models/firetruck-27a6b95f768d415282e2f5de48ba6d99) | [OzerGokmen](https://sketchfab.com/OzerGokmen) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+| trinity03_police.glb | [Trinity '03 Cop Interceptor - Low poly model](https://sketchfab.com/3d-models/trinity-03-cop-interceptor-low-poly-model-6a5c6c8a75764eea905541fd5b05e9bf) | [Daniel Zhabotinsky](https://sketchfab.com/DanielZhabotinsky) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+| urban10_police.glb | [Urban '10 Cop Enforcer - Low poly model](https://sketchfab.com/3d-models/urban-10-cop-enforcer-low-poly-model-745830362bb342128ef6509345606ffe) | [Daniel Zhabotinsky](https://sketchfab.com/DanielZhabotinsky) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+| phoenix71_police.glb | [Phoenix 455 '71 Interceptor - Low poly model](https://sketchfab.com/3d-models/phoenix-455-71-interceptor-low-poly-model-fbd5b96599944932a71fc8c81291253c) | [Daniel Zhabotinsky](https://sketchfab.com/DanielZhabotinsky) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+| saba95_police.glb | [Saba V12 '95 Interceptor - Low poly model](https://sketchfab.com/3d-models/saba-v12-95-interceptor-low-poly-model-63aa215521334cef9c4d8c4c391252ad) | [Daniel Zhabotinsky](https://sketchfab.com/DanielZhabotinsky) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
 
-The garage cars (Elfen 9R, Outlaw R, Spectre RS, Titan X) use the last four models.
+The garage cars (Elfen 9R, Outlaw R, Spectre RS, Titan X) use the Stinger, Phoenix, Saba and Cheetah models.
 The ambulance and the fire truck are the emergency services of RP mode.
+The four police cars (and the Crown Victoria) make up the fleet of the police job in RP mode.

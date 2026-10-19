@@ -37,6 +37,11 @@ const MODELS = {
   muscle: { file: "phoenix71", yaw: Math.PI / 2, length: CAR_SPECS.muscle.L, paint: /bodymat/i },
   super: { file: "saba95", yaw: Math.PI / 2, length: CAR_SPECS.super.L, paint: /bodymat/i },
   hyper: { file: "cheetah84", yaw: Math.PI / 2, length: CAR_SPECS.hyper.L, paint: /bodymat/i },
+  // The police job's fleet (RP mode), loaded when the session starts (loadPoliceModels).
+  police_sedan: { file: "trinity03_police", yaw: Math.PI / 2, length: CAR_SPECS.sedan.L, paint: null, lightBar: ["#3a8eff", "#ff3434"], fleet: true },
+  police_suv: { file: "urban10_police", yaw: Math.PI / 2, length: CAR_SPECS.suv.L, paint: null, lightBar: ["#3a8eff", "#ff3434"], fleet: true },
+  police_muscle: { file: "phoenix71_police", yaw: Math.PI / 2, length: CAR_SPECS.muscle.L, paint: null, lightBar: ["#3a8eff", "#ff3434"], fleet: true },
+  police_super: { file: "saba95_police", yaw: Math.PI / 2, length: CAR_SPECS.super.L, paint: null, lightBar: ["#3a8eff", "#ff3434"], fleet: true },
 };
 
 const loaded = new Map(); // key -> gltf scene
@@ -49,7 +54,7 @@ const EMERGENCY = new Set(["ambulance", "firetruck"]);
  */
 export async function loadCarModels(onProgress, { emergency = false } = {}) {
   const loader = new GLTFLoader();
-  const keys = Object.keys(MODELS).filter((key) => emergency || !EMERGENCY.has(key));
+  const keys = Object.keys(MODELS).filter((key) => (emergency || !EMERGENCY.has(key)) && !MODELS[key].fleet);
   let done = 0;
   await Promise.all(
     keys.map(async (key) => {
@@ -65,9 +70,28 @@ export async function loadCarModels(onProgress, { emergency = false } = {}) {
   );
 }
 
-/** The model key for a car: "police", or its body shape when there is a model for it. */
+/** The police job's cars (loaded in the background once a session has started; resolves when done). */
+export async function loadPoliceModels() {
+  const loader = new GLTFLoader();
+  await Promise.all(
+    Object.keys(MODELS)
+      .filter((key) => MODELS[key].fleet && !loaded.has(key))
+      .map(async (key) => {
+        try {
+          loaded.set(key, (await loader.loadAsync(`${BASE}${MODELS[key].file}.glb`)).scene);
+        } catch (error) {
+          console.warn("Police car model failed to load:", key, error);
+        }
+      }),
+  );
+}
+
+/**
+ * The model key for a car: for a police car its own model ("police_suv"...) given as `shape`, or the
+ * cruiser ("police"); otherwise its body shape, when there is a model for it.
+ */
 export function carModelKey(shape, police) {
-  const key = police ? "police" : shape;
+  const key = police ? (MODELS[shape]?.fleet && loaded.has(shape) ? shape : "police") : shape;
   return loaded.has(key) ? key : null;
 }
 
@@ -126,8 +150,9 @@ export function buildModelCar(key, { player = false, color = "#ffffff" } = {}) {
   });
 
   const length = spec.length;
-  if (spec.lightBar) addLightBar(car, model, spec.lightBar, (spec.barAt || 0) * length);
-  car.userData = player ? playerParts(car, model, length) : {};
+  const lightBar = spec.lightBar ? addLightBar(car, model, spec.lightBar, (spec.barAt || 0) * length) : [];
+  // (A police car the player drives: its light bar halves flash when the player turns the lights on.)
+  car.userData = player ? { ...playerParts(car, model, length), lightBar } : {};
   return car;
 }
 
@@ -139,6 +164,7 @@ function addLightBar(car, model, colours, z = 0) {
   const ray = new Raycaster(new Vector3(0, 20, z), new Vector3(0, -1, 0));
   const hits = ray.intersectObject(model, true);
   const top = hits.length ? hits[0].point.y : 1.6;
+  const halves = [];
   for (const [name, x, colour] of [
     ["blue", -0.2, colours[0]],
     ["red", 0.2, colours[1]],
@@ -147,7 +173,9 @@ function addLightBar(car, model, colours, z = 0) {
     half.position.set(x, top + 0.005, z);
     half.name = name;
     car.add(half);
+    halves.push(half);
   }
+  return halves;
 }
 
 /** For a car the player drives: its four wheels on pivots that can spin, and two low-beam headlights. */
@@ -157,7 +185,7 @@ function playerParts(car, model, length) {
     if (!object.isMesh) return;
     let node = object;
     while (node && node !== model) {
-      const match = /wheel[^A-Za-z]*(?:stock_?)?(FL|FR|RL|RR)/i.exec(node.name || "");
+      const match = /wheel[^A-Za-z]*(?:(?:stock|race|lifted|sport)_?)?(FL|FR|RL|RR)/i.exec(node.name || "");
       if (match) {
         corners[match[1].toUpperCase()].push(object);
         return;

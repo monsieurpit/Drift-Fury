@@ -1,4 +1,5 @@
 import "./styles/index.css";
+import "./styles/utilities.css";
 import * as ReactDOM from "react-dom/client";
 import { App } from "./App.jsx";
 import { LANG } from "./i18n.js";

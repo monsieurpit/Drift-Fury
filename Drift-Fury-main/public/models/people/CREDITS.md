@@ -13,3 +13,7 @@ animation and stands with Sophia's idle animation.
 | carla.glb | [Carla Rigged 001 - Rigged 3D Business Women](https://sketchfab.com/3d-models/carla-rigged-001-rigged-3d-business-women-acf520f450d14dd799f98a6fede3edf5) | [Renderpeople](https://sketchfab.com/renderpeople) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
 | claudia.glb | [Claudia Rigged 002 - 3D Rigged Business Women](https://sketchfab.com/3d-models/claudia-rigged-002-3d-rigged-business-women-c659bd0accab47c6bbe390cf822a2b92) | [Renderpeople](https://sketchfab.com/renderpeople) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
 | manuel.glb | [Manuel Animated 001 - 3D Dancing Man](https://sketchfab.com/3d-models/manuel-animated-001-3d-dancing-man-e65e0fef4e0743868c8d5bff36d61116) | [Renderpeople](https://sketchfab.com/renderpeople) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
+
+The police uniforms of the police job (`eric_patrol.webp`, `eric_sheriff.webp`, `eric_swat.webp`) are Eric's
+scanned texture with the suit and shirt recoloured (the shirt and the trousers told apart by the bones that
+move each part of the mesh); skin, face, hair and shoes are as scanned. Same licence and author as above.
