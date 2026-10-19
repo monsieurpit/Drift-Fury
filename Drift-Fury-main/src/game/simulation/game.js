@@ -927,6 +927,7 @@ export function createGame(car, engine, solids, noPolice = false) {
         // Shift: running. Space: a jump (from the ground, then gravity brings the player back down).
         const running = !!(keys.ShiftLeft || keys.ShiftRight);
         state.footRunning = running && !!(moveX || moveZ);
+        state.landing = Math.max(0, (state.landing || 0) - dt);
         if (keys.Space && !state._jumpHeld && !(state.jumpY > 0)) state.jumpV = JUMP_SPEED;
         state._jumpHeld = !!keys.Space;
         if (state.jumpV || state.jumpY > 0) {
@@ -935,6 +936,7 @@ export function createGame(car, engine, solids, noPolice = false) {
           if (state.jumpY <= 0) {
             state.jumpY = 0;
             state.jumpV = 0;
+            state.landing = 0.22; // (the knees take the landing: see the session's pose)
           }
         }
         ((sinHeading, cosHeading, walkSpeed) => {

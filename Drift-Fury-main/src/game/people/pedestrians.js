@@ -33,6 +33,9 @@ export function fightPose(L, swing = 0, rightHand = true) {
   L.ra.rotation.set(1.15 + (rightHand ? jab * 0.45 : 0), 0, -0.3);
   L.le.rotation.set(1.5 - (!rightHand ? jab * 1.3 : 0), 0, 0);
   L.re.rotation.set(1.5 - (rightHand ? jab * 1.3 : 0), 0, 0);
+  // The shoulders turn into the punch and the body leans in; between punches, a fighter's crouch.
+  L.body.rotation.set(-0.12 - jab * 0.12, (rightHand ? 1 : -1) * jab * 0.38, 0);
+  L.head.rotation.x = 0.12;
 }
 
 export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices, groundAt, count, seed = 911 }) {
@@ -66,6 +69,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
   }
 
   const people = [];
+  let fightTimer = 45 + random() * 60; // seconds to the next street fight
   let lastNear = null; // where the camera was last step (for putting people back out of its sight)
 
   function endTalk(ped) {
@@ -161,6 +165,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
     ped.visualZ = ped.z;
     ped.dead = null;
     ped.hp = 100;
+    ped.opponent = null;
     ped.swing = 0;
     ped.stagger = 0;
     ped.panic = 0;
@@ -282,6 +287,44 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
     events.push({ type: "killed", ped, x: ped.x, z: ped.z, speed, car });
   }
 
+  /** Two people walking near (but not too near) the camera start fighting each other; people close by back off. */
+  function startStreetFight(near, events) {
+    const candidates = people.filter((ped) => {
+      if (ped.mode !== "walk" && ped.mode !== "talk") return false;
+      const d = Math.hypot(ped.x - near.x, ped.z - near.z);
+      return d > 12 && d < 55;
+    });
+    for (const a of candidates) {
+      const b = candidates.find((other) => other !== a && Math.hypot(other.x - a.x, other.z - a.z) < 6);
+      if (!b) continue;
+      for (const [ped, foe] of [[a, b], [b, a]]) {
+        endTalk(ped);
+        ped.mode = "brawl";
+        ped.opponent = foe;
+        ped.brawlTime = 0;
+        ped.punchTimer = 0.4 + random() * 0.8;
+        ped.hp = Math.min(ped.hp ?? 100, 100);
+      }
+      events.push({ type: "scream", ped: a, x: a.x, z: a.z });
+      // Bystanders step away from it.
+      for (const ped of people) {
+        if (ped === a || ped === b || ped.mode === "dead" || ped.controlled || ped.mode === "brawl") continue;
+        const dx = ped.x - a.x;
+        const dz = ped.z - a.z;
+        const d = Math.hypot(dx, dz);
+        if (d > 7 || d < 0.01) continue;
+        ped.mode = "flee";
+        ped.dodging = true;
+        ped.fleeSpeed = 1;
+        ped.fleeX = dx / d;
+        ped.fleeZ = dz / d;
+        ped.panic = 1.5 + random();
+      }
+      return true;
+    }
+    return false;
+  }
+
   function pushBody(ped, car, speed, events) {
     const dead = ped.dead;
     if (dead.time - dead.lastHit < 0.5) return;
@@ -307,6 +350,12 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
       camera.getWorldDirection(cameraForward);
       const near = { x: camera.position.x, z: camera.position.z, viewX: cameraForward.x, viewZ: cameraForward.z };
       lastNear = near;
+      // Now and then a quarrel on the sidewalk turns into a fist fight, somewhere near the player.
+      fightTimer -= dt;
+      if (fightTimer <= 0) {
+        fightTimer = 70 + random() * 90;
+        startStreetFight(near, events);
+      }
       for (const ped of people) {
         const rig = ped.rig;
         if (ped.mode === "dead") {
@@ -509,13 +558,18 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
         ped.swing = Math.max(0, (ped.swing || 0) - dt);
         ped.stagger = Math.max(0, (ped.stagger || 0) - dt);
         if (ped.mode === "brawl") {
-          // In a fist fight with the player: closes in, fists up, and throws punches. Gives up (runs off)
-          // when badly hurt, when the player gets into a car or away, or after a while.
+          // In a fist fight (with the player, or another person: ped.opponent): closes in, fists up, and
+          // throws punches. Gives up (runs off) when badly hurt, when the other one is down, gone or in a car,
+          // or after a while.
           ped.brawlTime += dt;
-          const dx = player ? player.x - ped.x : 0;
-          const dz = player ? player.z - ped.z : 0;
+          const foe = ped.opponent;
+          const target = foe || player;
+          const dx = target ? target.x - ped.x : 0;
+          const dz = target ? target.z - ped.z : 0;
           const d = Math.hypot(dx, dz) || 1;
-          if (!player || !player.onFoot || player.dead || d > 25 || ped.brawlTime > 45 || ped.hp < 25) {
+          const foeDone = foe ? foe.mode === "dead" || foe.mode !== "brawl" || foe.controlled : !player || !player.onFoot || player.dead;
+          if (foeDone || d > 25 || ped.brawlTime > (foe ? 25 : 45) || ped.hp < 25) {
+            ped.opponent = null;
             ped.mode = "flee";
             ped.dodging = false;
             ped.fleeSpeed = 2;
@@ -538,7 +592,18 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
               ped.punchTimer = 0.75 + random() * 0.55;
               ped.swing = 0.28;
               ped.punchHand = !ped.punchHand;
-              events.push({ type: "punchPlayer", ped, x: ped.x, z: ped.z, damage: 5 + random() * 5 });
+              const damage = 5 + random() * 5;
+              if (!foe) events.push({ type: "punchPlayer", ped, x: ped.x, z: ped.z, damage });
+              else if (random() < 0.7) {
+                // (Some punches miss: a duck, a step back.)
+                foe.hp -= damage * 1.6;
+                foe.stagger = 0.35;
+                if (foe.hp <= 0) {
+                  const length = d || 1;
+                  kill(foe, { x: ped.x, z: ped.z, vx: (dx / length) * 2.2, vz: (dz / length) * 2.2, heading: ped.heading, player: false, fist: true }, 1, events);
+                  foe.dead.velocity.y = 1.2;
+                } else events.push({ type: "hurt", ped: foe, x: foe.x, z: foe.z });
+              }
             }
           }
         } else if (ped.mode === "frozen") {
@@ -691,7 +756,10 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
         // Facing where they go (or across the road while waiting), turning smoothly.
         let wantHeading = ped.heading;
         if (ped.mode === "wait") wantHeading = ped.waitHeading;
-        else if (ped.mode === "brawl" && player) wantHeading = Math.atan2(-(player.x - ped.x), -(player.z - ped.z));
+        else if (ped.mode === "brawl" && (ped.opponent || player)) {
+          const foe = ped.opponent || player;
+          wantHeading = Math.atan2(-(foe.x - ped.x), -(foe.z - ped.z));
+        }
         else if (ped.mode === "talk" && ped.partner)
           wantHeading = Math.atan2(-(ped.partner.x - ped.x), -(ped.partner.z - ped.z));
         else if (Math.hypot(moveX, moveZ) > 1e-4) wantHeading = Math.atan2(-moveX, -moveZ);
@@ -722,6 +790,16 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           }
         } else if (ped.mode === "wait") rig.userData.L.head.rotation.y = Math.sin(ped.lookTimer * 2) * 0.5;
         else rig.userData.L.head.rotation.y = 0;
+        // Someone walking right past the player on foot glances at them.
+        if (player && player.onFoot && !player.dead && (ped.mode === "walk" || ped.mode === "wait" || ped.mode === "cross")) {
+          const away = Math.hypot(player.x - ped.x, player.z - ped.z);
+          if (away < 5) {
+            let look = Math.atan2(-(player.x - ped.x), -(player.z - ped.z)) - ped.heading;
+            look = Math.atan2(Math.sin(look), Math.cos(look));
+            const L = rig.userData.L;
+            if (Math.abs(look) < 1.7) L.head.rotation.y = look * 0.6 * Math.min(1, (5 - away) / 2);
+          }
+        }
         if (ped.mode === "brawl") fightPose(rig.userData.L, ped.swing, ped.punchHand);
         if (ped.stagger > 0) {
           // Rocked back by a punch.
@@ -804,10 +882,14 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
       }
       ped.stagger = 0.35;
       events.push({ type: "hurt", ped, x: ped.x, z: ped.z });
-      if (ped.mode === "brawl") return;
+      if (ped.mode === "brawl") {
+        ped.opponent = null; // (whoever they were fighting, now it is the player)
+        return;
+      }
       endTalk(ped);
       ped.tough ??= random();
       if (ped.tough < 0.5 && ped.hp > 40) {
+        ped.opponent = null;
         ped.mode = "brawl";
         ped.brawlTime = 0;
         ped.punchTimer = 0.5 + random() * 0.4;
@@ -874,6 +956,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
     /** Takes `ped` (someone the player stopped) out of the crowd's own life. */
     claimPed(ped) {
       endTalk(ped);
+      ped.opponent = null;
       ped.controlled = true;
       ped.mode = "held";
       ped.panic = 0;

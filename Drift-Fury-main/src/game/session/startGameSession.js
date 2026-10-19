@@ -1233,6 +1233,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         if (state.onFoot && state.wasted <= 0 && state.busted <= 0 && !(state.jumpY > 0.25)) {
           state.playerHealth = Math.max(0, state.playerHealth - event.damage);
           state.sinceHit = 0;
+          playerFlinch = 0.3;
           state.shake = Math.min((state.shake || 0) + 0.15, 1);
           audio.bodyHit?.(3, distance, pan);
           audio.hurt?.(false, 2, 0);
@@ -1243,6 +1244,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     }
   }
   const pedestrianPlayer = { x: 0, z: 0, onFoot: false, dead: false };
+  let playerFlinch = 0; // seconds left of the player's flinch from a punch
   function updatePedestrians(state, dt) {
     pedestrianCars.length = 0;
     if (!state.onFoot) {
@@ -1829,7 +1831,30 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           limbs.rk.rotation.x = -0.7;
           limbs.la.rotation.set(0.5, 0, -0.45);
           limbs.ra.rotation.set(0.5, 0, 0.45);
-        } else if (limbs && state.footRunning) limbs.body.rotation.x = -0.2; // (leaning into the run)
+        } else if (limbs && state.landing > 0) {
+          // Landing: the knees bend and the body dips, then straightens.
+          const k = Math.sin((state.landing / 0.22) * Math.PI);
+          limbs.lh.rotation.x = 0.45 * k;
+          limbs.rh.rotation.x = 0.45 * k;
+          limbs.lk.rotation.x = -0.9 * k;
+          limbs.rk.rotation.x = -0.9 * k;
+          limbs.body.rotation.x = -0.15 * k;
+        } else if (limbs && state.footRunning) {
+          // Running: leaning into it, elbows bent, arms pumping.
+          const pump = Math.sin(state.elapsed * 9.5);
+          limbs.body.rotation.x = -0.2;
+          limbs.le.rotation.x = 1.25;
+          limbs.re.rotation.x = 1.25;
+          limbs.la.rotation.x = 0.35 + pump * 0.55;
+          limbs.ra.rotation.x = 0.35 - pump * 0.55;
+        }
+        if (limbs && playerFlinch > 0) {
+          // Punched: the head snaps back and the body rocks.
+          const k = playerFlinch / 0.3;
+          limbs.head.rotation.x = -0.45 * k;
+          limbs.body.rotation.x += 0.25 * k;
+        }
+        playerFlinch = Math.max(0, playerFlinch - dt);
       }
       if (state.respawned) {
         // Back at the hospital or the police station: the camera starts behind the player there.
