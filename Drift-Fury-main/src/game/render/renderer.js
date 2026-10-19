@@ -499,9 +499,9 @@ export function createRenderer(container, inGame = false) {
     environment: scene.environment,
   };
   const DAY = {
-    hemisphere: [new Color("#d4e6ff"), new Color("#5f5a4c"), 1.5],
-    ambient: [new Color("#b8c7d8"), 0.55],
-    sun: [new Color("#fff0d8"), 4.6],
+    hemisphere: [new Color("#d4e6ff"), new Color("#5f5a4c"), 3.2],
+    ambient: [new Color("#b8c7d8"), 1.0],
+    sun: [new Color("#fff0d8"), 10],
     fill: [new Color("#a8c8ee"), 0.55],
     rim: [new Color("#fff6e8"), 0.35],
     fog: new Color("#a9bdcd"),
