@@ -90,9 +90,9 @@
 }
 
 .hud-glass {
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  background: #10171be0;
+  /* (No backdrop blur: blurring the game's picture under every panel cost the GPU a full extra pass each
+     frame, for a difference invisible through a panel this opaque.) */
+  background: #10171be8;
   border: 1px solid #ffffff12;
   border-radius: 10px;
 }

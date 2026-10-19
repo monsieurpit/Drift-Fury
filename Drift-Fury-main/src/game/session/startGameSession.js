@@ -2133,9 +2133,31 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     sun.target.position.set(x, 0, z);
     sun.target.updateMatrixWorld();
     renderer.shadowMap.needsUpdate = true;
+    // In the city and up the mountain (their two environments), everything hidden until needed is shown for
+    // this render too: the player's car parked, the player on foot, the effects, the job's props. Their
+    // shaders (every pass: colour, shadow, motion vectors) are compiled now, with the lighting they will be
+    // drawn in, not on the frame they first appear (getting out of the car froze the game for seconds).
+    const revealed = [];
+    if (index === 0 || index === 3) {
+      scene.traverse((object) => {
+        if (object.visible || object.isLight) return;
+        let lit = false;
+        object.traverse((child) => {
+          if (child.isLight) lit = true;
+        });
+        if (lit) return; // (a hidden light shown would change every shader's light count)
+        object.visible = true;
+        revealed.push(object);
+      });
+      // (Every one of them, wherever it is, for the colour pass; the player in view for the others.)
+      renderer.compile(scene, camera);
+      playerPerson.position.set(lx, ly - 1, lz);
+      playerPerson.updateMatrixWorld(true);
+    }
     composer.taa?.beginFrame(camera);
     composer.render();
     composer.taa?.endFrame(camera);
+    for (const object of revealed) object.visible = false;
   }
   composer.taa?.reset();
   camera.position.set(0, 9, 85);

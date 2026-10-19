@@ -2,6 +2,7 @@
 // texture per outfit, see public/models/people/CREDITS.md) and the kit built here and fixed to the bones
 // that carry it: the cap (or campaign hat, or helmet) on the head, the badge and vest on the chest, the duty
 // belt with its holster, radio and cuff case on the hips.
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import {
   CanvasTexture,
   CylinderGeometry,
@@ -14,6 +15,7 @@ import {
   TextureLoader,
   Vector3,
   Quaternion,
+  Matrix4,
 } from "three";
 
 const BASE = (import.meta.env?.BASE_URL || "/") + "models/people/";
@@ -86,6 +88,29 @@ function ring(radius, height, material, depth = 0.78, segments = 18) {
   return mesh;
 }
 
+/**
+ * One mesh per material for a piece of kit built from parts (fewer draw calls for the same look); the
+ * parts' own transforms are baked in, the piece keeps its own.
+ */
+function merged(piece) {
+  piece.updateMatrixWorld(true);
+  const inverse = new Matrix4().copy(piece.matrixWorld).invert();
+  const groups = new Map();
+  piece.traverse((part) => {
+    if (!part.isMesh) return;
+    const geometry = part.geometry.clone().applyMatrix4(new Matrix4().multiplyMatrices(inverse, part.matrixWorld));
+    if (!groups.has(part.material)) groups.set(part.material, []);
+    groups.get(part.material).push(geometry);
+  });
+  const result = new Group();
+  result.position.copy(piece.position);
+  result.quaternion.copy(piece.quaternion);
+  for (const [material, geometries] of groups) {
+    result.add(new Mesh(geometries.length > 1 ? mergeGeometries(geometries) : geometries[0], material));
+  }
+  return result;
+}
+
 /** The headwear of `outfit`, built around the top of the head at the origin (front -Z). */
 function headwear(outfit, kit) {
   const group = new Group();
@@ -148,13 +173,15 @@ function addKit(rig, outfit) {
   const hipAt = toRig(hip);
   const parts = [];
   // Built in the person's own frame (rig-local), then fixed to the bone: it follows the bone from now on.
-  const fix = (object, bone, position) => {
+  const fix = (piece, bone, position, shadow = true) => {
+    const object = merged(piece);
     object.position.copy(rig.localToWorld(position.clone()));
     object.quaternion.copy(rigQuaternion).multiply(object.quaternion);
     bone.attach(object);
     object.traverse((part) => {
       if (part.isMesh) {
-        part.castShadow = true;
+        // (Small things cast no shadow worth drawing.)
+        part.castShadow = shadow;
         part.receiveShadow = true;
         parts.push(part);
       }
@@ -189,13 +216,15 @@ function addKit(rig, outfit) {
     fix(vest, chest, new Vector3(chestAt.x, chestY - 0.11, chestAt.z + 0.01));
   }
   if (outfit.badge) {
-    // Badge on the left breast (facing -Z, the person's left is -X).
+    // Badge on the left breast (facing -Z, the person's left is -X), name tag on the right.
+    const front = new Group();
     const badge = new Mesh(new BoxGeometry(0.05, 0.06, 0.012), kit.gold);
     badge.rotation.x = -0.12;
-    fix(badge, chest, new Vector3(chestAt.x - 0.085, chestY + 0.01, chestAt.z - (outfit.vest ? 0.16 : 0.12)));
-    // Name tag on the right.
+    badge.position.set(-0.085, 0.01, outfit.vest ? -0.16 : -0.12);
     const tag = new Mesh(new BoxGeometry(0.06, 0.016, 0.006), kit.silver);
-    fix(tag, chest, new Vector3(chestAt.x + 0.085, chestY - 0.02, chestAt.z - (outfit.vest ? 0.158 : 0.115)));
+    tag.position.set(0.085, -0.02, outfit.vest ? -0.158 : -0.115);
+    front.add(badge, tag);
+    fix(front, chest, new Vector3(chestAt.x, chestY, chestAt.z), false);
   }
   // Duty belt: the belt, holster (right hip), radio (left hip), cuff case (back).
   const belt = new Group();
