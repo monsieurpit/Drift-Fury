@@ -791,7 +791,16 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
             L.head.rotation.x = Math.max(0, Math.sin(t * 2.4)) * 0.18;
             L.head.rotation.y = 0;
           }
-        } else if (ped.mode === "wait") rig.userData.L.head.rotation.y = Math.sin(ped.lookTimer * 2) * 0.5;
+        } else if (ped.mode === "wait") {
+          const L = rig.userData.L;
+          L.head.rotation.y = Math.sin(ped.lookTimer * 2) * 0.5;
+          // Waiting: now and then a glance at the watch.
+          if (Math.sin(ped.lookTimer * 0.45 + rig.id) > 0.9) {
+            L.la.rotation.set(1.15, 0, 0.55);
+            L.le.rotation.set(1.7, 0, 0);
+            L.head.rotation.set(0.45, 0.25, 0);
+          }
+        }
         else rig.userData.L.head.rotation.y = 0;
         // In the rain, heads down against it.
         if (raining && (ped.mode === "walk" || ped.mode === "cross" || ped.mode === "wait")) rig.userData.L.head.rotation.x = 0.28;

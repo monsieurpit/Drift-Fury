@@ -213,6 +213,7 @@ export function GamePage() {
             <WeaponMenu
               options={hud.weaponMenu}
               current={hud.weapon}
+              rounds={hud.weaponRounds}
               onSelect={(id) => controls.current.selectWeapon?.(id)}
               onClose={() => controls.current.closeWeaponMenu?.()}
             />

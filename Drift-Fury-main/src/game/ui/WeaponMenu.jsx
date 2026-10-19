@@ -5,7 +5,7 @@ import { t } from "../../i18n.js";
 const ICONS = { fists: HandIcon, taser: ZapIcon };
 
 /** The weapon menu (G on foot): fists and the guns the player may carry; a number key or a click picks one. */
-export function WeaponMenu({ options, current, onSelect, onClose }) {
+export function WeaponMenu({ options, current, rounds, onSelect, onClose }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
       <div className="hud-glass pointer-events-auto w-[min(92vw,26rem)] px-5 py-4">
@@ -30,6 +30,7 @@ export function WeaponMenu({ options, current, onSelect, onClose }) {
                 <kbd className="race-key !m-0">{index + 1}</kbd>
                 <Icon size={14} />
                 <span>{t(`weapon.${id}`)}</span>
+                {rounds?.[id] && <span className="ml-auto text-[9px] text-[#8fa3a8]">{rounds[id]}</span>}
               </button>
             );
           })}

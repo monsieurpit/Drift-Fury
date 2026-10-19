@@ -2293,7 +2293,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       camera.updateMatrixWorld();
       addCarLights(state, time);
       updateLamps(state.x, state.z, camera);
-      effects.update(state, dt, camera);
+      effects.update(state, dt, camera, { rain: raining });
       safely("sparks", () => sparks.update(dt));
       updatePedestrians(state, dt);
       updateHeadlights(state, dt);
@@ -2352,6 +2352,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
               ? { rounds: ammo[equipped] ?? MAGAZINES[equipped] ?? 0, magazine: MAGAZINES[equipped] ?? 0, reloading: reloading > 0 }
               : null,
           weaponMenu: weaponMenuOpen ? weaponOptions() : null,
+          weaponRounds: weaponMenuOpen
+            ? Object.fromEntries(Object.keys(MAGAZINES).map((id) => [id, `${ammo[id] ?? MAGAZINES[id]}/${MAGAZINES[id]}`]))
+            : null,
           heliActive: !!state.heli && !state.heli.leaving,
           roadblockActive: !!state.roadblock,
         });

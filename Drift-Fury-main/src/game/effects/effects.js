@@ -50,6 +50,9 @@ function skidTexture() {
 
 export function createEffects(scene, { patch } = {}) {
   const smoke = createDriftSmoke(scene, { patch });
+  let sprayTimer = 0;
+  const sprayPoint = new Vector3();
+  const sprayVelocity = new Vector3();
   const crashSmoke = Array.from(
     {
       length: 20,
@@ -198,8 +201,25 @@ export function createEffects(scene, { patch } = {}) {
   let damageSmokeCursor = 0;
   let damageSmokeTimer = 0;
   return {
-    update(state, dt, camera) {
+    update(state, dt, camera, { rain = false } = {}) {
       smokeTimer += dt;
+      // Rain: driving fast on the wet city streets throws up a fine spray of water behind the rear wheels.
+      const speed = Math.hypot(state.vx || 0, state.vz || 0);
+      const inCity = state.z > -112 && state.x > -165 && state.x < 160;
+      if (rain && !state.onFoot && inCity && speed > 9) {
+        sprayTimer += dt;
+        if (sprayTimer > 0.07) {
+          sprayTimer = 0;
+          const strength = Math.min(0.55, 0.2 + (speed - 9) * 0.015);
+          const back = { x: Math.sin(state.heading), z: Math.cos(state.heading) };
+          const side = { x: Math.cos(state.heading), z: -Math.sin(state.heading) };
+          for (const sign of [-1, 1]) {
+            sprayPoint.set(state.x + back.x * 1.5 + side.x * sign * 0.8, (state.y || 0) + 0.25, state.z + back.z * 1.5 + side.z * sign * 0.8);
+            sprayVelocity.set(state.vx * 0.35 + back.x * 1.5, 0.6, state.vz * 0.35 + back.z * 1.5);
+            smoke.emit(sprayPoint, sprayVelocity, strength);
+          }
+        }
+      }
       smoke.update(dt);
       crashSmoke.forEach((puff) => {
         puff.mesh.visible = puff.life > 0;
