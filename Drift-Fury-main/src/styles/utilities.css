@@ -106,3 +106,10 @@
 @media (width>=1280px) {
   .xl\:block { display: block; }
 }
+.\!m-0 { margin: 0 !important; }
+.z-30 { z-index: 30; }
+.w-\[min\(92vw\,26rem\)\] { width: min(92vw, 26rem); }
+.bg-\[\#c6dc77\]\/15 { background-color: rgb(198 220 119 / 0.15); }
+.hover\:border-\[\#c6dc77\]\/60:hover { border-color: rgb(198 220 119 / 0.6); }
+.bg-\[\#d9797b\] { background-color: rgb(217 121 123); }
+.text-\[\#e89a9a\] { color: rgb(232 154 154); }

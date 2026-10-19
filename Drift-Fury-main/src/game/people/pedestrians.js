@@ -26,6 +26,15 @@ const AXIS_Y = new Vector3(0, 1, 0);
  * `crowd` draws the people, `blood` the blood, `voices` ({ scream, hurt, bodyHit } with distance and
  * pan); `groundAt(x, z)` gives the surface height. `count` people live around the player.
  */
+/** Fists up (a fist fight), one of them jabbing out while `swing` lasts (0.28 s). */
+export function fightPose(L, swing = 0, rightHand = true) {
+  const jab = swing > 0 ? Math.sin((1 - swing / 0.28) * Math.PI) : 0;
+  L.la.rotation.set(1.15 + (!rightHand ? jab * 0.45 : 0), 0, 0.3);
+  L.ra.rotation.set(1.15 + (rightHand ? jab * 0.45 : 0), 0, -0.3);
+  L.le.rotation.set(1.5 - (!rightHand ? jab * 1.3 : 0), 0, 0);
+  L.re.rotation.set(1.5 - (rightHand ? jab * 1.3 : 0), 0, 0);
+}
+
 export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices, groundAt, count, seed = 911 }) {
   let state = seed;
   const random = () => {
@@ -151,6 +160,9 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
     ped.visualX = ped.x;
     ped.visualZ = ped.z;
     ped.dead = null;
+    ped.hp = 100;
+    ped.swing = 0;
+    ped.stagger = 0;
     ped.panic = 0;
     ped.scared = 0;
     ped.thinkTimer = random() * 0.25;
@@ -263,6 +275,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
       pooled: false,
       lastHit: 0,
       flail: random() * 10,
+      noBlood: !!car.fist, // (knocked out by fists: no pool of blood)
     };
     endTalk(ped);
     ped.mode = "dead";
@@ -285,10 +298,11 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
     people,
     /**
      * One step. `cars`: [{ x, z, heading, vx, vz, driver }] (moving vehicles that can hit people);
-     * `camera` for recycling far people; `phase`: the traffic light cycle in seconds (0..24).
-     * Returns this step's events: { type: "killed" | "runOver" | "scream", ped, x, z, ... }.
+     * `camera` for recycling far people; `phase`: the traffic light cycle in seconds (0..24); `player`: { x,
+     * z, onFoot } (whom someone in a fist fight goes for).
+     * Returns this step's events: { type: "killed" | "runOver" | "scream" | "punchPlayer", ped, x, z, ... }.
      */
-    update(dt, { cars, camera, phase }) {
+    update(dt, { cars, camera, phase, player = null }) {
       const events = [];
       camera.getWorldDirection(cameraForward);
       const near = { x: camera.position.x, z: camera.position.z, viewX: cameraForward.x, viewZ: cameraForward.z };
@@ -367,7 +381,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
                   dead.quaternion.copy(LIE);
                   if (!dead.pooled) {
                     dead.pooled = true;
-                    blood.pool(dead.position.x, dead.position.z);
+                    if (!dead.noBlood) blood.pool(dead.position.x, dead.position.z);
                   }
                 }
               }
@@ -492,7 +506,42 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
         let moveX = 0;
         let moveZ = 0;
         let speed = 0;
-        if (ped.mode === "frozen") {
+        ped.swing = Math.max(0, (ped.swing || 0) - dt);
+        ped.stagger = Math.max(0, (ped.stagger || 0) - dt);
+        if (ped.mode === "brawl") {
+          // In a fist fight with the player: closes in, fists up, and throws punches. Gives up (runs off)
+          // when badly hurt, when the player gets into a car or away, or after a while.
+          ped.brawlTime += dt;
+          const dx = player ? player.x - ped.x : 0;
+          const dz = player ? player.z - ped.z : 0;
+          const d = Math.hypot(dx, dz) || 1;
+          if (!player || !player.onFoot || player.dead || d > 25 || ped.brawlTime > 45 || ped.hp < 25) {
+            ped.mode = "flee";
+            ped.dodging = false;
+            ped.fleeSpeed = 2;
+            ped.fleeX = -dx / d;
+            ped.fleeZ = -dz / d;
+            ped.panic = 3 + random() * 2;
+          } else if (ped.stagger > 0) {
+            // (Reeling from a punch.)
+          } else if (d > 0.95) {
+            speed = d > 3 ? 3.6 : 1.8;
+            moveX = dx / d;
+            moveZ = dz / d;
+            if (blocked(ped.x + moveX * 0.5, ped.z + moveZ * 0.5, RADIUS)) {
+              [moveX, moveZ] = [-moveZ, moveX];
+              if (blocked(ped.x + moveX * 0.5, ped.z + moveZ * 0.5, RADIUS)) [moveX, moveZ] = [-moveX, -moveZ];
+            }
+          } else {
+            ped.punchTimer -= dt;
+            if (ped.punchTimer <= 0) {
+              ped.punchTimer = 0.75 + random() * 0.55;
+              ped.swing = 0.28;
+              ped.punchHand = !ped.punchHand;
+              events.push({ type: "punchPlayer", ped, x: ped.x, z: ped.z, damage: 5 + random() * 5 });
+            }
+          }
+        } else if (ped.mode === "frozen") {
           // Rooted to the spot, staring at the car.
           ped.panic -= dt;
           if (ped.panic <= 0) rejoin(ped);
@@ -642,6 +691,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
         // Facing where they go (or across the road while waiting), turning smoothly.
         let wantHeading = ped.heading;
         if (ped.mode === "wait") wantHeading = ped.waitHeading;
+        else if (ped.mode === "brawl" && player) wantHeading = Math.atan2(-(player.x - ped.x), -(player.z - ped.z));
         else if (ped.mode === "talk" && ped.partner)
           wantHeading = Math.atan2(-(ped.partner.x - ped.x), -(ped.partner.z - ped.z));
         else if (Math.hypot(moveX, moveZ) > 1e-4) wantHeading = Math.atan2(-moveX, -moveZ);
@@ -672,6 +722,13 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           }
         } else if (ped.mode === "wait") rig.userData.L.head.rotation.y = Math.sin(ped.lookTimer * 2) * 0.5;
         else rig.userData.L.head.rotation.y = 0;
+        if (ped.mode === "brawl") fightPose(rig.userData.L, ped.swing, ped.punchHand);
+        if (ped.stagger > 0) {
+          // Rocked back by a punch.
+          const L = rig.userData.L;
+          L.body.rotation.x = 0.35 * (ped.stagger / 0.35);
+          L.head.rotation.x = 0.4 * (ped.stagger / 0.35);
+        }
         // Too far from the player: walk on somewhere nearer, out of sight.
         if (Math.hypot(ped.x - near.x, ped.z - near.z) > 105) spawn(ped, near);
       }
@@ -724,6 +781,46 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
       const d = Math.hypot(dx, dz) || 1;
       kill(ped, { x: fromX, z: fromZ, vx: (dx / d) * 1.2, vz: (dz / d) * 1.2, heading: Math.atan2(-dx, -dz), player: true, gun: true }, 0.5, events);
       ped.dead.velocity.y = 0.6;
+    },
+    /**
+     * `ped` punched by the player at (fromX, fromZ) for `damage` (of 100): rocked back; out cold (the
+     * "killed" event, its car marked fist) once worn down. About half of those hit fight back (a "brawl":
+     * see update), the others run.
+     */
+    punch(ped, fromX, fromZ, damage, events) {
+      if (ped.mode === "dead" || ped.controlled) return;
+      const dx = ped.x - fromX;
+      const dz = ped.z - fromZ;
+      const d = Math.hypot(dx, dz) || 1;
+      ped.hp = (ped.hp ?? 100) - damage;
+      if (ped.hp <= 0) {
+        kill(ped, { x: fromX, z: fromZ, vx: (dx / d) * 2.4, vz: (dz / d) * 2.4, heading: Math.atan2(-dx, -dz), player: true, fist: true }, 1, events);
+        ped.dead.velocity.y = 1.3;
+        return;
+      }
+      if (!blocked(ped.x + (dx / d) * 0.35, ped.z + (dz / d) * 0.35, RADIUS)) {
+        ped.x += (dx / d) * 0.35;
+        ped.z += (dz / d) * 0.35;
+      }
+      ped.stagger = 0.35;
+      events.push({ type: "hurt", ped, x: ped.x, z: ped.z });
+      if (ped.mode === "brawl") return;
+      endTalk(ped);
+      ped.tough ??= random();
+      if (ped.tough < 0.5 && ped.hp > 40) {
+        ped.mode = "brawl";
+        ped.brawlTime = 0;
+        ped.punchTimer = 0.5 + random() * 0.4;
+      } else {
+        ped.mode = "flee";
+        ped.dodging = false;
+        ped.fleeSpeed = 2.5;
+        ped.fleeX = dx / d;
+        ped.fleeZ = dz / d;
+        ped.panic = 4 + random() * 3;
+        if (random() < 0.6) events.push({ type: "scream", ped, x: ped.x, z: ped.z });
+      }
+      ped.scared = 6;
     },
     /** An explosion at (x, z): people within `radius` are thrown, dead (the "killed" events). */
     blast(x, z, radius, events) {

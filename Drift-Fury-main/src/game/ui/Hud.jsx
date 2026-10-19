@@ -188,13 +188,15 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation, onRepair }
         <div className="absolute left-1/2 top-24 -translate-x-1/2 rounded-lg bg-[#18251eee] px-4 py-2 text-xs text-[#c6dc77] border border-[#c6dc77]/30">
           {t("hud.onFoot")}
           <kbd className="race-key">F</kbd>
-          {hud.rp && (
-            <>
-              <span className="mx-2 text-[#5d6b5f]">|</span>
-              {t("hud.shoot")}
-              <kbd className="race-key">G</kbd>
-            </>
-          )}
+          <span className="mx-2 text-[#5d6b5f]">|</span>
+          {t("hud.run")}
+          <kbd className="race-key">Shift</kbd>
+          <span className="mx-2 text-[#5d6b5f]">|</span>
+          {t("hud.jump")}
+          <kbd className="race-key">Space</kbd>
+          <span className="mx-2 text-[#5d6b5f]">|</span>
+          {t("hud.weapons")}
+          <kbd className="race-key">G</kbd>
         </div>
       )}
       {hud.onFoot && (hud.shop >= 0 || hud.store >= 0) && (
@@ -265,6 +267,12 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation, onRepair }
               />
             </div>
             <span className="w-8 text-right text-[9px]">{Math.round(hud.playerHealth)}%</span>
+          </div>
+        )}
+        {hud.onFoot && hud.weapon && (
+          <div className="mt-2 flex items-center justify-between text-[9px] uppercase tracking-widest text-[#a5b6ac]">
+            <span>{t("hud.weapons")}</span>
+            <span className="font-bold text-[#e8eddf]">{t(`weapon.${hud.weapon}`)}</span>
           </div>
         )}
         <div className="mt-3 flex items-center gap-2">

@@ -20,6 +20,8 @@ export function createWorldContext(world) {
     box: CITY_REFLECTION_BOX,
     grid: new Vector4(60, 50, -80, 9),
   });
+  // (The lit city in the wet road, softer: reflected lights were glaring.)
+  roadMaterial.envMapIntensity = 0.5;
   // Lane lines, crossings and stop lines are painted in the road's shader (see roadMarkings.js).
   addRoadMarkings(roadMaterial, { roadXs: ROAD_XS, roadZs: ROAD_ZS });
   const highwayMaterial = createAsphaltMaterial();

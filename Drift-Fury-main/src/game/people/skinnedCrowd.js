@@ -218,7 +218,8 @@ export function createSkinnedCrowd(scene, capacity, { onMesh } = {}) {
         const walking = Math.min(1, speed / 0.6);
         walk.setEffectiveWeight(walking);
         idle.setEffectiveWeight(1 - walking);
-        walk.setEffectiveTimeScale(Math.max(0.4, speed / WALK_SPEED));
+        // (Running: longer strides, so the walk is not played faster in proportion.)
+        walk.setEffectiveTimeScale(Math.max(0.4, speed < 2.2 ? speed / WALK_SPEED : 2.2 / WALK_SPEED + (speed - 2.2) * 0.3));
         pending += dt;
         // Out of view: not animated at all (caught up when seen again). Far away: every other frame.
         if (viewSet) {

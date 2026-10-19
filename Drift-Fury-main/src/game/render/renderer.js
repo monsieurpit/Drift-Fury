@@ -181,7 +181,8 @@ function createComposer(renderer, scene, camera, width, height, bloomStrength, i
     composer.taa.enabled = false;
     composer.addPass(composer.taa);
   }
-  composer.addPass(new UnrealBloomPass(new Vector2(width, height), bloomStrength, 0.4, 0.92));
+  composer.bloom = new UnrealBloomPass(new Vector2(width, height), bloomStrength, 0.4, 0.92);
+  composer.addPass(composer.bloom);
   const vignette = new ShaderPass(VignetteShader);
   vignette.uniforms.offset.value = 0.95;
   vignette.uniforms.darkness.value = 1.08;
@@ -263,9 +264,8 @@ export function createRenderer(container, inGame = false) {
   container.appendChild(renderer.domElement);
   renderer.domElement.className = inGame ? "game-canvas" : "game-canvas-preview";
   const camera = new PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1200);
-  scene.add(
-    new HemisphereLight(inGame ? "#a1bfdc" : "#dfeaf8", inGame ? "#1a2418" : "#101a22", inGame ? 0.95 : 1.15),
-  );
+  const hemisphere = new HemisphereLight(inGame ? "#a1bfdc" : "#dfeaf8", inGame ? "#1a2418" : "#101a22", inGame ? 0.95 : 1.15);
+  scene.add(hemisphere);
   const ambient = new AmbientLight(inGame ? "#3d536d" : "#78879a", inGame ? 0.5 : 0.58);
   scene.add(ambient);
   const sun = new DirectionalLight(inGame ? "#a9c5e8" : "#f6d7a8", inGame ? 2.2 : 3.2);
@@ -291,8 +291,9 @@ export function createRenderer(container, inGame = false) {
   const fillLight = new DirectionalLight(inGame ? "#7ca8d7" : "#7ca8d7", inGame ? 0.35 : 0.55);
   fillLight.position.set(52, 42, 64);
   scene.add(fillLight);
+  let rimLight = null;
   if (inGame) {
-    const rimLight = new DirectionalLight("#90b0d8", 0.5);
+    rimLight = new DirectionalLight("#90b0d8", 0.5);
     rimLight.position.set(25, 34, -60);
     scene.add(rimLight);
   } else {
@@ -480,6 +481,92 @@ export function createRenderer(container, inGame = false) {
     }
   });
   resizeObserver.observe(container);
+  /*
+   * Day or night (the game's lighting is built for the night; the day swaps in the sun, a bright sky to
+   * reflect, a light haze for the mist, less bloom). The sun keeps the moonlight's direction, so the cached
+   * shadows of the world stay right.
+   */
+  const NIGHT = {
+    hemisphere: [hemisphere.color.clone(), hemisphere.groundColor.clone(), hemisphere.intensity],
+    ambient: [ambient.color.clone(), ambient.intensity],
+    sun: [sun.color.clone(), sun.intensity],
+    fill: [fillLight.color.clone(), fillLight.intensity],
+    rim: rimLight ? [rimLight.color.clone(), rimLight.intensity] : null,
+    fog: scene.fog?.color.clone(),
+    fogDensity: scene.fog?.density,
+    exposure: renderer.toneMappingExposure,
+    bloom: composer.bloom.strength,
+    environment: scene.environment,
+  };
+  const DAY = {
+    hemisphere: [new Color("#d4e6ff"), new Color("#5f5a4c"), 1.5],
+    ambient: [new Color("#b8c7d8"), 0.55],
+    sun: [new Color("#fff0d8"), 4.6],
+    fill: [new Color("#a8c8ee"), 0.55],
+    rim: [new Color("#fff6e8"), 0.35],
+    fog: new Color("#a9bdcd"),
+    fogDensity: 0.0021,
+    exposure: 0.92,
+    bloom: 0.22,
+    environment: null, // (made the first time it is needed)
+  };
+  let day = false;
+  function dayEnvironment() {
+    const canvas = document.createElement("canvas");
+    // (The night sky's size: its reflections have the same resolution, so switching changes no shader.)
+    canvas.width = 2048;
+    canvas.height = 1024;
+    const context = canvas.getContext("2d");
+    context.scale(2, 2);
+    const gradient = context.createLinearGradient(0, 0, 0, 512);
+    gradient.addColorStop(0, "#3f78c2");
+    gradient.addColorStop(0.32, "#6f9fd6");
+    gradient.addColorStop(0.48, "#c4d8ea");
+    gradient.addColorStop(0.52, "#9a9a92");
+    gradient.addColorStop(1, "#4a4b46");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, 1024, 512);
+    // The sun (the moonlight's direction), a bright spot to glint in paint and glass.
+    const sunGlow = context.createRadialGradient(808, 96, 2, 808, 96, 90);
+    sunGlow.addColorStop(0, "rgba(255,250,235,1)");
+    sunGlow.addColorStop(0.15, "rgba(255,244,214,0.7)");
+    sunGlow.addColorStop(1, "rgba(255,240,210,0)");
+    context.fillStyle = sunGlow;
+    context.fillRect(708, 0, 200, 200);
+    const texture = new CanvasTexture(canvas);
+    texture.mapping = 303;
+    texture.colorSpace = "srgb";
+    const generator = new PMREMGenerator(renderer);
+    const environment = generator.fromEquirectangular(texture).texture;
+    generator.dispose();
+    texture.dispose();
+    return environment;
+  }
+  function setDay(value) {
+    day = !!value;
+    if (day && !DAY.environment) DAY.environment = dayEnvironment();
+    const look = day ? DAY : NIGHT;
+    hemisphere.color.copy(look.hemisphere[0]);
+    hemisphere.groundColor.copy(look.hemisphere[1]);
+    hemisphere.intensity = look.hemisphere[2];
+    ambient.color.copy(look.ambient[0]);
+    ambient.intensity = look.ambient[1];
+    sun.color.copy(look.sun[0]);
+    sun.intensity = look.sun[1];
+    fillLight.color.copy(look.fill[0]);
+    fillLight.intensity = look.fill[1];
+    if (rimLight && look.rim) {
+      rimLight.color.copy(look.rim[0]);
+      rimLight.intensity = look.rim[1];
+    }
+    if (scene.fog && look.fog) {
+      scene.fog.color.copy(look.fog);
+      if (scene.fog.isFogExp2) scene.fog.density = look.fogDensity;
+    }
+    renderer.toneMappingExposure = look.exposure;
+    composer.bloom.strength = look.bloom;
+    renderer.shadowMap.needsUpdate = true;
+  }
   return {
     scene,
     renderer,
@@ -488,6 +575,14 @@ export function createRenderer(container, inGame = false) {
     touchDevice,
     composer,
     applyQuality,
+    setDay,
+    /** The sky's reflections for the time of day (the scene's environment outside the city). */
+    get skyEnvironment() {
+      return day ? DAY.environment : NIGHT.environment;
+    },
+    get day() {
+      return day;
+    },
     /** The effects that are on right now and could be the cause of a black image, in the order to try. */
     suspects() {
       const preset = QUALITY_PRESETS[quality];

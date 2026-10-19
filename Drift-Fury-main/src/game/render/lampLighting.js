@@ -66,7 +66,8 @@ const GROUND_LIGHTING = /* glsl */ `
     lampLight.direction = toLamp * inversesqrt(distanceSquared);
     float spot = smoothstep(0.12, 0.7, dot(-lampLight.direction, lampDown));
     float window = 1.0 - distanceSquared * distanceSquared / (range * range * range * range);
-    lampLight.color = streetLampColor * (lamp.w * glint * spot * window * window / max(distanceSquared, 1.0));
+    // (At 0.45: the lamps' streaks in the wet road, and their clear-coat sheen, were glaring.)
+    lampLight.color = streetLampColor * (0.45 * lamp.w * glint * spot * window * window / max(distanceSquared, 1.0));
     lampLight.visible = true;
     ReflectedLight glints = ReflectedLight(vec3(0.0), vec3(0.0), vec3(0.0), vec3(0.0));
     RE_Direct( lampLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, glints );
@@ -169,6 +170,7 @@ export function createLampLighting(positions, { intensity = 450, color = "#ffcf9
     streetLampCount: { value: 0 },
     streetLampGlint: { value: new Array(LAMP_COUNT).fill(0) },
   };
+  const lampColour = new Color(color);
   const baked = bakeGroundLight(positions, intensity);
   uniforms.streetLampMap = { value: baked.texture };
   uniforms.streetLampMapRect = { value: baked.rect };
@@ -281,6 +283,10 @@ export function createLampLighting(positions, { intensity = 450, color = "#ffcf9
             : Math.min(1, Math.max(0, (glintCutoff - visibleDistances[slot]) / glintFade));
         glints[slot] = t * t * (3 - 2 * t);
       }
+    },
+    /** The lamps' brightness (0: off, by day; 1: the night). */
+    setLevel(level) {
+      uniforms.streetLampColor.value.copy(lampColour).multiplyScalar(level);
     },
     clear() {
       uniforms.streetLampCount.value = 0;

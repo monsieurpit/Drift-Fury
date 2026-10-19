@@ -23,6 +23,8 @@ uniform vec3 uMoon;
 uniform vec3 uHorizon;
 uniform vec3 uZenith;
 uniform vec3 uCityGlow;
+uniform float uDay;
+uniform vec3 uDayHorizon;
 varying vec3 vDirection;
 
 float hash13(vec3 p) {
@@ -153,6 +155,24 @@ void main() {
   sky += moonLight;
   sky = mix(sky, moonColor, onDisk * step(0.0, h));
 
+  // Day: a blue sky, paler toward the horizon (where it meets the haze), the sun where the moon is, and
+  // white clouds drifting.
+  if (uDay > 0.0) {
+    vec3 zenithBlue = vec3(0.09, 0.26, 0.62);
+    vec3 daySky = mix(uDayHorizon, zenithBlue, pow(smoothstep(-0.02, 0.6, h), 0.65));
+    float sunDisk = 1.0 - smoothstep(0.9, 1.0, moonAngle / 0.012);
+    daySky += vec3(1.0, 0.92, 0.75) * (exp(-moonAngle * 14.0) * 0.35 + exp(-moonAngle * 3.0) * 0.08);
+    if (h > 0.0) {
+      vec2 plane = d.xz / (h + 0.08) * 0.45 + vec2(uTime * 0.004, uTime * 0.0015);
+      float shape = fbm2(plane) * 0.65 + fbm2(plane * 3.1 + 11.0) * 0.35;
+      float coverage = smoothstep(0.52, 0.74, shape) * smoothstep(0.02, 0.22, h);
+      vec3 cloud = mix(vec3(0.72, 0.76, 0.82), vec3(1.0, 0.99, 0.96), smoothstep(0.55, 0.85, shape));
+      daySky = mix(daySky, cloud, coverage * 0.85);
+      sunDisk *= 1.0 - coverage * 0.9;
+    }
+    daySky = mix(daySky, vec3(1.0, 0.98, 0.9) * 6.0, sunDisk * step(0.0, h));
+    sky = mix(sky, daySky, uDay);
+  }
   // Dither against banding in the very dark gradient.
   sky += (hash12(gl_FragCoord.xy) - 0.5) * 0.0012;
   gl_FragColor = vec4(max(sky, 0.0), 1.0);
@@ -161,7 +181,7 @@ void main() {
 }
 `;
 
-/** Builds the sky dome; returns a per-frame update (time in seconds). */
+/** Builds the sky dome; returns a per-frame update (time in seconds), with setDay(day). */
 export function buildSky(world) {
   const { scene } = world;
   const horizon = scene.fog ? scene.fog.color.clone() : new Color("#223a4d");
@@ -172,6 +192,8 @@ export function buildSky(world) {
       uHorizon: { value: horizon },
       uZenith: { value: new Color("#050a18") },
       uCityGlow: { value: new Color(0.05, 0.03, 0.016) },
+      uDay: { value: 0 },
+      uDayHorizon: { value: new Color("#a9bdcd") },
     },
     vertexShader: VERTEX,
     fragmentShader: FRAGMENT,
@@ -186,7 +208,12 @@ export function buildSky(world) {
   scene.add(dome);
   // The dome covers every pixel, so the equirectangular background (still used for reflections) is not drawn.
   scene.background = null;
-  return (time) => {
+  const update = (time) => {
     material.uniforms.uTime.value = time;
   };
+  /** Day (true) or night. */
+  update.setDay = (day) => {
+    material.uniforms.uDay.value = day ? 1 : 0;
+  };
+  return update;
 }

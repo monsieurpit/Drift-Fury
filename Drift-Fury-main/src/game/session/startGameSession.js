@@ -55,6 +55,8 @@ import { createGunfire } from "../effects/gunfire.js";
 import { createFire } from "../effects/fire.js";
 import { createEmergencyServices } from "./emergencyServices.js";
 import { createPoliceJob } from "./policeJob.js";
+import { WEAPONS } from "../simulation/policeDuty.js";
+import { fightPose } from "../people/pedestrians.js";
 import { buildWorldInSteps } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
 import { loadStreetProps, placeStreetProps } from "../world/streetProps.js";
@@ -171,7 +173,35 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     clearLamps,
     lightByLamps,
     clusteredLights,
+    setDay: setWorldDay,
   } = worldStep.value;
+  /*
+   * Day or night (the pause menu; remembered). By day: the sun, a blue sky, the lamps and the city's lit
+   * windows and signs off, no glow around the lamps, the city's reflections taken again in daylight.
+   */
+  const nightGlows = []; // the lamps' halos and light cones
+  const litMaterials = new Map(); // the world's lit windows, signs and screens -> their night glow
+  scene.traverse((object) => {
+    if (object.name === "light-halos" || object.name === "light-cones") nightGlows.push(object);
+    const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
+    for (const material of materials) {
+      if (material.emissiveMap && material.emissiveIntensity > 0 && !litMaterials.has(material)) litMaterials.set(material, material.emissiveIntensity);
+    }
+  });
+  const TIME_KEY = "drift-fury-time";
+  let daytime = false;
+  try {
+    daytime = localStorage.getItem(TIME_KEY) === "day";
+  } catch {
+    // (night)
+  }
+  function lookOfDay(day) {
+    daytime = day;
+    view.setDay(day);
+    setWorldDay(day);
+    for (const mesh of nightGlows) mesh.visible = !day;
+    for (const [material, night] of litMaterials) material.emissiveIntensity = day ? night * 0.12 : night;
+  }
   // Cars sit on the ground: pitch and roll follow the terrain under their wheels (flat in the city).
   const sitOnGround = (object, x, z, heading, extraRoll = 0) => {
     const forwardX = -Math.sin(heading);
@@ -760,6 +790,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   });
   cleanup.push(() => policeJob.dispose());
   controls.current.duty = policeJob;
+  // The weapon menu's buttons (Hud.jsx).
+  controls.current.selectWeapon = (id) => selectWeapon(id);
+  controls.current.closeWeaponMenu = () => (weaponMenuOpen = false);
   // The player is a scanned person too (the one built from shapes if the scans could not load).
   if (peopleModels) {
     const scanned = crowd.add(Math.random, "eric");
@@ -812,7 +845,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     return [distance, distance > 0.01 ? (dx * cameraRight.x + dz * cameraRight.z) / distance : 0];
   };
   const movingBodies = new Set(); // pedestrians thrown or falling (see processPedEvents)
-  /* ----- guns (RP mode): the police shoot at 3 stars; the player fires with G (or the touch button) ----- */
+  /* ----- guns (RP mode): the police shoot at 3 stars; the player fires the gun in hand (click or C) ----- */
   let playerGunCooldown = 0;
   let gunDrawn = 0; // seconds the player keeps the gun up after firing
   let playerAim = null; // where the player is aiming (a Vector3), while the gun is up
@@ -854,25 +887,135 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     rifle: { cooldown: 0.14, range: 45, near: 20, hitNear: 0.9, hitFar: 0.78 },
   };
   let playerWeapon = "pistol";
+  /*
+   * On foot, what is in the player's hands: fists, or a gun taken out of the weapon menu (G, then 1-5 or a
+   * click). A gun picked is held, lowered, until used; attacking (left click, C, or the touch button) throws
+   * a punch or fires. Off duty there is the pistol (RP mode); on duty, the job's weapons of the player's rank.
+   */
+  let equipped = "fists";
+  let weaponMenuOpen = false;
+  let attackWasDown = false;
+  let holdUpRequest = false; // a gun drawn on a store's clerk: the hold-up (game.js), next step
+  let punchTime = 0; // seconds left of the punch being thrown
+  let punchRight = false;
+  let guardUntil = -Infinity; // fists kept up for a moment after a punch
+  const PUNCH_TIME = 0.28;
+  function weaponOptions() {
+    const state = game.state;
+    const options = ["fists"];
+    if (state.noPolice) return options;
+    if (game.duty.duty.on) {
+      const rank = game.duty.rankOf(game.duty.duty.xp);
+      for (const weapon of WEAPONS) if (weapon.rank <= rank) options.push(weapon.id);
+    } else options.push("pistol");
+    return options;
+  }
+  function selectWeapon(id) {
+    weaponMenuOpen = false;
+    if (!weaponOptions().includes(id)) return;
+    equipped = id;
+    if (id !== "fists" && game.duty.duty.on) game.duty.duty.weapon = id;
+    playerAim = null;
+    gunDrawn = 0;
+  }
+  function toggleWeaponMenu() {
+    const state = game.state;
+    weaponMenuOpen = !weaponMenuOpen && state.onFoot && state.wasted <= 0 && state.busted <= 0 && !interaction;
+  }
+  /** Each step on foot: the weapon in hand still allowed, and an attack (a punch or a shot) when asked. */
+  function updateWeapons(state, dt) {
+    const options = weaponOptions();
+    // (Changed with X on duty: the job's weapon is the one in hand.)
+    if (equipped !== "fists" && game.duty.duty.on && game.duty.duty.weapon !== equipped && options.includes(game.duty.duty.weapon)) {
+      equipped = game.duty.duty.weapon;
+    }
+    if (!options.includes(equipped)) equipped = "fists";
+    if (!state.onFoot || state.wasted > 0 || state.busted > 0) weaponMenuOpen = false;
+    punchTime = Math.max(0, punchTime - dt);
+    const down = !!(keys.KeyC || keys.MouseLeft || controls.current.keys.KeyC) && !weaponMenuOpen;
+    const pressed = down && !attackWasDown;
+    attackWasDown = down;
+    if (equipped === "fists") {
+      updatePlayerGun(state, dt, false);
+      if (pressed && state.onFoot && state.wasted <= 0 && state.busted <= 0 && !interaction && punchTime <= 0) throwPunch(state);
+    } else {
+      // (The pistol and the shotgun fire once per press; the carbine keeps firing while held.)
+      updatePlayerGun(state, dt, equipped === "rifle" ? down : pressed);
+    }
+  }
+  /** A punch: whoever is right in front of the player takes it (turned to face them). */
+  function throwPunch(state) {
+    punchTime = PUNCH_TIME;
+    punchRight = !punchRight;
+    guardUntil = state.elapsed + 2.5;
+    const yaw = state.footYaw || 0;
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    let best = null;
+    let bestDistance = 1.6;
+    const consider = (x, z, target) => {
+      const dx = x - state.x;
+      const dz = z - state.z;
+      const d = Math.hypot(dx, dz);
+      if (d >= bestDistance || d < 0.05 || (dx * fx + dz * fz) / d < 0.3) return;
+      bestDistance = d;
+      best = { x, z, ...target };
+    };
+    for (const ped of pedestrians.people) if (ped.mode !== "dead" && ped.rig.visible) consider(ped.x, ped.z, { ped });
+    // (On duty, no punching colleagues.)
+    if (!game.duty.duty.on) {
+      for (const officer of state.police) if (officer.onFoot && !officer.dead && !(officer.down > 0)) consider(officer.x, officer.z, { officer });
+    }
+    if (!best) return;
+    state.footYaw = Math.atan2(-(best.x - state.x), -(best.z - state.z));
+    const [distance, pan] = heard(best.x, best.z);
+    audio.bodyHit?.(3, distance, pan);
+    shotEvents.length = 0;
+    if (best.ped?.controlled) {
+      // A suspect of the police job: the job decides (worn down, or excessive force).
+      if (best.ped.suspect) game.duty.punched(best.ped.suspect);
+      audio.hurt?.(best.ped.female, distance, pan);
+    } else if (best.ped) {
+      const selfDefence = best.ped.mode === "brawl";
+      pedestrians.punch(best.ped, state.x, state.z, 22 + Math.random() * 12, shotEvents);
+      if (game.duty.duty.on && !selfDefence) game.duty.punched(null);
+      else if (!game.duty.duty.on && !state.noPolice && !selfDefence) {
+        // An assault in front of the police.
+        if (state.police.some((o) => !o.dead && Math.hypot(o.x - state.x, o.z - state.z) < 40)) state.wanted = Math.max(state.wanted, 1);
+      }
+    } else if (best.officer) {
+      // Assaulting an officer: wanted, and three punches knock them down.
+      const officer = best.officer;
+      officer.punches = (officer.punches || 0) + 1;
+      state.wanted = Math.min(5, Math.max(state.wanted, 1.5) + 0.3);
+      audio.hurt?.(false, distance, pan);
+      if (officer.punches >= 3) {
+        officer.punches = 0;
+        officer.down = 6;
+        officer.aiming = false;
+      }
+    }
+    processPedEvents(shotEvents, state);
+  }
   /** The player's gun: aims at whoever is in front (people, officers), fires, and what it does. */
-  function updatePlayerGun(state, dt) {
+  function updatePlayerGun(state, dt, pressed) {
     playerGunCooldown -= dt;
     gunDrawn -= dt;
     if (gunDrawn <= 0) playerAim = null;
-    const pressed = !!(keys.KeyG || controls.current.keys.KeyG);
     if (state.noPolice || !state.onFoot || state.busted > 0 || state.wasted > 0 || interaction) {
       playerAim = null;
       gunDrawn = 0;
       return;
     }
     const onDuty = game.duty.duty.on;
-    playerWeapon = onDuty ? game.duty.duty.weapon : "pistol";
+    if (equipped !== "fists") playerWeapon = equipped;
     const stats = WEAPON_STATS[playerWeapon] || WEAPON_STATS.pistol;
     if (!pressed || playerGunCooldown > 0) return;
     playerGunCooldown = stats.cooldown;
     gunDrawn = 3;
     // In a store, the gun is pointed at the clerk: a hold-up (game.js), no shot.
     if (state.store >= 0 && !onDuty) {
+      holdUpRequest = true;
       playerAim = (playerAim || new Vector3()).set(
         state.x - Math.sin(state.footYaw || 0) * 3,
         (state.y || 0) + 1.3,
@@ -1022,12 +1165,23 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       aimPoint.set(state.x, (state.y || 0) + (state.onFoot ? 1.2 : 0.9), state.z);
       gunfire.holdPistol(handPoint, aimPoint);
     });
-    if (playerAim && state.onFoot && playerPerson.visible && state.wasted <= 0) {
-      const limbs = playerPerson.userData.L;
+    if (!state.onFoot || !playerPerson.visible || state.wasted > 0 || state.busted > 0) return;
+    const limbs = playerPerson.userData.L;
+    if (playerAim && equipped !== "fists") {
       if (limbs) aimArms(limbs);
       handPosition(playerPerson, handPoint);
       if (playerWeapon === "pistol") gunfire.holdPistol(handPoint, playerAim);
       else gunfire.holdWeapon(playerWeapon, handPoint, playerAim);
+    } else if (equipped !== "fists") {
+      // The gun picked from the menu, in hand, pointed at the ground ahead until used.
+      handPosition(playerPerson, handPoint);
+      const yaw = state.footYaw || 0;
+      aimPoint.set(handPoint.x - Math.sin(yaw) * 0.55, handPoint.y - 1.3, handPoint.z - Math.cos(yaw) * 0.55);
+      if (equipped === "pistol") gunfire.holdPistol(handPoint, aimPoint);
+      else gunfire.holdWeapon(equipped, handPoint, aimPoint);
+    } else if (limbs && (punchTime > 0 || state.elapsed < guardUntil)) {
+      // Fists up, a jab while a punch is thrown.
+      fightPose(limbs, punchTime, punchRight);
     }
   }
   /** Blood, voices and the crimes of the pedestrians' events (hit by cars, shot, screaming). */
@@ -1046,7 +1200,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         impactPoint.set(event.x, groundAt(event.x, event.z) + (killed ? 1.0 : 0.3), event.z);
         impactVelocity.set(event.car.vx, killed ? 1.5 : 0.5, event.car.vz);
         const gun = !!event.car.gun; // (shot, not hit by a car)
-        blood.spray(impactPoint, impactVelocity, gun ? 22 : Math.round(Math.min(70, (killed ? 14 : 6) + event.speed * 2.5)));
+        const fist = !!event.car.fist; // (knocked out)
+        if (!fist) blood.spray(impactPoint, impactVelocity, gun ? 22 : Math.round(Math.min(70, (killed ? 14 : 6) + event.speed * 2.5)));
         if (!gun) audio.bodyHit?.(event.speed, distance, pan);
         if (killed) {
           audio.hurt?.(female, distance, pan);
@@ -1073,11 +1228,21 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         audio.scream?.(female, distance, pan);
       } else if (event.type === "hurt") {
         audio.hurt?.(female, distance, pan);
+      } else if (event.type === "punchPlayer") {
+        // Someone in a fist fight lands one (in mid-jump, it misses).
+        if (state.onFoot && state.wasted <= 0 && state.busted <= 0 && !(state.jumpY > 0.25)) {
+          state.playerHealth = Math.max(0, state.playerHealth - event.damage);
+          state.sinceHit = 0;
+          state.shake = Math.min((state.shake || 0) + 0.15, 1);
+          audio.bodyHit?.(3, distance, pan);
+          audio.hurt?.(false, 2, 0);
+        }
       } else if (event.type === "talk") {
         audio.murmur?.(female, distance, pan);
       }
     }
   }
+  const pedestrianPlayer = { x: 0, z: 0, onFoot: false, dead: false };
   function updatePedestrians(state, dt) {
     pedestrianCars.length = 0;
     if (!state.onFoot) {
@@ -1099,7 +1264,11 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     for (const car of game.traffic ? game.traffic.cars : []) {
       pedestrianCars.push({ x: car.x, z: car.z, heading: car.heading, vx: car.vx, vz: car.vz, player: false });
     }
-    const events = pedestrians.update(dt, { cars: pedestrianCars, camera, phase: signalClock });
+    pedestrianPlayer.x = state.x;
+    pedestrianPlayer.z = state.z;
+    pedestrianPlayer.onFoot = state.onFoot;
+    pedestrianPlayer.dead = state.wasted > 0 || state.busted > 0;
+    const events = pedestrians.update(dt, { cars: pedestrianCars, camera, phase: signalClock, player: pedestrianPlayer });
     processPedEvents(events, state);
     // The police job's suspects: their bodies placed and posed (before the crowd's bones are set).
     safely("suspects", () => policeJob.updateBodies(dt, state, performance.now()));
@@ -1215,6 +1384,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   // The car radio (radio.js): T, or the touch button, goes to the next station.
   let radioShown = null;
   let radioTouchHeld = false;
+  let touchGHeld = false;
   let touchEHeld = false;
   /** H: the player's horn. People just ahead jump out of the way. */
   function honk() {
@@ -1260,6 +1430,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       dragPointer = e.pointerId;
     } else {
       if (e.button !== 2) {
+        // The left button: attack (a punch, or the gun in hand).
+        if (e.button === 0) keys.MouseLeft = true;
         return;
       }
       e.preventDefault();
@@ -1311,6 +1483,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     } else if (e.pointerId === dragPointer) {
       dragPointer = null;
     }
+    if (e.pointerType !== "touch" && e.button === 0) keys.MouseLeft = false;
   }
   function preventCameraMenu(e) {
     e.preventDefault();
@@ -1360,6 +1533,18 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   let cheatBuffer = "";
   const onKeyDown = (e) => {
     audio.resume();
+    // The weapon menu (G): 1-9 picks a weapon (and does nothing else meanwhile); Esc or G closes it.
+    if (weaponMenuOpen && /^Digit[1-9]$/.test(e.code)) {
+      e.preventDefault();
+      const option = weaponOptions()[Number(e.code.slice(5)) - 1];
+      if (option && !e.repeat) selectWeapon(option);
+      return;
+    }
+    if (e.code === "KeyG" && !e.repeat && game.state.onFoot) toggleWeaponMenu();
+    if (e.code === "Escape" && weaponMenuOpen) {
+      weaponMenuOpen = false;
+      return;
+    }
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
       e.preventDefault();
     }
@@ -1408,6 +1593,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const shadowCenter = new Vector3(0, 0, 70);
   let shadowsDue = true;
   let inCityEnvironment = () => {};
+  let setTimeOfDay = () => {};
   let disposed = false;
   const reportedErrors = new Set();
   function reportFrameError(part, error) {
@@ -1502,6 +1688,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         {
           ...keys,
           ...controls.current.keys,
+          HoldUp: holdUpRequest,
           ...(interaction
             ? {
                 ArrowUp: false,
@@ -1521,6 +1708,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         },
         game.state.onFoot ? footCameraYaw : game.state.heading + cameraYaw,
       );
+      holdUpRequest = false;
       if (wasOnFoot !== state.onFoot) {
         if (state.onFoot) {
           footCameraYaw = state.heading + cameraYaw;
@@ -1616,6 +1804,10 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         const touchE = !!controls.current.keys.KeyE;
         if (touchE && !touchEHeld && state.onFoot) policeJob.interact();
         touchEHeld = touchE;
+        // (And G, the weapon menu.)
+        const touchG = !!controls.current.keys.KeyG;
+        if (touchG && !touchGHeld && state.onFoot) toggleWeaponMenu();
+        touchGHeld = touchG;
       });
       playerPerson.visible = !!state.onFoot;
       playerPerson.rotation.x = 0;
@@ -1625,9 +1817,19 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         playerPerson.position.set(state.wastedX, (state.y || 0) + 0.13, state.wastedZ);
         playerPerson.rotation.set(-Math.PI / 2, state.footYaw || 0, 0);
       } else if (state.onFoot) {
-        playerPerson.position.set(state.x, state.y || 0, state.z);
+        playerPerson.position.set(state.x, (state.y || 0) + (state.jumpY || 0), state.z);
         playerPerson.rotation.y = state.footYaw || 0;
         animatePerson(playerPerson, dt, state.x, state.z);
+        const limbs = playerPerson.userData.L;
+        if (limbs && state.jumpY > 0) {
+          // In the air: knees up, arms out for balance.
+          limbs.lh.rotation.x = 0.55;
+          limbs.rh.rotation.x = 0.25;
+          limbs.lk.rotation.x = -1.1;
+          limbs.rk.rotation.x = -0.7;
+          limbs.la.rotation.set(0.5, 0, -0.45);
+          limbs.ra.rotation.set(0.5, 0, 0.45);
+        } else if (limbs && state.footRunning) limbs.body.rotation.x = -0.2; // (leaning into the run)
       }
       if (state.respawned) {
         // Back at the hospital or the police station: the camera starts behind the player there.
@@ -1693,7 +1895,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       safely("arrest scene", () => updateBusted(state));
       heliLight = safely("helicopter", () => helicopter.update(state.heli, dt, state.elapsed, groundAt)) ?? null;
       safely("guns", () => {
-        updatePlayerGun(state, dt);
+        updateWeapons(state, dt);
         processPoliceShots(state);
         gunfire.update(dt, camera);
         poseGuns(state);
@@ -1988,6 +2190,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           burning: state.burning > 0 && !state.onFoot,
           ...policeJob.hud(state, state.onFoot ? footCameraYaw : state.heading + cameraYaw),
           respawnMessage: state.elapsed < respawnMessageUntil ? respawnMessageKind : null,
+          weapon: state.onFoot ? equipped : null,
+          weaponMenu: weaponMenuOpen ? weaponOptions() : null,
           heliActive: !!state.heli && !state.heli.leaving,
           roadblockActive: !!state.roadblock,
         });
@@ -2092,9 +2296,29 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   // City reflections: captured once from the middle of the grid at street level, used as the scene's
   // environment while the player is in the city (the night sky's elsewhere).
   await stage(0.76, t("stage.reflections"));
-  const skyEnvironment = scene.environment;
+  if (daytime) lookOfDay(true);
+  let skyEnvironment = view.skyEnvironment;
+  scene.environment = skyEnvironment;
   clearLamps();
   let cityEnvironment = captureCityEnvironment(renderer, scene, CITY_REFLECTION_PROBE, [playerCar]);
+  /** Switches between day and night during the session (the city's reflections are taken again). */
+  setTimeOfDay = (day) => {
+    if (day === daytime) return;
+    try {
+      localStorage.setItem(TIME_KEY, day ? "day" : "night");
+    } catch {
+      // (not remembered)
+    }
+    lookOfDay(day);
+    skyEnvironment = view.skyEnvironment;
+    scene.environment = skyEnvironment;
+    const previous = cityEnvironment;
+    clearLamps();
+    cityEnvironment = captureCityEnvironment(renderer, scene, CITY_REFLECTION_PROBE, [playerCar]);
+    previous.dispose();
+    inCityEnvironment(game.state.x, game.state.z);
+    renderer.shadowMap.needsUpdate = true;
+  };
   // If the scanned textures were still on their way, retake it when they arrive.
   if (!scannedTextureProgress().ready && scannedTexturesRequested()) {
     scannedTexturesReady.then(() => {
@@ -2181,6 +2405,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   await stage(1, t("stage.ready"));
   if (debugSession) {
     debugSession.fx = effects;
+    debugSession.setTimeOfDay = (day) => setTimeOfDay(day);
     debugSession.ready = true;
   }
   const session = {
@@ -2259,5 +2484,6 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   };
   // The pause menu reaches the live session through the shared controls ref.
   controls.current.setQuality = (choice) => session.setQuality(choice);
+  controls.current.setTimeOfDay = (day) => setTimeOfDay(day);
   return session;
 }

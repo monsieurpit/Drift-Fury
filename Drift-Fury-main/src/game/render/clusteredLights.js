@@ -120,6 +120,7 @@ export function createClusteredLights({ enabled = true } = {}) {
   let originJ = Infinity;
   const dynamicLights = [];
   let dynamicWritten = 0;
+  let staticLevel = 1; // the world's own lights: 0 by day
 
   function writeLight(slot, light, fade) {
     const o = slot * 4;
@@ -248,7 +249,7 @@ export function createClusteredLights({ enabled = true } = {}) {
         const t = Math.min(1, Math.max(0, (FADE_END - d) / (FADE_END - FADE_START)));
         return t * t * (3 - 2 * t);
       };
-      for (let k = 0; k < nearby.length; k++) writeLight(k, nearby[k], fadeOf(nearby[k]));
+      for (let k = 0; k < nearby.length; k++) writeLight(k, nearby[k], fadeOf(nearby[k]) * staticLevel);
       // Moving lights on top of the world's (in the slots after them).
       if (dynamicLights.length || dynamicWritten || cellsChanged) {
         cellIds.set(staticCellIds);
@@ -264,6 +265,10 @@ export function createClusteredLights({ enabled = true } = {}) {
       }
       dynamicLights.length = 0;
       lightTexture.needsUpdate = true;
+    },
+    /** The world's own lights' brightness (lamps, shops: 0 by day); moving lights stay as they are. */
+    setStaticLevel(level) {
+      staticLevel = level;
     },
     /** Turns the lights off (for cube-map captures) or back on. */
     setEnabled(enabled) {

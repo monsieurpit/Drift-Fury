@@ -98,6 +98,12 @@ export function* buildWorldInSteps(scene) {
     /** Adds the lights to another material (effects, props). */
     lightByLamps: (material) =>
       clusteredFallback ? lampLighting.patch(material) : clusteredLights.patch(material),
+    /** Day (true) or night: the sky, and the world's lamps and lit signs off by day. */
+    setDay: (day) => {
+      updateSky.setDay(day);
+      lampLighting.setLevel(day ? 0 : 1);
+      clusteredLights.setStaticLevel(day ? 0 : 1);
+    },
     /** Per-frame animation of world details (summit beacon, sky); `time` in seconds. */
     update: (time) => {
       updateMountain(world, time);

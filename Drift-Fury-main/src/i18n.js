@@ -7,6 +7,9 @@ import { POLICE_TEXT } from "./i18nPolice.js";
 // falls back to English. LOCALE formats numbers the local way.
 
 const en = {
+  "pause.time": "Time of day",
+  "pause.day": "Day",
+  "pause.night": "Night",
   "feature.lights": "Many real lights (back to the nearest street lamps)",
   "failure.detail": "Error reported by the graphics chip:",
   "lang.name": "English",
@@ -131,6 +134,13 @@ const en = {
   "hud.shoot": "Shoot",
   "touch.fire": "Fire",
   "touch.fireLabel": "FIRE",
+  "hud.run": "Run",
+  "hud.jump": "Jump",
+  "hud.weapons": "Weapons",
+  "weaponMenu.title": "Weapons",
+  "weaponMenu.hint": "Press a number or click to take it in hand. Left click or C: attack. G: close.",
+  "touch.weapons": "ARMS",
+  "touch.attack": "HIT",
   "hud.handsUp": "Hands where I can see them!",
   "hud.heli": "Helicopter overhead",
   "hud.roadblock": "Roadblock ahead",
@@ -177,7 +187,7 @@ const en = {
   "failure.restartNow": "RESTART NOW",
   // Game page
   "game.controls":
-    "WASD / ARROWS • DRIVE \xA0 SPACE • DRIFT \xA0 E • STATION \xA0 F • ON FOOT/GET IN \xA0 G • SHOOT \xA0 J • JOB \xA0 T • RADIO \xA0 ESC • PAUSE",
+    "WASD / ARROWS • DRIVE \xA0 SPACE • DRIFT \xA0 E • STATION \xA0 F • ON FOOT/GET IN \xA0 SHIFT • RUN \xA0 G • WEAPONS \xA0 CLICK/C • ATTACK \xA0 J • JOB \xA0 T • RADIO \xA0 ESC • PAUSE",
   // Loading
   "loading.eyebrow": "FREE ROAM / LOADING",
   "loading.title1": "PREPARING ",
@@ -249,6 +259,9 @@ const en = {
 };
 
 const fr = {
+  "pause.time": "Moment de la journée",
+  "pause.day": "Jour",
+  "pause.night": "Nuit",
   "feature.lights": "Éclairage multiple (retour aux lampadaires les plus proches)",
   "failure.detail": "Erreur signalée par la puce graphique :",
   "lang.name": "Français",
@@ -367,6 +380,13 @@ const fr = {
   "hud.shoot": "Tirer",
   "touch.fire": "Tirer",
   "touch.fireLabel": "TIR",
+  "hud.run": "Courir",
+  "hud.jump": "Sauter",
+  "hud.weapons": "Armes",
+  "weaponMenu.title": "Armes",
+  "weaponMenu.hint": "Appuyez sur un chiffre ou cliquez pour la prendre en main. Clic gauche ou C : attaquer. G : fermer.",
+  "touch.weapons": "ARMES",
+  "touch.attack": "COUP",
   "hud.handsUp": "Les mains en l'air !",
   "hud.heli": "Hélicoptère au-dessus",
   "hud.roadblock": "Barrage devant",
@@ -410,7 +430,7 @@ const fr = {
   "failure.stepDown": " Le jeu repasse en mode {to} et redémarre.",
   "failure.restartNow": "REDÉMARRER MAINTENANT",
   "game.controls":
-    "ZQSD / WASD / FLÈCHES • CONDUIRE \xA0 ESPACE • DRIFT \xA0 E • STATION \xA0 F • PIED/ENTRER \xA0 G • TIRER \xA0 J • JOB \xA0 T • RADIO \xA0 ESC • PAUSE",
+    "ZQSD / WASD / FLÈCHES • CONDUIRE \xA0 ESPACE • DRIFT \xA0 E • STATION \xA0 F • PIED/ENTRER \xA0 MAJ • COURIR \xA0 G • ARMES \xA0 CLIC/C • ATTAQUER \xA0 J • JOB \xA0 T • RADIO \xA0 ESC • PAUSE",
   "loading.eyebrow": "SESSION LIBRE / CHARGEMENT",
   "loading.title1": "PRÉPARATION DE ",
   "loading.title2": "LA NUIT.",
@@ -479,6 +499,9 @@ const fr = {
 };
 
 const es = {
+  "pause.time": "Hora del día",
+  "pause.day": "Día",
+  "pause.night": "Noche",
   "feature.lights": "Muchas luces reales (vuelta a las farolas más cercanas)",
   "failure.detail": "Error indicado por el chip gráfico:",
   "lang.name": "Español",
@@ -596,6 +619,13 @@ const es = {
   "hud.shoot": "Disparar",
   "touch.fire": "Disparar",
   "touch.fireLabel": "TIRO",
+  "hud.run": "Correr",
+  "hud.jump": "Saltar",
+  "hud.weapons": "Armas",
+  "weaponMenu.title": "Armas",
+  "weaponMenu.hint": "Pulsa un número o haz clic para tomarla. Clic izquierdo o C: atacar. G: cerrar.",
+  "touch.weapons": "ARMAS",
+  "touch.attack": "GOLPE",
   "hud.handsUp": "¡Manos donde pueda verlas!",
   "hud.heli": "Helicóptero encima",
   "hud.roadblock": "Control policial adelante",
@@ -638,7 +668,7 @@ const es = {
   "failure.stepDown": " El juego pasa al modo {to} y se reinicia.",
   "failure.restartNow": "REINICIAR AHORA",
   "game.controls":
-    "WASD / FLECHAS • CONDUCIR \xA0 ESPACIO • DRIFT \xA0 E • GASOLINERA \xA0 F • A PIE/SUBIR \xA0 G • DISPARAR \xA0 J • TRABAJO \xA0 T • RADIO \xA0 ESC • PAUSA",
+    "WASD / FLECHAS • CONDUCIR \xA0 ESPACIO • DRIFT \xA0 E • GASOLINERA \xA0 F • A PIE/SUBIR \xA0 MAYÚS • CORRER \xA0 G • ARMAS \xA0 CLIC/C • ATACAR \xA0 J • TRABAJO \xA0 T • RADIO \xA0 ESC • PAUSA",
   "loading.eyebrow": "MODO LIBRE / CARGANDO",
   "loading.title1": "PREPARANDO ",
   "loading.title2": "LA NOCHE.",
@@ -704,6 +734,9 @@ const es = {
 };
 
 const de = {
+  "pause.time": "Tageszeit",
+  "pause.day": "Tag",
+  "pause.night": "Nacht",
   "feature.lights": "Viele echte Lichter (zurück zu den nächsten Laternen)",
   "failure.detail": "Vom Grafikchip gemeldeter Fehler:",
   "lang.name": "Deutsch",
@@ -821,6 +854,13 @@ const de = {
   "hud.shoot": "Schießen",
   "touch.fire": "Schießen",
   "touch.fireLabel": "FEUER",
+  "hud.run": "Rennen",
+  "hud.jump": "Springen",
+  "hud.weapons": "Waffen",
+  "weaponMenu.title": "Waffen",
+  "weaponMenu.hint": "Zahl drücken oder klicken, um sie in die Hand zu nehmen. Linksklick oder C: angreifen. G: schließen.",
+  "touch.weapons": "WAFFEN",
+  "touch.attack": "SCHLAG",
   "hud.handsUp": "Hände hoch!",
   "hud.heli": "Hubschrauber über dir",
   "hud.roadblock": "Straßensperre voraus",
@@ -863,7 +903,7 @@ const de = {
   "failure.stepDown": " Das Spiel wechselt zu {to} und startet neu.",
   "failure.restartNow": "JETZT NEU STARTEN",
   "game.controls":
-    "WASD / PFEILE • FAHREN \xA0 LEERTASTE • DRIFT \xA0 E • TANKSTELLE \xA0 F • ZU FUSS/EINSTEIGEN \xA0 G • SCHIESSEN \xA0 J • JOB \xA0 T • RADIO \xA0 ESC • PAUSE",
+    "WASD / PFEILE • FAHREN \xA0 LEERTASTE • DRIFT \xA0 E • TANKSTELLE \xA0 F • ZU FUSS/EINSTEIGEN \xA0 UMSCHALT • RENNEN \xA0 G • WAFFEN \xA0 KLICK/C • ANGRIFF \xA0 J • JOB \xA0 T • RADIO \xA0 ESC • PAUSE",
   "loading.eyebrow": "FREIES SPIEL / LADEN",
   "loading.title1": "DIE NACHT ",
   "loading.title2": "WIRD VORBEREITET.",
@@ -929,6 +969,9 @@ const de = {
 };
 
 const pt = {
+  "pause.time": "Hora do dia",
+  "pause.day": "Dia",
+  "pause.night": "Noite",
   "feature.lights": "Muitas luzes reais (volta aos postes mais próximos)",
   "failure.detail": "Erro informado pelo chip gráfico:",
   "lang.name": "Português",
@@ -1046,6 +1089,13 @@ const pt = {
   "hud.shoot": "Atirar",
   "touch.fire": "Atirar",
   "touch.fireLabel": "TIRO",
+  "hud.run": "Correr",
+  "hud.jump": "Saltar",
+  "hud.weapons": "Armas",
+  "weaponMenu.title": "Armas",
+  "weaponMenu.hint": "Prima um número ou clique para a pegar. Clique esquerdo ou C: atacar. G: fechar.",
+  "touch.weapons": "ARMAS",
+  "touch.attack": "SOCO",
   "hud.handsUp": "Mãos onde eu possa ver!",
   "hud.heli": "Helicóptero acima",
   "hud.roadblock": "Bloqueio à frente",
@@ -1088,7 +1138,7 @@ const pt = {
   "failure.stepDown": " O jogo passa para o modo {to} e reinicia.",
   "failure.restartNow": "REINICIAR AGORA",
   "game.controls":
-    "WASD / SETAS • DIRIGIR \xA0 ESPAÇO • DRIFT \xA0 E • POSTO \xA0 F • A PÉ/ENTRAR \xA0 G • ATIRAR \xA0 J • TRABALHO \xA0 T • RÁDIO \xA0 ESC • PAUSA",
+    "WASD / SETAS • DIRIGIR \xA0 ESPAÇO • DRIFT \xA0 E • POSTO \xA0 F • A PÉ/ENTRAR \xA0 SHIFT • CORRER \xA0 G • ARMAS \xA0 CLIQUE/C • ATACAR \xA0 J • TRABALHO \xA0 T • RÁDIO \xA0 ESC • PAUSA",
   "loading.eyebrow": "MODO LIVRE / CARREGANDO",
   "loading.title1": "PREPARANDO ",
   "loading.title2": "A NOITE.",
@@ -1154,6 +1204,9 @@ const pt = {
 };
 
 const it = {
+  "pause.time": "Momento della giornata",
+  "pause.day": "Giorno",
+  "pause.night": "Notte",
   "feature.lights": "Molte luci reali (ritorno ai lampioni più vicini)",
   "failure.detail": "Errore segnalato dal chip grafico:",
   "lang.name": "Italiano",
@@ -1271,6 +1324,13 @@ const it = {
   "hud.shoot": "Spara",
   "touch.fire": "Spara",
   "touch.fireLabel": "FUOCO",
+  "hud.run": "Corri",
+  "hud.jump": "Salta",
+  "hud.weapons": "Armi",
+  "weaponMenu.title": "Armi",
+  "weaponMenu.hint": "Premi un numero o fai clic per impugnarla. Clic sinistro o C: attacca. G: chiudi.",
+  "touch.weapons": "ARMI",
+  "touch.attack": "PUGNO",
   "hud.handsUp": "Mani in vista!",
   "hud.heli": "Elicottero sopra di te",
   "hud.roadblock": "Posto di blocco avanti",
@@ -1313,7 +1373,7 @@ const it = {
   "failure.stepDown": " Il gioco passa alla modalità {to} e si riavvia.",
   "failure.restartNow": "RIAVVIA ORA",
   "game.controls":
-    "WASD / FRECCE • GUIDA \xA0 SPAZIO • DRIFT \xA0 E • DISTRIBUTORE \xA0 F • A PIEDI/SALI \xA0 G • SPARA \xA0 J • LAVORO \xA0 T • RADIO \xA0 ESC • PAUSA",
+    "WASD / FRECCE • GUIDA \xA0 SPAZIO • DRIFT \xA0 E • DISTRIBUTORE \xA0 F • A PIEDI/SALI \xA0 MAIUSC • CORRI \xA0 G • ARMI \xA0 CLIC/C • ATTACCA \xA0 J • LAVORO \xA0 T • RADIO \xA0 ESC • PAUSA",
   "loading.eyebrow": "MODALITÀ LIBERA / CARICAMENTO",
   "loading.title1": "PREPARAZIONE DELLA ",
   "loading.title2": "NOTTE.",

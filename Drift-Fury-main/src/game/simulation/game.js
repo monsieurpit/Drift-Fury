@@ -43,6 +43,9 @@ export const TRAFFIC_COLORS = [
 ];
 export const CIVILIAN_SHAPES = ["sedan", "suv", "hatch", "coupe"];
 const WALK_SPEED = 4.6;
+const RUN_SPEED = 7.4; // on foot with Shift held
+const JUMP_SPEED = 4.4; // m/s up at take-off (about half a metre high)
+const GRAVITY = 12;
 const OFFICER_RUN_SPEED = 4.9;
 const BUSTED_TIME = 4.2; // seconds of the arrest scene (hands up, cuffed) before the result screen
 const HELI_ALTITUDE = 38;
@@ -909,9 +912,8 @@ export function createGame(car, engine, solids, noPolice = false) {
       const repairPressed = !!keys.KeyR && !state._rPrev;
       state._rPrev = !!keys.KeyR;
       if (repairPressed && !state.onFoot && state.station >= 0) repairAndRespray();
-      // G in a gas station store: a hold-up (RP mode).
-      const robPressed = !!keys.KeyG && !state._gPrev;
-      state._gPrev = !!keys.KeyG;
+      // A gun drawn on the clerk in a gas station store (the session's HoldUp): a hold-up (RP mode).
+      const robPressed = !!keys.HoldUp;
       if (robPressed && !state.noPolice && !duty.duty.on && state.onFoot && state.store >= 0) robStore();
       if (state.onFoot) {
         state.throttle = 0;
@@ -922,6 +924,19 @@ export function createGame(car, engine, solids, noPolice = false) {
         const moveZ =
           (keys.ArrowDown || keys.KeyS ? 1 : 0) - (keys.ArrowUp || keys.KeyW || keys.KeyZ ? 1 : 0);
         const moveLength = Math.hypot(moveX, moveZ) || 1;
+        // Shift: running. Space: a jump (from the ground, then gravity brings the player back down).
+        const running = !!(keys.ShiftLeft || keys.ShiftRight);
+        state.footRunning = running && !!(moveX || moveZ);
+        if (keys.Space && !state._jumpHeld && !(state.jumpY > 0)) state.jumpV = JUMP_SPEED;
+        state._jumpHeld = !!keys.Space;
+        if (state.jumpV || state.jumpY > 0) {
+          state.jumpY = (state.jumpY || 0) + (state.jumpV || 0) * dt;
+          state.jumpV = (state.jumpV || 0) - GRAVITY * dt;
+          if (state.jumpY <= 0) {
+            state.jumpY = 0;
+            state.jumpV = 0;
+          }
+        }
         ((sinHeading, cosHeading, walkSpeed) => {
           const dx = (cosHeading * moveX + sinHeading * moveZ) / moveLength;
           const dz = (cosHeading * moveZ - sinHeading * moveX) / moveLength;
@@ -939,7 +954,7 @@ export function createGame(car, engine, solids, noPolice = false) {
               Math.cos(state.footYaw + yawDelta * (1 - Math.exp(-14 * dt))),
             );
           }
-        })(Math.sin(cameraHeading), Math.cos(cameraHeading), WALK_SPEED);
+        })(Math.sin(cameraHeading), Math.cos(cameraHeading), state.footRunning ? RUN_SPEED : WALK_SPEED);
         state.x = clamp(state.x, -200, 250);
         state.z = clamp(state.z, -700, 150);
         for (let solid of solidGrid.near(state.x, state.z, 3, nearbyBuffer)) {
@@ -960,6 +975,9 @@ export function createGame(car, engine, solids, noPolice = false) {
         state.yaw = 0;
         state.rpm = 900;
       } else {
+        state.jumpY = 0;
+        state.jumpV = 0;
+        state.footRunning = false;
         state.throttle = throttle;
         state.brake = brake;
         const forwardX = -Math.sin(state.heading);

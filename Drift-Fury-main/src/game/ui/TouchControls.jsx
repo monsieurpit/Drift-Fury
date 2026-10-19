@@ -48,15 +48,23 @@ export function TouchControls({ controls, hud }) {
         </div>
       </div>
       <div className="touch-group pointer-events-auto flex gap-1.5">
-        {hud?.onFoot && hud?.rp ? (
-          <div
-            className="touch-button !w-12 !border-[#e8857a]/60 !bg-[#e8857a]/20 text-[9px] font-bold"
-            role="button"
-            aria-label={t("touch.fire")}
-            {...bindButton("KeyG")}
-          >
-            {t("touch.fireLabel")}
-          </div>
+        {hud?.onFoot ? (
+          <>
+            <div className="touch-button !w-11 text-[8px] font-bold" role="button" aria-label={t("hud.weapons")} {...bindButton("KeyG")}>
+              {t("touch.weapons")}
+            </div>
+            <div
+              className="touch-button !w-12 !border-[#e8857a]/60 !bg-[#e8857a]/20 text-[9px] font-bold"
+              role="button"
+              aria-label={t("touch.fire")}
+              {...bindButton("KeyC")}
+            >
+              {hud.weapon === "fists" ? t("touch.attack") : t("touch.fireLabel")}
+            </div>
+            <div className="touch-button !w-11 text-[8px] font-bold" role="button" aria-label={t("hud.jump")} {...bindButton("Space")}>
+              {t("hud.jump")}
+            </div>
+          </>
         ) : (
           <div className="touch-button !w-12 text-[9px] font-bold" role="button" {...bindButton("Space")}>
             DRIFT

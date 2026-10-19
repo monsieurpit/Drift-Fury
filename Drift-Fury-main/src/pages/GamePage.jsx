@@ -8,6 +8,7 @@ import { GameView } from "../game/ui/GameView.jsx";
 import { GarageScreen } from "../game/ui/GarageScreen.jsx";
 import { Hud } from "../game/ui/Hud.jsx";
 import { PoliceHud } from "../game/ui/PoliceHud.jsx";
+import { WeaponMenu } from "../game/ui/WeaponMenu.jsx";
 import { LockerModal } from "../game/ui/LockerModal.jsx";
 import { LoadingScreen } from "../game/ui/LoadingScreen.jsx";
 import { PauseMenu } from "../game/ui/PauseMenu.jsx";
@@ -208,6 +209,14 @@ export function GamePage() {
           {!paused && !result && !picker && !locker && !(loading && !loading.done) && (
             <TouchControls controls={controls} hud={hud} />
           )}
+          {hud.weaponMenu && !paused && !result && !picker && !locker && (
+            <WeaponMenu
+              options={hud.weaponMenu}
+              current={hud.weapon}
+              onSelect={(id) => controls.current.selectWeapon?.(id)}
+              onClose={() => controls.current.closeWeaponMenu?.()}
+            />
+          )}
           {locker && (
             <LockerModal
               info={hud.policeInfo}
@@ -230,6 +239,7 @@ export function GamePage() {
               hud={hud}
               onResume={() => setPaused(false)}
               onQuality={(value) => controls.current.setQuality?.(value)}
+              onTimeOfDay={(day) => controls.current.setTimeOfDay?.(day)}
               onEnd={() =>
                 finishSession({
                   ...hud,

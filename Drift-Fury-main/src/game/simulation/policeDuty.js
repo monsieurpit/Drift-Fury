@@ -1545,6 +1545,31 @@ export function createPoliceDuty({ state, traffic, roadXs, roadZs, blockedAt, li
       suspect.stun = 5;
       if (duty.escort === suspect.id) duty.escort = null;
     },
+    /**
+     * A punch from the player (fists). Someone fighting or running is worn down, then stunned (most then
+     * give up); punching someone who complies (or a victim, or a passer-by: `suspect` null) is excessive
+     * force: a complaint.
+     */
+    punched(suspect) {
+      // (null: a passer-by punched for nothing, on duty.)
+      if (!suspect) {
+        if (duty.on) strike("excessiveForce");
+        return;
+      }
+      if (suspect.outcome || suspect.mode === "inCar" || suspect.mode === "seated") return;
+      if (suspect.mode === "fight" || suspect.mode === "fleeFoot" || suspect.mode === "brawl" || suspect.mode === "rampage" || suspect.mode === "robbing") {
+        suspect.facts.fought = true;
+        suspect.hits = (suspect.hits || 0) + 1;
+        if (suspect.mode === "fleeFoot" || suspect.hits >= (suspect.person.armed ? 2 : 3)) {
+          suspect.mode = "stunned";
+          suspect.stun = 1.6;
+          suspect.hits = 0;
+        }
+        return;
+      }
+      if (suspect.mode === "stunned") return;
+      strike("excessiveForce");
+    },
     /** A suspect's car was rammed (game.js): damage, and a disabled car stops for good. */
     rammed(car, impact) {
       if (!car.flee) return;
