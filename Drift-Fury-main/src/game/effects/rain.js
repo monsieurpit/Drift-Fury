@@ -29,7 +29,7 @@ void main() {
   p.z = uCenter.z + mod(p.z - uCenter.z, ${SIZE.toFixed(1)}) - ${(SIZE / 2).toFixed(1)};
   p.y += uCenter.y - ${(HEIGHT * 0.45).toFixed(1)};
   // The streak: its length along the fall (motion blur of a drop over a frame or so).
-  vec3 fall = normalize(vec3(uWind * 0.06, -1.0));
+  vec3 fall = normalize(vec3(uWind.x * 0.06, -1.0, uWind.y * 0.06));
   p -= fall * tip * (0.8 + seed.w * 0.5);
   vTip = tip;
   vec4 view = viewMatrix * vec4(p, 1.0);
