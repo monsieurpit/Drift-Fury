@@ -49,6 +49,24 @@ const loaded = new Map(); // key -> gltf scene
 const EMERGENCY = new Set(["ambulance", "firetruck"]);
 
 /**
+ * Glass with transmission makes three.js draw the whole opaque scene a second time each frame (into the
+ * texture the glass refracts). The one model that has it (the cruiser) has a transmission map of almost
+ * zero (its glass is tinted, not see-through), so it looks the same without: plain blended glass.
+ */
+function withoutTransmission(model) {
+  model.traverse((object) => {
+    const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : [];
+    for (const material of materials) {
+      if (!(material.transmission > 0)) continue;
+      material.transmission = 0;
+      material.transmissionMap = null;
+      material.needsUpdate = true;
+    }
+  });
+  return model;
+}
+
+/**
  * Loads the car models (a model that fails to load is left to the cars built from code); the emergency
  * vehicles only when `emergency` (RP mode).
  */
@@ -61,7 +79,7 @@ export async function loadCarModels(onProgress, { emergency = false } = {}) {
       if (loaded.has(key)) return onProgress?.(++done / keys.length);
       try {
         const gltf = await loader.loadAsync(`${BASE}${MODELS[key].file}.glb`);
-        loaded.set(key, gltf.scene);
+        loaded.set(key, withoutTransmission(gltf.scene));
       } catch (error) {
         console.warn("Car model failed to load:", key, error);
       }
@@ -78,7 +96,7 @@ export async function loadPoliceModels() {
       .filter((key) => MODELS[key].fleet && !loaded.has(key))
       .map(async (key) => {
         try {
-          loaded.set(key, (await loader.loadAsync(`${BASE}${MODELS[key].file}.glb`)).scene);
+          loaded.set(key, withoutTransmission((await loader.loadAsync(`${BASE}${MODELS[key].file}.glb`)).scene));
         } catch (error) {
           console.warn("Police car model failed to load:", key, error);
         }
