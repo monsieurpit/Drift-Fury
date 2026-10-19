@@ -4,9 +4,11 @@ import {
   Color,
   CylinderGeometry,
   DoubleSide,
+  InstancedMesh,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  Object3D,
   OctahedronGeometry,
   Vector3,
 } from "three";
@@ -669,17 +671,18 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     roughness: 0.4,
     metalness: 0.1,
   });
-  const packageMeshes = game.packages.spots.map((spot, id) => {
-    const mesh = new Mesh(packageGeometry, packageMaterial);
-    mesh.visible = false;
-    mesh.castShadow = false;
-    mesh.userData.baseY = groundAt(spot.x, spot.z) + 0.95;
-    mesh.position.set(spot.x, mesh.userData.baseY, spot.z);
-    mesh.userData.id = id;
-    scene.add(mesh);
-    trackMotion(mesh);
-    return mesh;
-  });
+  // (All in one draw: an instance per package, always in the same slot; a hidden one is scaled to nothing.)
+  const packageMesh = new InstancedMesh(packageGeometry, packageMaterial, game.packages.spots.length);
+  packageMesh.frustumCulled = false;
+  packageMesh.castShadow = false;
+  const packageBaseY = game.packages.spots.map((spot) => groundAt(spot.x, spot.z) + 0.95);
+  const packageDummy = new Object3D();
+  packageDummy.scale.setScalar(0);
+  packageDummy.updateMatrix();
+  for (let id = 0; id < packageBaseY.length; id++) packageMesh.setMatrixAt(id, packageDummy.matrix);
+  packageMesh.visible = false;
+  scene.add(packageMesh);
+  trackMotion(packageMesh);
   scene.add(crackPrewarm());
   // Scanned, animated people (skinnedCrowd.js); the people built from shapes if they could not load.
   const crowd = peopleModels
@@ -1680,15 +1683,18 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           audio.chime?.(1);
         }
         // Hidden packages: the ones near enough to see, spinning; a chime and saved when one is found.
-        for (const mesh of packageMeshes) {
-          const spot = game.packages.spots[mesh.userData.id];
-          const near = !game.packages.found.has(mesh.userData.id) && Math.abs(spot.x - state.x) < 110 && Math.abs(spot.z - state.z) < 110;
-          mesh.visible = near;
-          if (near) {
-            mesh.rotation.y = state.elapsed * 2.2;
-            mesh.position.y = mesh.userData.baseY + Math.sin(state.elapsed * 2.5 + mesh.userData.id) * 0.12;
-          }
-        }
+        let anyNear = false;
+        game.packages.spots.forEach((spot, id) => {
+          const near = !game.packages.found.has(id) && Math.abs(spot.x - state.x) < 110 && Math.abs(spot.z - state.z) < 110;
+          anyNear ||= near;
+          packageDummy.position.set(spot.x, packageBaseY[id] + Math.sin(state.elapsed * 2.5 + id) * 0.12, spot.z);
+          packageDummy.rotation.set(0, state.elapsed * 2.2, 0);
+          packageDummy.scale.setScalar(near ? 1 : 0);
+          packageDummy.updateMatrix();
+          packageMesh.setMatrixAt(id, packageDummy.matrix);
+        });
+        packageMesh.visible = anyNear;
+        packageMesh.instanceMatrix.needsUpdate = true;
         if (state.packageFound !== undefined && state.packageFound !== null) {
           state.packageFound = null;
           audio.chime?.(2);
