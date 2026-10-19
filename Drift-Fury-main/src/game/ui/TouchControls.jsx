@@ -70,6 +70,16 @@ export function TouchControls({ controls, hud }) {
         >
           {t("touch.footLabel")}
         </div>
+        {!hud?.onFoot && (
+          <div className="touch-button !w-11 text-[9px] font-bold" role="button" aria-label={t("job.take")} {...bindButton("KeyJ")}>
+            JOB
+          </div>
+        )}
+        {!hud?.onFoot && (
+          <div className="touch-button !w-11 text-[9px] font-bold" role="button" aria-label={t("radio.title")} {...bindButton("KeyT")}>
+            FM
+          </div>
+        )}
         <div className="touch-button" role="button" aria-label={t("touch.brake")} {...bindButton("ArrowDown")}>
           <ArrowDownIcon />
         </div>

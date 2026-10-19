@@ -184,6 +184,10 @@ export function GamePage() {
               onMute={() => setMuted((e) => !e)}
               onPause={togglePause}
               onStation={() => setPicker("cars")}
+              onRepair={() => {
+                controls.current.keys.KeyR = true;
+                setTimeout(() => delete controls.current.keys.KeyR, 150);
+              }}
             />
           )}
           {!paused && !result && !picker && !(loading && !loading.done) && (

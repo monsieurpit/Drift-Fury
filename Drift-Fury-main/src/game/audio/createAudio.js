@@ -4,6 +4,7 @@ import { createWorkletEngine } from "./workletEngine.js";
 import { createVoices } from "./voices.js";
 import { createPoliceSounds } from "./policeSounds.js";
 import { createDamageSounds } from "./damageSounds.js";
+import { createRadio } from "./radio.js";
 export function createAudio(engine) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) {
@@ -22,6 +23,13 @@ export function createAudio(engine) {
       horn() {},
       gunshot() {},
       ping() {},
+      fire() {},
+      explosion() {},
+      chime() {},
+      radioNext() {
+        return null;
+      },
+      radioAudible() {},
       startEngine() {},
       resume() {},
       close() {},
@@ -64,6 +72,7 @@ export function createAudio(engine) {
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
   }
   const damageSounds = createDamageSounds(context, master, whiteNoise);
+  const radio = createRadio(context, master, whiteNoise);
   let engineVoice = null;
   let closed = false;
   let lastShiftSerial = 0;
@@ -144,6 +153,45 @@ export function createAudio(engine) {
     },
     glass(strength) {
       if (!closed && !muted) damageSounds.glass(strength);
+    },
+    /** Fire close by (0..1) and hoses spraying (0..1): call every frame. */
+    fire(level, spraying) {
+      if (!closed) damageSounds.fire(muted ? 0 : level, muted ? 0 : spraying);
+    },
+    /** T: the next radio station (null: off). */
+    radioNext() {
+      return closed ? null : radio.next();
+    },
+    /** The radio is heard only while driving. */
+    radioAudible(on) {
+      if (!closed) radio.setAudible(on && !muted);
+    },
+    /** Jobs: 2 done (a rising three-note chime), 1 a step (one note), 0 failed (falling). */
+    chime(kind) {
+      if (closed || muted) return;
+      const now = context.currentTime;
+      const notes = kind === 2 ? [660, 830, 990] : kind === 1 ? [880] : [440, 330];
+      notes.forEach((frequency, index) => {
+        const tone = context.createOscillator();
+        tone.type = "sine";
+        tone.frequency.value = frequency;
+        const gain = context.createGain();
+        const at = now + index * 0.11;
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.exponentialRampToValueAtTime(0.09, at + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0005, at + 0.35);
+        tone.connect(gain);
+        gain.connect(master);
+        tone.start(at);
+        tone.stop(at + 0.4);
+        tone.onended = () => {
+          tone.disconnect();
+          gain.disconnect();
+        };
+      });
+    },
+    explosion(distance, pan) {
+      if (!closed && !muted) damageSounds.explosion(distance, pan);
     },
     /** A pistol shot at `distance` metres: the crack, the body of the blast and its echo off the buildings. */
     gunshot(distance, pan) {
@@ -250,6 +298,7 @@ export function createAudio(engine) {
         closed = true;
         engineVoice?.close();
         policeSounds.close();
+        radio.close();
         damageSounds.close();
         soundEffects.close();
         master.disconnect();

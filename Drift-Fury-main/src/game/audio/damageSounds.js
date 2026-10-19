@@ -26,6 +26,27 @@ export function createDamageSounds(context, output, noiseBuffer) {
   scrapeGain.connect(output);
   scrapeNoise.start();
 
+  // Fire: crackling noise, its level wandering; hoses: a steady hiss. (Loops, silent until needed.)
+  const loop = (type, frequency, q) => {
+    const source = context.createBufferSource();
+    source.buffer = noiseBuffer;
+    source.loop = true;
+    const filter = context.createBiquadFilter();
+    filter.type = type;
+    filter.frequency.value = frequency;
+    filter.Q.value = q;
+    const gain = context.createGain();
+    gain.gain.value = 0;
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(output);
+    source.start(0, Math.random());
+    return { source, gain, filter };
+  };
+  const crackle = loop("bandpass", 1300, 0.7);
+  const roar = loop("lowpass", 260, 0.5);
+  const hiss = loop("highpass", 2600, 0.4);
+
   const voices = new Set();
   const once = (source, nodes, at, duration) => {
     voices.add(source);
@@ -88,6 +109,51 @@ export function createDamageSounds(context, output, noiseBuffer) {
         once(tone, [tone, gain], now, decay * (0.7 + s * 0.4) + 0.02);
       }
     },
+    /** Fire close by (`level` 0..1, by distance) and hoses spraying (`spraying` 0..1). Every frame. */
+    fire(level, spraying) {
+      const now = context.currentTime;
+      // (The crackle's level jumps around like burning things popping.)
+      crackle.gain.gain.setTargetAtTime(level * (0.12 + Math.random() * 0.22), now, 0.03);
+      roar.gain.gain.setTargetAtTime(level * 0.35, now, 0.2);
+      hiss.gain.gain.setTargetAtTime(spraying * 0.12, now, 0.1);
+    },
+    /** A car blowing up at `distance` metres: the blast, its low rumble rolling on, debris. */
+    explosion(distance, pan) {
+      const now = context.currentTime;
+      const near = Math.min(1, 20 / Math.max(20, distance));
+      const panner = context.createStereoPanner ? context.createStereoPanner() : null;
+      if (panner) {
+        panner.pan.value = Math.max(-1, Math.min(1, pan * 0.6));
+        panner.connect(output);
+      }
+      const out = panner || output;
+      const nodes = [panner];
+      const burst = (type, frequency, level, start, length) => {
+        const source = context.createBufferSource();
+        source.buffer = noiseBuffer;
+        source.loop = true;
+        const filter = context.createBiquadFilter();
+        filter.type = type;
+        filter.frequency.value = frequency;
+        const gain = context.createGain();
+        gain.gain.setValueAtTime(0.0001, now + start);
+        gain.gain.exponentialRampToValueAtTime(level, now + start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0005, now + start + length);
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(out);
+        source.start(now + start, Math.random());
+        source.stop(now + start + length + 0.05);
+        nodes.push(source, filter, gain);
+        return source;
+      };
+      burst("highpass", 900, 0.7 * near, 0, 0.18);
+      burst("lowpass", 180, 1.0 * Math.sqrt(near), 0, 1.4);
+      const last = burst("lowpass", 90, 0.6 * Math.sqrt(near), 0.08, 2.4);
+      last.onended = () => {
+        for (const node of nodes) node?.disconnect();
+      };
+    },
     /** Glass breaking: a sharp crack, then a shower of small tinkling pieces. */
     glass(strength = 1) {
       const now = context.currentTime;
@@ -111,10 +177,12 @@ export function createDamageSounds(context, output, noiseBuffer) {
       }
     },
     close() {
-      try {
-        scrapeNoise.stop();
-      } catch {
-        // already stopped
+      for (const node of [scrapeNoise, crackle.source, roar.source, hiss.source]) {
+        try {
+          node.stop();
+        } catch {
+          // already stopped
+        }
       }
       for (const voice of voices) {
         try {

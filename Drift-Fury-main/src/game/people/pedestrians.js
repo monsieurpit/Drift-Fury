@@ -57,6 +57,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
   }
 
   const people = [];
+  let lastNear = null; // where the camera was last step (for putting people back out of its sight)
 
   function endTalk(ped) {
     const partner = ped.partner;
@@ -275,6 +276,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
     dead.velocity.set(car.vx * 0.55, 1 + speed * 0.06, car.vz * 0.55);
     dead.spin.set((random() - 0.5) * 6, (random() - 0.5) * 3, (random() - 0.5) * 6);
     dead.settled = false;
+    dead.lie = null; // (it lands again: how it lies is decided anew)
     dead.bounced = 1;
     events.push({ type: "runOver", ped, x: ped.x, z: ped.z, speed, car });
   }
@@ -290,6 +292,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
       const events = [];
       camera.getWorldDirection(cameraForward);
       const near = { x: camera.position.x, z: camera.position.z, viewX: cameraForward.x, viewZ: cameraForward.z };
+      lastNear = near;
       for (const ped of people) {
         const rig = ped.rig;
         if (ped.mode === "dead") {
@@ -345,11 +348,19 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
                 dead.velocity.x *= friction;
                 dead.velocity.z *= friction;
                 dead.spin.multiplyScalar(Math.exp(-7 * dt));
-                const up = new Vector3(0, 0, -1).applyQuaternion(dead.quaternion).y; // face up or down
-                const yawVector = new Vector3(0, 1, 0).applyQuaternion(dead.quaternion);
-                // (Lying on the back turns the head toward +z before the yaw, on the front toward -z.)
-                const yaw = Math.atan2(yawVector.x, yawVector.z) + (up >= 0 ? 0 : Math.PI);
-                LIE.setFromAxisAngle(AXIS_Y, yaw).multiply(tmpQuaternion.setFromAxisAngle(AXIS_X, up >= 0 ? Math.PI / 2 : -Math.PI / 2));
+                // How it ends up lying (on the back or the front, which way) is decided once, when it first
+                // comes down: worked out again every frame, a body landing on its side flipped between the
+                // two from frame to frame.
+                if (!dead.lie) {
+                  const up = new Vector3(0, 0, -1).applyQuaternion(dead.quaternion).y; // face up or down
+                  const yawVector = new Vector3(0, 1, 0).applyQuaternion(dead.quaternion);
+                  // (Lying on the back turns the head toward +z before the yaw, on the front toward -z.)
+                  const yaw = Math.atan2(yawVector.x, yawVector.z) + (up >= 0 ? 0 : Math.PI);
+                  dead.lie = new Quaternion()
+                    .setFromAxisAngle(AXIS_Y, yaw)
+                    .multiply(tmpQuaternion.setFromAxisAngle(AXIS_X, up >= 0 ? Math.PI / 2 : -Math.PI / 2));
+                }
+                LIE.copy(dead.lie);
                 dead.quaternion.slerp(LIE, 1 - Math.exp(-6 * dt));
                 if (Math.hypot(dead.velocity.x, dead.velocity.z) < 0.15 && dead.spin.length() < 0.2) {
                   dead.settled = true;
@@ -368,10 +379,13 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           const hip = new Vector3(0, 0.95 * rig.scale.y, 0).applyQuaternion(dead.quaternion);
           rig.position.copy(dead.position).sub(hip);
           rig.quaternion.copy(dead.quaternion);
-          // Limbs: flailing in the air, then sprawled.
+          // Limbs: flailing in the air, then sprawled (easing from one to the other, not snapping, and
+          // only while actually in the air: not while sliding along the ground).
           const L = rig.userData.L;
           const t = dead.time * 9 + dead.flail;
-          const air = dead.settled ? 0 : 1;
+          const airborne = !dead.settled && dead.position.y > restHeight + 0.25 ? 1 : 0;
+          dead.air = (dead.air ?? 1) + (airborne - (dead.air ?? 1)) * (1 - Math.exp(-8 * dt));
+          const air = dead.air;
           L.la.rotation.set(-0.6 + Math.sin(t) * 1.2 * air, 0, -1.25);
           L.ra.rotation.set(0.4 + Math.sin(t * 1.3) * 1.2 * air, 0, 1.1);
           L.le.rotation.set(0.5, 0, 0);
@@ -693,6 +707,25 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
       const d = Math.hypot(dx, dz) || 1;
       kill(ped, { x: fromX, z: fromZ, vx: (dx / d) * 1.2, vz: (dz / d) * 1.2, heading: Math.atan2(-dx, -dz), player: true, gun: true }, 0.5, events);
       ped.dead.velocity.y = 0.6;
+    },
+    /** An explosion at (x, z): people within `radius` are thrown, dead (the "killed" events). */
+    blast(x, z, radius, events) {
+      for (const ped of people) {
+        if (ped.mode === "dead") continue;
+        const dx = ped.x - x;
+        const dz = ped.z - z;
+        const d = Math.hypot(dx, dz);
+        if (d > radius) continue;
+        const push = (radius - d) * 2.2 + 2;
+        const ux = d > 0.01 ? dx / d : 1;
+        const uz = d > 0.01 ? dz / d : 0;
+        kill(ped, { x, z, vx: ux * push, vz: uz * push, heading: Math.atan2(-ux, -uz), player: false }, push, events);
+      }
+    },
+    /** A body taken away (by the paramedics): that person is back to life somewhere out of sight. */
+    removeBody(ped) {
+      if (ped.mode !== "dead") return;
+      spawn(ped, lastNear);
     },
     /** People near (x, z) see something terrible and run from it. */
     frighten(x, z, radius, events) {

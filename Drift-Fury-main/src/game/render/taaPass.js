@@ -48,6 +48,8 @@ const velocityMaterial = () =>
       prevViewProjection: { value: new Matrix4() },
     },
     vertexShader: /* glsl */ `
+      #include <common>
+      #include <skinning_pars_vertex>
       uniform mat4 prevModelMatrix;
       uniform mat4 currViewProjection;
       uniform mat4 prevViewProjection;
@@ -57,7 +59,12 @@ const velocityMaterial = () =>
       varying vec4 vCurrent;
       varying vec4 vPrevious;
       void main() {
-        vec4 local = vec4(position, 1.0);
+        // Animated people in their current pose (their limbs' own motion is left out: the body's is
+        // what counts), not in the pose they were modelled in.
+        #include <skinbase_vertex>
+        #include <begin_vertex>
+        #include <skinning_vertex>
+        vec4 local = vec4(transformed, 1.0);
         #ifdef USE_INSTANCING
         vec4 world = modelMatrix * instanceMatrix * local;
         vec4 previousWorld = prevModelMatrix * prevInstanceMatrix * local;
@@ -324,7 +331,10 @@ export class TAAPass extends Pass {
   }
 
   untrack(root) {
-    root.traverse((object) => this.tracked.delete(object));
+    root.traverse((object) => {
+      this.tracked.delete(object);
+      object.layers.disable(VELOCITY_LAYER);
+    });
   }
 
   /** Jitters the camera's projection for this frame. */

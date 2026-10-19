@@ -1,4 +1,15 @@
-import { Color, Vector3 } from "three";
+import {
+  AdditiveBlending,
+  BoxGeometry,
+  Color,
+  CylinderGeometry,
+  DoubleSide,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  OctahedronGeometry,
+  Vector3,
+} from "three";
 import { createAudio } from "../audio/createAudio.js";
 import { createEffects } from "../effects/effects.js";
 import { createBlood } from "../effects/blood.js";
@@ -37,6 +48,8 @@ import { createHelicopter } from "../vehicles/helicopter.js";
 import { crackPrewarm, createCarDamage } from "../vehicles/carDamage.js";
 import { createSparks } from "../effects/sparks.js";
 import { createGunfire } from "../effects/gunfire.js";
+import { createFire } from "../effects/fire.js";
+import { createEmergencyServices } from "./emergencyServices.js";
 import { buildWorldInSteps } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
 import { loadStreetProps, placeStreetProps } from "../world/streetProps.js";
@@ -183,7 +196,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   });
   // Real 3D car models for the parked and police cars (carModels.js).
   await stage(0.36, t("stage.vehicles"));
-  const [, peopleModels] = await Promise.all([loadCarModels(undefined, { emergency: !noPolice }), loadPeopleModels()]);
+  const [, peopleModels] = await Promise.all([loadCarModels(undefined, { emergency: true }), loadPeopleModels()]);
   if (loading.cancelled()) {
     cleanup.forEach((dispose) => dispose());
     throw CANCELLED;
@@ -300,6 +313,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const cuffingOfficer = newOfficer();
   const helicopter = createHelicopter(scene);
   let sparkLight = null;
+  let jobNews = null;
+  const cashPops = [];
+  let noticeShown = null;
   let respawnMessageKind = null;
   let respawnMessageUntil = -1;
   let baseSaturation = null;
@@ -403,6 +419,11 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       handle.visible = true;
       handle.position.set(car.x, terrainHeight(car.x, car.z) + 0.1, car.z);
       sitOnGround(handle, car.x, car.z, car.heading);
+      // An ambulance or fire truck on a call: its lights flash (off on the way back).
+      const flashing = car.mission === "enroute" || car.mission === "arrived";
+      const phase = Math.sin(performance.now() * 0.02 + car.id) > 0;
+      handle.userData.blue = flashing && phase;
+      handle.userData.red = flashing && !phase;
     }
   }
   function syncTrafficCars() {
@@ -422,6 +443,12 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         trafficCars.set(vehicle.id, entry);
       }
       entry.car.visible = true;
+      // Burnt out: the paint goes black.
+      if ((entry.color ?? vehicle.color) !== vehicle.color) {
+        entry.car.userData.paint = new Color(vehicle.color);
+        entry.car.userData.look.dirty = true;
+      }
+      entry.color = vehicle.color;
       // Parked cars don't move: place them only when they do.
       if (entry.x !== vehicle.x || entry.z !== vehicle.z || entry.heading !== vehicle.heading) {
         entry.x = vehicle.x;
@@ -454,6 +481,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   };
   const nearestTraffic = [];
   const BAR_BLUE = new Color("#3a6bff");
+  const EMERGENCY_WHITE = new Color("#e8eeff");
   const BAR_RED = new Color("#ff2a2a");
   const HEADLIGHT = new Color("#fff0d8");
   const TAIL = new Color("#ff1a10");
@@ -494,6 +522,15 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     for (const vehicle of state.vehicles) {
       if (vehicle.kind === "police") addBar(vehicle.x, vehicle.z);
     }
+    // Ambulances and fire trucks on a call: red and white flashes.
+    for (const car of game.traffic ? game.traffic.cars : []) {
+      if (car.mission !== "enroute" && car.mission !== "arrived") continue;
+      const light = carLight();
+      Object.assign(light, { x: car.x, y: terrainHeight(car.x, car.z) + 2.6, z: car.z, intensity: 30, range: 16, flags: 0 });
+      light.color.copy(flashBlue ? BAR_RED : EMERGENCY_WHITE);
+      light.direction = null;
+      clusteredLights.addDynamic(light);
+    }
     // Low beams of the nearest traffic (the farther cars' lamps just glow).
     if (game.traffic) {
       nearestTraffic.length = 0;
@@ -522,6 +559,13 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         beam.color.copy(HEADLIGHT);
         clusteredLights.addDynamic(beam);
       }
+    }
+    for (const flame of fire.lights().slice(0, 4)) {
+      const light = carLight();
+      Object.assign(light, { x: flame.x, y: flame.y, z: flame.z, intensity: flame.intensity, range: flame.range, flags: 0 });
+      light.direction = null;
+      light.color.copy(flame.colour);
+      clusteredLights.addDynamic(light);
     }
     const shotLight = gunfire.light;
     if (shotLight) {
@@ -580,6 +624,62 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   const blood = createBlood(scene, groundAt, { patch: lightByLamps });
   const sparks = createSparks(scene, groundAt);
   const gunfire = createGunfire(scene);
+  const fire = createFire(scene);
+  // The job marker: a glowing ring on the ground and a column of light seen from across the city.
+  const JOB_COLOURS = { taxi: new Color("#ffd23a"), delivery: new Color("#4fb4ff"), race: new Color("#ff5a5a") };
+  const markerMaterial = new MeshBasicMaterial({
+    color: new Color("#ffd23a"),
+    transparent: true,
+    opacity: 0.35,
+    depthWrite: false,
+    blending: AdditiveBlending,
+    side: DoubleSide,
+    fog: false,
+  });
+  const jobMarker = new Mesh(new CylinderGeometry(1, 1, 1, 32, 1, true), markerMaterial);
+  jobMarker.visible = false;
+  jobMarker.frustumCulled = false;
+  jobMarker.renderOrder = 3;
+  scene.add(jobMarker);
+  // Who or what is waiting at a job's pickup: a client waving for the taxi, a package on the kerb.
+  const jobClient = createPerson("#7a4b8f");
+  jobClient.visible = false;
+  scene.add(jobClient);
+  trackMotion(jobClient);
+  const jobPackage = new Mesh(
+    new BoxGeometry(0.55, 0.42, 0.45),
+    new MeshStandardMaterial({ color: "#a07a4a", roughness: 0.85, metalness: 0 }),
+  );
+  jobPackage.visible = false;
+  jobPackage.castShadow = true;
+  scene.add(jobPackage);
+  // Hidden packages: small green glowing parcels, spinning and bobbing over the sidewalk.
+  const PACKAGE_SAVE = "drift-fury-packages";
+  try {
+    const saved = JSON.parse(localStorage.getItem(PACKAGE_SAVE) || "[]");
+    if (Array.isArray(saved)) game.packages.restore(saved);
+  } catch {
+    // (no saved packages)
+  }
+  const packageGeometry = new OctahedronGeometry(0.42, 0);
+  const packageMaterial = new MeshStandardMaterial({
+    color: "#1f6b34",
+    emissive: new Color("#3cff7a"),
+    emissiveIntensity: 0.9,
+    roughness: 0.4,
+    metalness: 0.1,
+  });
+  const packageMeshes = game.packages.spots.map((spot, id) => {
+    const mesh = new Mesh(packageGeometry, packageMaterial);
+    mesh.visible = false;
+    mesh.castShadow = false;
+    mesh.userData.baseY = groundAt(spot.x, spot.z) + 0.95;
+    mesh.position.set(spot.x, mesh.userData.baseY, spot.z);
+    mesh.userData.id = id;
+    scene.add(mesh);
+    trackMotion(mesh);
+    return mesh;
+  });
   scene.add(crackPrewarm());
   // Scanned, animated people (skinnedCrowd.js); the people built from shapes if they could not load.
   const crowd = peopleModels
@@ -602,6 +702,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     count: pedestrianCount,
   });
   if (debugSession) debugSession.pedestrians = pedestrians;
+  // Ambulances for the dead, fire trucks for burning cars (emergencyServices.js).
+  const emergency = createEmergencyServices({ scene, game, pedestrians, fire, groundAt, trackMotion, trafficWorld });
   // The player is a scanned person too (the one built from shapes if the scans could not load).
   if (peopleModels) {
     const scanned = crowd.add(Math.random, "eric");
@@ -653,6 +755,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     const distance = Math.hypot(dx, dz);
     return [distance, distance > 0.01 ? (dx * cameraRight.x + dz * cameraRight.z) / distance : 0];
   };
+  const movingBodies = new Set(); // pedestrians thrown or falling (see processPedEvents)
   /* ----- guns (RP mode): the police shoot at 3 stars; the player fires with G (or the touch button) ----- */
   let playerGunCooldown = 0;
   let gunDrawn = 0; // seconds the player keeps the gun up after firing
@@ -701,6 +804,15 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     if (!pressed || playerGunCooldown > 0) return;
     playerGunCooldown = 0.32;
     gunDrawn = 3;
+    // In a store, the gun is pointed at the clerk: a hold-up (game.js), no shot.
+    if (state.store >= 0) {
+      playerAim = (playerAim || new Vector3()).set(
+        state.x - Math.sin(state.footYaw || 0) * 3,
+        (state.y || 0) + 1.3,
+        state.z - Math.cos(state.footYaw || 0) * 3,
+      );
+      return;
+    }
     // The target: the nearest person or officer roughly in front, in plain sight, within 30 m.
     const yaw = state.footYaw || 0;
     const fx = -Math.sin(yaw);
@@ -847,6 +959,11 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       const female = event.ped.female;
       if (event.type === "killed" || event.type === "runOver") {
         const killed = event.type === "killed";
+        // A body flying through the air gets motion vectors (no smearing) until it lies still.
+        if (!movingBodies.has(event.ped)) {
+          composer.taa?.track(event.ped.rig);
+          movingBodies.add(event.ped);
+        }
         impactPoint.set(event.x, groundAt(event.x, event.z) + (killed ? 1.0 : 0.3), event.z);
         impactVelocity.set(event.car.vx, killed ? 1.5 : 0.5, event.car.vz);
         const gun = !!event.car.gun; // (shot, not hit by a car)
@@ -899,6 +1016,12 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     }
     const events = pedestrians.update(dt, { cars: pedestrianCars, camera, phase: signalClock });
     processPedEvents(events, state);
+    for (const ped of movingBodies) {
+      if (ped.mode !== "dead" || ped.dead?.settled) {
+        composer.taa?.untrack(ped.rig);
+        movingBodies.delete(ped);
+      }
+    }
     crowd.update();
     blood.update(dt);
   }
@@ -988,12 +1111,33 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         sirenAt = { distance, pan };
       }
     }
+    // An ambulance or fire truck on its way, siren wailing.
+    for (const car of game.traffic ? game.traffic.cars : []) {
+      if (car.mission !== "enroute") continue;
+      const [distance, pan] = heard(car.x, car.z);
+      if (distance < 160 && (!sirenAt || distance < sirenAt.distance)) sirenAt = { distance, pan };
+    }
     let heliAt = null;
     if (state.heli) {
       const [distance, pan] = heard(state.heli.x, state.heli.z);
       heliAt = { distance: Math.hypot(distance, state.heli.y - (state.y || 0)), pan };
     }
     audio.police?.(sirenAt, heliAt);
+  }
+  // The car radio (radio.js): T, or the touch button, goes to the next station.
+  let radioShown = null;
+  let radioTouchHeld = false;
+  /** H: the player's horn. People just ahead jump out of the way. */
+  function honk() {
+    const state = game.state;
+    audio.horn?.(2, 0);
+    const events = [];
+    pedestrians.frighten(state.x - Math.sin(state.heading) * 8, state.z - Math.cos(state.heading) * 8, 7, events);
+    processPedEvents(events, state);
+  }
+  function switchRadio() {
+    const station = audio.radioNext?.() ?? null;
+    radioShown = { station, until: game.state.elapsed + 2.5 };
   }
   const keys = {};
   let frameId;
@@ -1122,15 +1266,29 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   let lastRaise = -Infinity;
   let skipWindow = false;
   audio.ready.catch(() => {});
+  const CHEATS = ["HESOYAM", "TURTLE", "PAINKILLER", "LAWYERUP", "FUGITIVE"];
+  let cheatBuffer = "";
   const onKeyDown = (e) => {
     audio.resume();
     if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
       e.preventDefault();
     }
     keys[e.code] = true;
+    // Cheat codes: the last letters typed.
+    if (!e.repeat && /^Key[A-Z]$/.test(e.code)) {
+      cheatBuffer = (cheatBuffer + e.code.slice(3)).slice(-12);
+      for (const code of CHEATS) {
+        if (cheatBuffer.endsWith(code) && game.cheat(code)) {
+          cheatBuffer = "";
+          break;
+        }
+      }
+    }
     if (e.code === "KeyE" && !e.repeat && !game.state.onFoot && game.state.station >= 0) {
       callbacks.current.onStation();
     }
+    if (e.code === "KeyT" && !e.repeat && !game.state.onFoot) switchRadio();
+    if (e.code === "KeyH" && !e.repeat && !game.state.onFoot) honk();
     if (e.code === "Escape" && !e.repeat) {
       callbacks.current.onPause();
     }
@@ -1441,6 +1599,106 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       });
       syncTrafficCars();
       safely("traffic", () => updateTraffic(state, dt));
+      safely("fires", () => {
+        // Explosions: fireball, debris, the blast (people thrown), the boom.
+        for (const blast of state.explosions) {
+          const y = groundAt(blast.x, blast.z);
+          fire.explode(blast.x, y, blast.z);
+          effects.crash(blast.x, y + 0.6, blast.z, 1.5);
+          const [distance, pan] = heard(blast.x, blast.z);
+          audio.explosion?.(distance, pan);
+          shotEvents.length = 0;
+          pedestrians.blast(blast.x, blast.z, 7, shotEvents);
+          pedestrians.frighten(blast.x, blast.z, 45, shotEvents);
+          processPedEvents(shotEvents, state);
+        }
+        emergency.update(state, dt);
+        const sources = emergency.fireSources(state);
+        fire.burn(sources, dt);
+        fire.update(dt, camera);
+        let nearest = Infinity;
+        for (const source of sources) nearest = Math.min(nearest, Math.hypot(source.x - camera.position.x, source.z - camera.position.z));
+        audio.fire?.(Math.min(1, 10 / Math.max(10, nearest)) * (sources.length ? 1 : 0), emergency.spraying);
+      });
+      if (state._playerHit) {
+        const hit = state._playerHit;
+        state._playerHit = null;
+        impactPoint.set(hit.x, groundAt(hit.x, hit.z) + 1, hit.z);
+        impactVelocity.set(0, 1.2, 0);
+        blood.spray(impactPoint, impactVelocity, 14);
+        audio.bodyHit?.(hit.speed, 2, 0);
+        audio.hurt?.(false, 2, 0);
+      }
+      if (state._robbery) {
+        state._robbery = null;
+        audio.scream?.(Math.random() < 0.5, 4, 0);
+      }
+      safely("jobs", () => {
+        const job = state.job;
+        jobMarker.visible = !!job;
+        if (job) {
+          const m = job.marker;
+          const pulse = 1 + Math.sin(state.elapsed * 4) * 0.06;
+          jobMarker.position.set(m.x, groundAt(m.x, m.z) + 14, m.z);
+          jobMarker.scale.set(m.radius * pulse, 28, m.radius * pulse);
+          markerMaterial.color.copy(JOB_COLOURS[job.kind] || JOB_COLOURS.taxi);
+        }
+        // At the pickup: the client (on the sidewalk side of the marker, waving) or the package.
+        const waiting = job && job.stage === "pickup";
+        jobClient.visible = waiting && job.kind === "taxi";
+        jobPackage.visible = waiting && job.kind === "delivery";
+        if (waiting) {
+          const m = job.marker;
+          const kerbX = m.x + Math.sign(m.x - Math.round(m.x / 60) * 60 || 1) * 4.5 * (Math.abs(m.x - Math.round(m.x / 60) * 60) < 9 ? 1 : 0);
+          const kerbZ = m.z + Math.sign(m.z - Math.round((m.z - 20) / 50) * 50 - 20 || 1) * 4.5 * (Math.abs(m.x - Math.round(m.x / 60) * 60) < 9 ? 0 : 1);
+          if (jobClient.visible) {
+            jobClient.position.set(kerbX, groundAt(kerbX, kerbZ), kerbZ);
+            jobClient.rotation.y = Math.atan2(-(state.x - kerbX), -(state.z - kerbZ));
+            animatePerson(jobClient, dt, kerbX, kerbZ);
+            const limbs = jobClient.userData.L;
+            if (limbs) {
+              limbs.ra.rotation.set(2.6, 0, -0.3 + Math.sin(state.elapsed * 7) * 0.35);
+              limbs.re.rotation.x = 0.3;
+            }
+          }
+          if (jobPackage.visible) {
+            jobPackage.position.set(kerbX, groundAt(kerbX, kerbZ) + 0.21, kerbZ);
+            jobPackage.rotation.y = 0.4;
+          }
+        }
+        for (const news of state.jobEvents) {
+          if (news.type === "done" || news.type === "checkpoint" || news.type === "stage") audio.chime?.(news.type === "done" ? 2 : 1);
+          else if (news.type === "failed") audio.chime?.(0);
+          jobNews = { ...news, until: state.elapsed + 4 };
+        }
+        for (const money of state.cashEvents) cashPops.push({ amount: money.amount, until: state.elapsed + 3 });
+        while (cashPops.length && cashPops[0].until < state.elapsed) cashPops.shift();
+        for (const notice of state.notices) noticeShown = { ...notice, until: state.elapsed + 3.5 };
+        if (state.cheatNotice) {
+          noticeShown = { key: "hud.cheat", amount: state.cheatNotice, until: state.elapsed + 3.5 };
+          state.cheatNotice = null;
+          audio.chime?.(1);
+        }
+        // Hidden packages: the ones near enough to see, spinning; a chime and saved when one is found.
+        for (const mesh of packageMeshes) {
+          const spot = game.packages.spots[mesh.userData.id];
+          const near = !game.packages.found.has(mesh.userData.id) && Math.abs(spot.x - state.x) < 110 && Math.abs(spot.z - state.z) < 110;
+          mesh.visible = near;
+          if (near) {
+            mesh.rotation.y = state.elapsed * 2.2;
+            mesh.position.y = mesh.userData.baseY + Math.sin(state.elapsed * 2.5 + mesh.userData.id) * 0.12;
+          }
+        }
+        if (state.packageFound !== undefined && state.packageFound !== null) {
+          state.packageFound = null;
+          audio.chime?.(2);
+          try {
+            localStorage.setItem(PACKAGE_SAVE, JSON.stringify([...game.packages.found]));
+          } catch {
+            // (not saved)
+          }
+        }
+      });
       if (state._carjack) {
         const jack = state._carjack;
         state._carjack = null;
@@ -1577,6 +1835,13 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       updateHeadlights(state, dt);
       audio.update(state.rpm, state.pedal, controls.current.muted, state.drifting, state);
       safely("police sounds", () => updatePoliceSounds(state));
+      safely("radio", () => {
+        audio.radioAudible?.(!state.onFoot && state.wasted <= 0 && state.busted <= 0);
+        // (The touch button presses KeyT through the controls.)
+        const touchRadio = !!controls.current.keys.KeyT;
+        if (touchRadio && !radioTouchHeld && !state.onFoot) switchRadio();
+        radioTouchHeld = touchRadio;
+      });
       if (wasOnFoot && !state.onFoot) {
         audio.startEngine();
       }
@@ -1592,6 +1857,29 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
             ...e,
           })),
           rp: !state.noPolice,
+          radio: radioShown && state.elapsed < radioShown.until ? { station: radioShown.station } : null,
+          cash: state.cash,
+          cashPops: cashPops.map((pop) => pop.amount),
+          notice: noticeShown && state.elapsed < noticeShown.until ? noticeShown : null,
+          jobNews: jobNews && state.elapsed < jobNews.until ? jobNews : null,
+          job: state.job
+            ? {
+                kind: state.job.kind,
+                stage: state.job.stage,
+                timeLeft: state.job.timeLeft,
+                distance: state.job.distance ?? 0,
+                index: state.job.index ?? 0,
+                count: state.job.checkpoints?.length ?? 0,
+                reward: state.job.reward,
+                // Which way the marker is from where the camera looks (0: straight ahead).
+                bearing:
+                  Math.atan2(-(state.job.marker.x - state.x), -(state.job.marker.z - state.z)) -
+                  (state.onFoot ? footCameraYaw : state.heading + cameraYaw),
+                markerX: state.job.marker.x,
+                markerZ: state.job.marker.z,
+              }
+            : null,
+          burning: state.burning > 0 && !state.onFoot,
           respawnMessage: state.elapsed < respawnMessageUntil ? respawnMessageKind : null,
           heliActive: !!state.heli && !state.heli.leaving,
           roadblockActive: !!state.roadblock,
@@ -1602,7 +1890,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         controls.current.paused = true;
         callbacks.current.onFinish({
           ...state,
-          credits: Math.floor(state.score / 12 + state.elapsed * 2),
+          credits: Math.floor(state.score / 12 + state.elapsed * 2 + state.cash),
         });
       }
     }
@@ -1722,7 +2010,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   // Everything lit is lit by the world's lights too (clusteredLights.js); cars as they are set up.
   clusteredLights.patchAll(scene);
   // (The looks of the cars driving in traffic, so their shaders compile now too.)
-  if (game.traffic) for (const shape of CIVILIAN_SHAPES) trafficTemplate("#ffffff", shape, false, true);
+  if (game.traffic) {
+    for (const shape of [...CIVILIAN_SHAPES, "ambulance", "firetruck"]) trafficTemplate("#ffffff", shape, false, true);
+  }
   // The streets filled with traffic before the session starts (a few seconds of driving, behind the
   // loading screen), so no car appears out of nowhere in front of the player.
   if (game.traffic) {

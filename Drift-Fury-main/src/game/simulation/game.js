@@ -14,6 +14,8 @@ import { terrainHeight } from "../world/terrain.js";
 import { ROAD_XS, ROAD_ZS } from "../data/roadGrid.js";
 import { buildRoadGraph, createPoliceBrain } from "./policeAI.js";
 import { createTraffic } from "./traffic.js";
+import { createJobs } from "./jobs.js";
+import { createPackages } from "./packages.js";
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance2D = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const PLAYER_HALF_WIDTH = 1;
@@ -47,6 +49,8 @@ const HELI_MAX_SPEED = 34; // m/s: a car flat out on the highway can outrun it
 const ESCAPE_BASE = 4; // seconds out of sight to lose the police, plus ESCAPE_PER_STAR per star
 const ESCAPE_PER_STAR = 2.5;
 const WASTED_TIME = 4.2; // seconds of the death scene before waking up at the hospital
+const FIRE_TO_EXPLOSION = 6; // seconds a burning car takes to blow up
+const WRECK_BURN = 50; // seconds a wreck burns on (unless firefighters put it out)
 const GUN_RANGE = 35; // metres the police open fire from
 // Where the player comes back (RP mode): out of the hospital after dying, out of the police station after
 // an arrest; their own car waits parked at the curb in front.
@@ -86,6 +90,17 @@ export function createGame(car, engine, solids, noPolice = false) {
     sinceHit: 99,
     gunfire: 0, // seconds left of the police treating the player as armed (after they fire)
     shots: [], // this step's gunshots (for the session's effects): { x0, z0, x1, z1, hit, by }
+    burning: 0, // seconds the player's car has been on fire (0: not)
+    invincible: 0, // seconds left of the PAINKILLER cheat
+    cash: 0, // money earned this session (added to the garage credits at the end)
+    jobEvents: [], // this step's job news: { type: started|stage|checkpoint|done|failed|needCar|noJob, ... }
+    cashEvents: [], // this step's money in or out: { amount, reason }
+    notices: [], // this step's messages for the HUD: { key }
+    policeSee: false,
+    lastSeenX: 0, // where the police last saw the player (the centre of their search)
+    lastSeenZ: 0,
+    robbedAt: [], // per gas station: when its till was last emptied (session seconds)
+    explosions: [], // this step's explosions: { x, z }
     respawned: null,
     heli: null,
     roadblock: null,
@@ -175,10 +190,10 @@ export function createGame(car, engine, solids, noPolice = false) {
     return false;
   };
   const roadGraph = buildRoadGraph({ roadXs: ROAD_XS, roadZs: ROAD_ZS });
-  // City traffic (RP mode): moved by the session (it needs the light cycle), solid here.
-  const traffic = noPolice
-    ? null
-    : createTraffic({ roadXs: ROAD_XS, roadZs: ROAD_ZS, shapes: CIVILIAN_SHAPES, colors: TRAFFIC_COLORS });
+  const jobs = createJobs({ roadXs: ROAD_XS, roadZs: ROAD_ZS });
+  const packages = createPackages({ roadXs: ROAD_XS, roadZs: ROAD_ZS });
+  // City traffic (both modes): moved by the session (it needs the light cycle), solid here.
+  const traffic = createTraffic({ roadXs: ROAD_XS, roadZs: ROAD_ZS, shapes: CIVILIAN_SHAPES, colors: TRAFFIC_COLORS });
   const brain = createPoliceBrain(roadGraph, blockedAt);
   const occluders = solids.filter((e) => e.w >= 3);
   const nearbyBuffer = [];
@@ -230,6 +245,7 @@ export function createGame(car, engine, solids, noPolice = false) {
       let nearest = null;
       let nearestDistance = 3.6;
       for (let vehicle of state.vehicles) {
+        if (vehicle.kind === "wreck" || vehicle.burning > 0) continue; // (burnt out, or on fire)
         const distance = distance2D(vehicle, state);
         if (distance < nearestDistance) {
           nearestDistance = distance;
@@ -258,6 +274,7 @@ export function createGame(car, engine, solids, noPolice = false) {
         return;
       }
       state.vehicles = state.vehicles.filter((t) => t.id !== nearest.id);
+      state.health = nearest.health ?? 100; // (this car's own damage)
       if (nearest.kind === "police") {
         const officer = state.police.find((t) => t.carId === nearest.id);
         if (officer) {
@@ -294,7 +311,11 @@ export function createGame(car, engine, solids, noPolice = false) {
         kind: state.playerVeh.kind,
         color: state.playerVeh.color,
         shape: state.playerVeh.shape,
+        // (Getting out of a burning car: it goes on burning, and blows up, without the player.)
+        burning: state.burning,
+        health: state.health, // (each car keeps its own damage)
       });
+      state.burning = 0;
       state.onFoot = true;
       state.x += -Math.cos(state.heading) * 2.2;
       state.z += Math.sin(state.heading) * 2.2;
@@ -505,12 +526,134 @@ export function createGame(car, engine, solids, noPolice = false) {
     officer.reverse = 0;
     officer.backupCooldown = 12;
   }
+  /** Money in (positive) or out (never below zero), with what it was for. */
+  function pay(amount, reason) {
+    const change = amount < 0 ? -Math.min(state.cash, -amount) : amount;
+    if (change === 0) return;
+    state.cash += change;
+    state.cashEvents.push({ amount: change, reason });
+  }
+  /**
+   * At a gas station, R: the body shop repairs the car and resprays it a new colour. With the police after
+   * the player and not looking right now, the new colour loses them too.
+   */
+  function repairAndRespray() {
+    const wanted = !state.noPolice && state.wanted > 0.15;
+    const cost = 60 + (wanted ? 140 : 0);
+    if (state.cash < cost) {
+      state.notices.push({ key: "hud.noMoney", amount: cost });
+      return;
+    }
+    if (wanted && state.policeSee) {
+      state.notices.push({ key: "hud.policeWatching" });
+      return;
+    }
+    pay(-cost, "repair");
+    state.health = 100;
+    state.burning = 0;
+    let colour = state.playerVeh.color;
+    while (colour === state.playerVeh.color) colour = TRAFFIC_COLORS[Math.floor(Math.random() * TRAFFIC_COLORS.length)];
+    state.playerVeh = { ...state.playerVeh, color: colour, spec: `${state.playerVeh.kind}|${colour}|${state.playerVeh.shape}|${state.nextVid++}` };
+    if (wanted) {
+      state.wanted = 0;
+      state.escape = 0;
+    }
+    state.notices.push({ key: wanted ? "hud.resprayLost" : "hud.repaired" });
+  }
+  /**
+   * G inside a gas station store (RP mode): a hold-up. The clerk hands over the till; the alarm goes off
+   * (two stars). A till is only worth robbing again after a few minutes.
+   */
+  function robStore() {
+    const index = state.store;
+    const last = state.robbedAt[index] ?? -Infinity;
+    if (state.elapsed - last < 180) {
+      state.notices.push({ key: "hud.tillEmpty" });
+      return;
+    }
+    state.robbedAt[index] = state.elapsed;
+    pay(Math.round(120 + Math.random() * 230), "robbery");
+    state.wanted = clamp(Math.max(state.wanted, 2), 0, 5);
+    state.gunfire = 15;
+    state.notices.push({ key: "hud.robbery" });
+    state._robbery = { x: state.x, z: state.z };
+  }
+  /** A car blowing up at (x, z): what is near is hurt or killed (people: the session, pedestrians.js). */
+  function explode(x, z) {
+    state.explosions.push({ x, z });
+    state.shake = Math.min(state.shake + 1.2, 1.6);
+    const d = Math.hypot(state.x - x, state.z - z);
+    if (state.onFoot) {
+      if (d < 9) {
+        state.playerHealth = Math.max(0, state.playerHealth - (9 - d) * 22);
+        state.sinceHit = 0;
+      }
+    } else if (d < 7) {
+      state.health = clamp(state.health - (7 - d) * 14, 0, 100);
+    }
+    for (const officer of state.police) {
+      if (officer.onFoot && !officer.dead && Math.hypot(officer.x - x, officer.z - z) < 6) {
+        officer.dead = true;
+        officer.aiming = false;
+      }
+    }
+    // Cars right next to it catch fire too (parked ones; traffic stops dead).
+    for (const vehicle of state.vehicles) {
+      if (vehicle.kind === "wreck" || vehicle.burning > 0) continue;
+      if (Math.hypot(vehicle.x - x, vehicle.z - z) < 4.5) vehicle.burning = 1e-3;
+    }
+    for (const car of traffic.cars) if (Math.hypot(car.x - x, car.z - z) < 8) traffic.shake(car, 12);
+  }
+  /** Burning cars: the player's (engine dead), and parked ones, until they blow up; then wrecks burn on. */
+  function updateFires(dt) {
+    if (state.burning > 0) {
+      state.burning += dt;
+      if (state.burning >= FIRE_TO_EXPLOSION) {
+        // Still inside: WASTED. The car is left a burnt-out wreck.
+        state.burning = 0;
+        explode(state.x, state.z);
+        state.vehicles.push({
+          id: state.nextVid++,
+          x: state.x,
+          z: state.z,
+          heading: state.heading,
+          kind: "wreck",
+          color: "#1a1a1a",
+          shape: state.playerVeh.shape,
+          fireLeft: WRECK_BURN,
+        });
+        state.playerHealth = 0;
+        state.wasted = 1e-3;
+        state.wastedX = state.x - Math.cos(state.heading) * 2.4;
+        state.wastedZ = state.z + Math.sin(state.heading) * 2.4;
+        state.onFoot = true;
+        state.x = state.wastedX;
+        state.z = state.wastedZ;
+      }
+    }
+    for (const vehicle of state.vehicles) {
+      if (vehicle.burning > 0) {
+        vehicle.burning += dt;
+        if (vehicle.burning >= FIRE_TO_EXPLOSION) {
+          vehicle.burning = 0;
+          vehicle.kind = "wreck";
+          vehicle.color = "#1a1a1a";
+          vehicle.fireLeft = WRECK_BURN;
+          explode(vehicle.x, vehicle.z);
+        }
+      } else if (vehicle.fireLeft > 0) {
+        vehicle.fireLeft = Math.max(0, vehicle.fireLeft - dt);
+      }
+    }
+  }
   /**
    * After an arrest or a death (RP mode): out of the police station or the hospital, on foot, healed,
    * wanted no more; the police back on patrol; the player's own car parked at the curb in front.
    */
   function respawn(where) {
     const spot = where === "police" ? POLICE_STATION : HOSPITAL;
+    // The hospital bill, or bail.
+    pay(where === "police" ? -150 : -100, where === "police" ? "bail" : "hospital");
     if (state.roadblock) removeRoadblock();
     if (state.heli) state.heli.leaving = true;
     for (const officer of state.police) {
@@ -561,6 +704,7 @@ export function createGame(car, engine, solids, noPolice = false) {
       busted: 0,
       wasted: 0,
       gunfire: 0,
+      burning: 0,
       stoppedFor: 0,
       respawned: where,
     });
@@ -599,9 +743,45 @@ export function createGame(car, engine, solids, noPolice = false) {
   }
   let physics = createCarPhysics(car, engine);
   let carCollisionProfile = getCollisionProfile(car.shape);
+  /** A GTA-style cheat code, typed on the keyboard. Returns whether `code` is one. */
+  function cheat(code) {
+    if (state.wasted > 0 || state.busted > 0) return false;
+    const fixCar = () => {
+      state.health = 100;
+      state.burning = 0;
+      // (A fresh copy of the same car: dents and broken glass gone.)
+      state.playerVeh = { ...state.playerVeh, spec: `${state.playerVeh.kind}|${state.playerVeh.color}|${state.playerVeh.shape}|${state.nextVid++}` };
+    };
+    if (code === "TURTLE") {
+      state.playerHealth = 100;
+      if (!state.onFoot) fixCar();
+    } else if (code === "HESOYAM") {
+      state.playerHealth = 100;
+      if (!state.onFoot) fixCar();
+      pay(250, "cheat");
+    } else if (code === "PAINKILLER") {
+      state.invincible = 300;
+    } else if (code === "LAWYERUP") {
+      if (state.noPolice) return false;
+      state.wanted = 0;
+      state.escape = 0;
+      state.gunfire = 0;
+    } else if (code === "FUGITIVE") {
+      if (state.noPolice) return false;
+      state.wanted = clamp(Math.floor(state.wanted) + 1, 0, 5);
+      state.lastSeenX = state.x;
+      state.lastSeenZ = state.z;
+    } else {
+      return false;
+    }
+    state.cheatNotice = code;
+    return true;
+  }
   return {
     state,
     traffic,
+    packages,
+    cheat,
     setCar(nextCar) {
       state.car = nextCar;
       physics = createCarPhysics(nextCar, engine);
@@ -622,8 +802,19 @@ export function createGame(car, engine, solids, noPolice = false) {
       state.elapsed += dt;
       state.collisionTimer -= dt;
       state.shots.length = 0;
+      state.explosions.length = 0;
+      state.jobEvents.length = 0;
+      state.cashEvents.length = 0;
+      state.notices.length = 0;
       state.respawned = null;
       state.gunfire = Math.max(0, state.gunfire - dt);
+      // PAINKILLER: nothing hurts for a while (the car does not catch fire either).
+      if (state.invincible > 0) {
+        state.invincible = Math.max(0, state.invincible - dt);
+        state.burning = 0;
+        state.playerHealth = 100;
+      }
+      updateFires(dt);
       // Health on foot comes back slowly when not hurt for a while.
       state.sinceHit += dt;
       if (state.sinceHit > 6) state.playerHealth = Math.min(100, state.playerHealth + dt * 2.5);
@@ -668,6 +859,17 @@ export function createGame(car, engine, solids, noPolice = false) {
       if (footTogglePressed) {
         toggleOnFoot();
       }
+      // J: take a job (or give it up). R at a gas station: the body shop.
+      const jobPressed = !!keys.KeyJ && !state._jPrev;
+      state._jPrev = !!keys.KeyJ;
+      if (jobPressed) jobs.toggle(state);
+      const repairPressed = !!keys.KeyR && !state._rPrev;
+      state._rPrev = !!keys.KeyR;
+      if (repairPressed && !state.onFoot && state.station >= 0) repairAndRespray();
+      // G in a gas station store: a hold-up (RP mode).
+      const robPressed = !!keys.KeyG && !state._gPrev;
+      state._gPrev = !!keys.KeyG;
+      if (robPressed && !state.noPolice && state.onFoot && state.store >= 0) robStore();
       if (state.onFoot) {
         state.throttle = 0;
         state.brake = 0;
@@ -733,7 +935,7 @@ export function createGame(car, engine, solids, noPolice = false) {
           brake,
           handbrake,
           steer,
-          fuel: +(state.fuel > 0),
+          fuel: +(state.fuel > 0 && !(state.burning > 0)),
         });
       }
       const speed = Math.hypot(state.vx, state.vz);
@@ -1230,17 +1432,55 @@ export function createGame(car, engine, solids, noPolice = false) {
         state.arrestTimer = Math.max(0, state.arrestTimer - dt * 2);
       }
       state.arrest = (state.arrestTimer / 5) * 100;
+      state.policeSee = seen;
+      if (seen) {
+        state.lastSeenX = state.x;
+        state.lastSeenZ = state.z;
+      }
+      jobs.update(state, dt);
+      packages.update(state, pay);
+      // On foot, hit by a moving car (traffic, a cruiser): hurt, knocked about.
+      if (state.onFoot && state.wasted <= 0) {
+        const hitBy = (x, z, heading, carSpeed) => {
+          if (carSpeed < 4) return false;
+          const dx = state.x - x;
+          const dz = state.z - z;
+          const forward = -dx * Math.sin(heading) - dz * Math.cos(heading);
+          const side = dx * Math.cos(heading) - dz * Math.sin(heading);
+          return Math.abs(forward) < 2.6 && Math.abs(side) < 1.25;
+        };
+        const hits = [];
+        for (const car of traffic.cars) if (hitBy(car.x, car.z, car.heading, car.speed)) hits.push(car.speed);
+        for (const officer of state.police) {
+          if (!officer.onFoot && hitBy(officer.x, officer.z, officer.heading, officer.speed || 0)) hits.push(officer.speed);
+        }
+        if (hits.length && !(state.carHitCooldown > 0)) {
+          const impact = Math.max(...hits);
+          state.playerHealth = Math.max(0, state.playerHealth - impact * 4.5);
+          state.sinceHit = 0;
+          state.shake = Math.min(state.shake + 0.5, 1.4);
+          state.carHitCooldown = 1;
+          state._playerHit = { x: state.x, z: state.z, speed: impact };
+        }
+        state.carHitCooldown = Math.max(0, (state.carHitCooldown || 0) - dt);
+      }
+      for (const done of state.jobEvents) if (done.type === "done") state.cashEvents.push({ amount: done.reward, reason: done.kind });
+      state.job = jobs.job;
       state.speed = Math.round(speed * 3.6);
       state.zone = state.z < -160 ? "mountain" : state.x > 130 ? "highway" : "city";
       state.y = terrainHeight(state.x, state.z);
+      if (state.invincible > 0) {
+        state.playerHealth = 100;
+        state.health = Math.max(state.health, 1);
+      }
       if (state.onFoot && state.playerHealth <= 0) {
         // Shot down: WASTED.
         state.wasted = 1e-3;
         state.wastedX = state.x;
         state.wastedZ = state.z;
-      } else if (state.health <= 0) {
-        state.ended = true;
-        state.reason = "destroyed";
+      } else if (state.health <= 0 && !state.onFoot && !(state.burning > 0)) {
+        // Wrecked: the car catches fire (the engine dies); get out before it blows up.
+        state.burning = 1e-3;
       } else if (state.arrest >= 100) {
         // Busted: the arrest scene plays (see the top of update), then the game ends.
         state.busted = 1e-3;

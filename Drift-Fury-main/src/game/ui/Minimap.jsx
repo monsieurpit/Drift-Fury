@@ -35,6 +35,18 @@ export function Minimap({ hud }) {
             key={i}
           />
         ))}
+        {/* The hospital and the police station (where the player comes back), and the job marker. */}
+        <text x={mapX(-90)} y={mapZ(59.75) + 3} fontSize="8" fontWeight="bold" fill="#ff8f8f" textAnchor="middle">H</text>
+        {hud.rp && (
+          <text x={mapX(90)} y={mapZ(-19.75) + 3} fontSize="8" fontWeight="bold" fill="#88b7ef" textAnchor="middle">P</text>
+        )}
+        {hud.rp && hud.wanted > 0.15 && hud.escape > 0 && (
+          // The police's search area: around where they last saw the player.
+          <circle cx={mapX(hud.lastSeenX)} cy={mapZ(hud.lastSeenZ)} r="16" fill="#ff5a4e" opacity="0.18" stroke="#ff7a6a" strokeWidth="1" />
+        )}
+        {hud.job && (
+          <circle cx={mapX(hud.job.markerX)} cy={mapZ(hud.job.markerZ)} r="4" fill="none" stroke="#ffd23a" strokeWidth="2" />
+        )}
         <g transform={`translate(${mapX(hud.x)} ${mapZ(hud.z)}) rotate(${(-hud.heading * 180) / Math.PI})`}>
           <circle r="7" fill="#c6dc77" opacity=".15" />
           <path d="M0 -5 L3 4 L0 2 L-3 4Z" fill="#e8f7b8" />

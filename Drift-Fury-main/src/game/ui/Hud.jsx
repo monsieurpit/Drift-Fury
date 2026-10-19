@@ -2,7 +2,11 @@ import { VolumeXIcon, Volume2Icon, PauseIcon, StarIcon, FuelIcon, ShieldIcon, He
 import { GearIndicator } from "./GearIndicator.jsx";
 import { Minimap } from "./Minimap.jsx";
 import { t, formatNumber } from "../../i18n.js";
-export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
+const formatTime = (seconds) => {
+  const whole = Math.max(0, Math.ceil(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+};
+export function Hud({ hud, engine, muted, onMute, onPause, onStation, onRepair }) {
   return (
     <div className="pointer-events-none absolute inset-0 z-10 p-4 sm:p-6">
       <div className="flex items-start justify-between">
@@ -26,7 +30,8 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
             </button>
           </div>
           <div className="hud-glass px-3 py-2">
-            <div className="flex gap-1.5">
+            {/* (The stars flash while the police have lost sight of the player.) */}
+            <div className={`flex gap-1.5 ${hud.escape > 0 && hud.wanted > 0.15 ? "animate-pulse" : ""}`}>
               {[1, 2, 3, 4, 5].map((t) => (
                 <StarIcon
                   size={18}
@@ -44,6 +49,14 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
             {hud.heliActive && <p className="mt-1 text-[9px] text-[#9fc3ff]">{t("hud.heli")}</p>}
             {hud.roadblockActive && <p className="mt-1 text-[9px] text-[#ff9b8f]">{t("hud.roadblock")}</p>}
           </div>
+          <div className="hud-glass px-3 py-2 text-right">
+            <div className="race-title text-xl tabular-nums text-[#9be08f]">${formatNumber(Math.floor(hud.cash || 0))}</div>
+            {(hud.cashPops || []).map((amount, index) => (
+              <div key={index} className={`text-[10px] font-bold ${amount >= 0 ? "text-[#9be08f]" : "text-[#ff8f80]"}`}>
+                {amount >= 0 ? "+" : "-"}${formatNumber(Math.abs(Math.round(amount)))}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
       {hud.audioLoading && (
@@ -55,10 +68,60 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
           {t("hud.audioLoading")}
         </div>
       )}
+      {hud.job && (
+        <div className="hud-glass absolute left-4 top-28 w-56 px-4 py-3 sm:left-6">
+          <div className="flex items-center justify-between">
+            <span className="eyebrow !text-[#ffd23a]">{t(`job.${hud.job.kind}`)}</span>
+            <span className="race-title text-lg tabular-nums text-white">{formatTime(hud.job.timeLeft)}</span>
+          </div>
+          <p className="mt-1 text-[11px] leading-snug text-[#e8eddf]">
+            {t(`job.${hud.job.kind}.${hud.job.stage}`, { n: hud.job.index + 1, total: hud.job.count })}
+          </p>
+          <div className="mt-2 flex items-center gap-2 text-[11px] text-[#c6dc77]">
+            <span
+              className="inline-block text-base leading-none"
+              style={{ transform: `rotate(${(-hud.job.bearing * 180) / Math.PI}deg)` }}
+            >
+              ▲
+            </span>
+            {Math.round(hud.job.distance)} m
+            {hud.job.reward > 0 && <span className="ml-auto text-[#9be08f]">${hud.job.reward}</span>}
+          </div>
+          <p className="mt-1 text-[8px] text-[#8f989b]">
+            <kbd className="race-key">J</kbd> {t("job.cancel")}
+          </p>
+        </div>
+      )}
+      {hud.jobNews && hud.jobNews.type !== "checkpoint" && hud.jobNews.type !== "stage" && (
+        <div className="hud-glass absolute left-1/2 top-[18%] -translate-x-1/2 px-5 py-3 text-center">
+          <div className={`race-title text-2xl ${hud.jobNews.type === "done" ? "text-[#9be08f]" : hud.jobNews.type === "started" ? "text-[#ffd23a]" : "text-[#ff8f80]"}`}>
+            {t(`job.news.${hud.jobNews.type}`, { kind: hud.jobNews.kind ? t(`job.${hud.jobNews.kind}`) : "" })}
+            {hud.jobNews.reward ? ` +$${hud.jobNews.reward}` : ""}
+          </div>
+          {hud.jobNews.reason && <p className="mt-1 text-[10px] text-[#c9b5b0]">{t(`job.reason.${hud.jobNews.reason}`)}</p>}
+        </div>
+      )}
+      {hud.radio && (
+        <div className="hud-glass absolute left-1/2 top-16 -translate-x-1/2 px-4 py-2 text-center">
+          <div className="eyebrow !text-[8px]">{t("radio.title")}</div>
+          <div className="race-title text-lg text-[#e8eddf]">{t(`radio.${hud.radio.station || "off"}`)}</div>
+        </div>
+      )}
+      {hud.notice && (
+        <div className="hud-glass absolute left-1/2 top-[26%] -translate-x-1/2 px-4 py-2 text-xs text-[#e8eddf]">
+          {t(hud.notice.key, { n: hud.notice.amount })}
+        </div>
+      )}
       {hud.drifting && (
         <div className="absolute left-1/2 top-[28%] -translate-x-1/2 text-center">
           <span className="race-title text-6xl italic text-[#c6dc77] drop-shadow-lg">DRIFT ×{hud.combo}</span>
           <p className="mt-2 text-[10px] font-bold tracking-[.3em] text-white">{t("hud.holdAngle")}</p>
+        </div>
+      )}
+      {hud.burning && (
+        <div className="absolute left-1/2 top-[22%] -translate-x-1/2 animate-pulse rounded-lg border border-[#ff7a4a]/50 bg-[#3a140cee] px-5 py-3 text-center text-sm font-bold text-[#ffb08a]">
+          {t("hud.onFire")}
+          <kbd className="race-key ml-2">F</kbd>
         </div>
       )}
       {hud.wasted > 0 && (
@@ -107,6 +170,19 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation }) {
             {t("hud.changeCar")}
           </p>
         </button>
+      )}
+      {!hud.onFoot && hud.station >= 0 && (
+        <button
+          onClick={onRepair}
+          className="pointer-events-auto absolute left-1/2 top-[70%] -translate-x-1/2 rounded-xl border border-[#4fb4ff]/40 bg-[#14202aee] px-5 py-3 text-center text-[11px] text-[#bfe0ff]"
+        >
+          <kbd className="race-key">R</kbd> {t("hud.repairRespray", { n: hud.rp && hud.wanted > 0.15 ? 200 : 60 })}
+        </button>
+      )}
+      {!hud.onFoot && !hud.job && hud.station < 0 && (
+        <div className="absolute bottom-6 left-1/2 hidden -translate-x-1/2 text-[9px] tracking-wider text-white/45 sm:block">
+          <kbd className="race-key">J</kbd> {t("job.take")}
+        </div>
       )}
       {hud.onFoot && !hud.respawnMessage && (
         <div className="absolute left-1/2 top-24 -translate-x-1/2 rounded-lg bg-[#18251eee] px-4 py-2 text-xs text-[#c6dc77] border border-[#c6dc77]/30">
