@@ -117,7 +117,10 @@ export function createPoliceJob({
     /** Emergency vehicles with sirens on that traffic pulls over for: the player's car, assisting units. */
     sirens(state, out) {
       out.length = 0;
-      if (duty.duty.siren && !state.onFoot && state.playerVeh.kind === "police") out.push({ x: state.x, z: state.z, heading: state.heading });
+      // (Lights alone are enough: the car right in front pulls over.)
+      if ((duty.duty.lights || duty.duty.siren) && !state.onFoot && state.playerVeh.kind === "police") {
+        out.push({ x: state.x, z: state.z, heading: state.heading, speed: Math.hypot(state.vx, state.vz) });
+      }
       for (const officer of state.police) if (officer.assist && !officer.onFoot) out.push(officer);
       return out;
     },

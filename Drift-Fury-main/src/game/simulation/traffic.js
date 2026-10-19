@@ -502,26 +502,47 @@ export function createTraffic({ roadXs, roadZs, shapes, colors, random = Math.ra
   }
 
   /**
-   * A siren coming up behind in the same lane (a chasing police car, an ambulance or fire truck on its
-   * way): 0 none, 1 behind (pull over and slow down), 2 alongside (stopped at the curb until it is
-   * past, by its whole length).
+   * Lights or a siren right behind it (a chasing police car, the player's police car, an ambulance or fire
+   * truck on its way): 0 none, 1 right behind (pull over and slow down), 2 stopped right behind it or
+   * alongside (stop at the curb until it goes), 3 an ambulance or fire truck behind (move over a little and
+   * drive on). Only for one directly behind in the same lane, close, going the same way, with no other car
+   * in between: a police car further back, ahead, or driving past is going somewhere else, and the car
+   * drives on.
    */
   function sirenBehind(car, world) {
     const fx = -Math.sin(car.heading);
     const fz = -Math.cos(car.heading);
     let result = 0;
-    const check = (x, z, halfLength) => {
-      const dx = x - car.x;
-      const dz = z - car.z;
+    const check = (o, halfLength, speed) => {
+      const dx = o.x - car.x;
+      const dz = o.z - car.z;
       const behind = -(dx * fx + dz * fz);
-      if (Math.abs(dx * fz - dz * fx) > 5) return;
-      if (behind > -(car.halfLength + halfLength + 3) && behind < 45) {
-        result = Math.max(result, behind < car.halfLength + halfLength + 2 ? 2 : 1);
+      const side = dx * fz - dz * fx;
+      // Same way (not crossing, not oncoming).
+      const ox = -Math.sin(o.heading);
+      const oz = -Math.cos(o.heading);
+      if (ox * fx + oz * fz < 0.75) return;
+      const bumpers = car.halfLength + halfLength;
+      // Alongside (passing): it waits at the curb while the police car goes by.
+      if (behind > -bumpers && behind < bumpers + 1 && Math.abs(side) < 4.5) {
+        result = Math.max(result, 2);
+        return;
       }
+      if (behind < bumpers || behind > bumpers + 20 || Math.abs(side) > 2.4) return;
+      // Nothing in between (a car between them is the one it is behind).
+      for (const other of cars) {
+        if (other === car) continue;
+        const ax = other.x - car.x;
+        const az = other.z - car.z;
+        const otherBehind = -(ax * fx + az * fz);
+        if (otherBehind > 0 && otherBehind < behind && Math.abs(ax * fz - az * fx) < 2.4) return;
+      }
+      // Stopped right behind: stop (the start of a traffic stop); otherwise slow down at the curb.
+      result = Math.max(result, (speed ?? 99) < 2 && behind < bumpers + 12 ? 2 : 1);
     };
-    for (const o of world.police) if (!o.onFoot && world.chasing) check(o.x, o.z, HALF_LENGTH);
-    // The player's police car (the police job) and units on a call, sirens on.
-    for (const o of world.sirens || []) check(o.x, o.z, HALF_LENGTH);
+    for (const o of world.police) if (!o.onFoot && world.chasing) check(o, HALF_LENGTH, o.speed);
+    // The player's police car (lights on) and units on a call.
+    for (const o of world.sirens || []) check(o, HALF_LENGTH, o.speed);
     if (result) return result;
     // An ambulance or a fire truck behind in the lane (it never passes): move over a little and drive on.
     for (const other of cars) {

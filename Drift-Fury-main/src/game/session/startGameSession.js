@@ -1799,7 +1799,9 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         });
       }
       if (interaction) {
-        interaction.elapsed += dt;
+        // (Real time, not the step's capped time: on a slow frame rate getting in or out of the car would
+        // otherwise drag on for many seconds before the player could move.)
+        interaction.elapsed += Math.min(frameSeconds, 0.25);
         const time = Math.min(interaction.elapsed / interaction.duration, 1);
         const ease = (e) => e * e * (3 - 2 * e);
         const open = ease(Math.min(time / 0.2, 1)) * (1 - ease(Math.max(0, (time - 0.78) / 0.22)));

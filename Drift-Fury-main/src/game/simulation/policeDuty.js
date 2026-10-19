@@ -1187,8 +1187,17 @@ export function createPoliceDuty({ state, traffic, roadXs, roadZs, blockedAt, li
           duty.plateCard = { record: record.car, until: state.elapsed + 10 };
         }
       }
-      // E with the lights on: pull the car ahead over.
+      // E with the lights on: pull the car ahead over. Or just stop right behind it with the lights on (it
+      // has pulled over for them): after a moment, that is a traffic stop too.
       if (presses.KeyE && duty.lights && car && state.station < 0 && !car.pulled && !car.flee) stopCar(car);
+      const behindStopped =
+        duty.lights && car && !car.pulled && !car.flee && !car.mission && car.speed < 0.6 && speed < 1.5 && car.shift > 1.2 &&
+        Math.hypot(car.x - state.x, car.z - state.z) < 16;
+      duty.autoStop = behindStopped ? (duty.autoStop || 0) + dt : 0;
+      if (duty.autoStop > 1.6) {
+        duty.autoStop = 0;
+        stopCar(car);
+      }
     }
 
     // Suspects.

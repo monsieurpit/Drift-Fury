@@ -1180,6 +1180,8 @@ export function createGame(car, engine, solids, noPolice = false) {
         state.fuel = clamp(state.fuel + dt * 14, 0, 100);
       }
       sightTick++;
+      // On duty, the police are colleagues: nothing the player did makes them give chase.
+      if (duty.duty.on) state.wanted = 0;
       const playerBox = orientedBox(state.x, state.z, state.heading, PLAYER_HALF_WIDTH, PLAYER_HALF_LENGTH);
       let rammed = false;
       let seen = false;
