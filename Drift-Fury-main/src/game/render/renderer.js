@@ -69,11 +69,15 @@ class GameAOPass extends GTAOPass {
     for (const { object, alwaysHidden } of this.drawables) {
       if (!object.visible) continue;
       let hide = alwaysHidden;
-      // Instanced cars hold only the cars in view already (their geometry sphere is not where they are).
-      if (!hide && !object.isInstancedMesh) {
+      // Instanced cars hold only the cars in view already (their geometry sphere is not where they are);
+      // other instanced things (props, pines, boulders) have a sphere around all their instances, fixed
+      // when they were placed: those are skipped beyond 90 m too. (Instances that move, like a crowd, have
+      // none and are always drawn.)
+      const instancedFixed = object.isInstancedMesh && !object.userData.carInstances && !!object.boundingSphere;
+      if (!hide && (!object.isInstancedMesh || instancedFixed)) {
         // Contact shadows only matter close up: skip whatever lies wholly beyond 90 m (most of the
         // scene's triangles), so the extra depth/normal pass stays cheap.
-        const sphere = object.boundingSphere || object.geometry.boundingSphere;
+        const sphere = object.isInstancedMesh ? object.boundingSphere : object.boundingSphere || object.geometry.boundingSphere;
         if (sphere) {
           aoSphere.copy(sphere).applyMatrix4(object.matrixWorld);
           hide = aoSphere.distanceToPoint(eye) > 90;
