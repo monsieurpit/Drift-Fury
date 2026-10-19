@@ -6,7 +6,7 @@
 // let them go, or arrest them (cuffs, escort, the back seat, booked at the jail). Suspects comply, run (on
 // foot or in their car: a pursuit), or fight back (armed ones shoot). Backup (B) sends the patrol cruisers;
 // a transport unit can take a prisoner. Pay, experience and rank (the fleet, uniforms and weapons unlock
-// with rank); misconduct (a false arrest, an unjustified shooting) brings complaints and suspension.
+// with rank); misconduct (a false arrest, an unjustified shooting) brings complaints (on the record only).
 //
 // Pure simulation on the game state: the session draws the suspects (taking pedestrians' bodies), the
 // lights and sirens, and shows the menus; it reports what only it knows (a suspect killed, a person the
@@ -227,17 +227,11 @@ export function createPoliceDuty({ state, traffic, roadXs, roadZs, blockedAt, li
     pay(amount, reason);
     duty.shift.pay += amount;
   }
+  /** A complaint on the record (shown in the MDT). Only a note: complaints never cost the player the job. */
   function strike(reason, severe = false) {
     duty.strikes += severe ? 3 : 1;
     radio("radio.strike", { reason: `strike.${reason}` });
     duty.events.push({ type: "strike", reason });
-    if (duty.strikes >= 3) suspend();
-  }
-  function suspend() {
-    radio("radio.suspended");
-    endDuty(true);
-    duty.suspendedFor = 120;
-    duty.strikes = 0;
   }
 
   /* ----- suspects ----- */
@@ -849,8 +843,10 @@ export function createPoliceDuty({ state, traffic, roadXs, roadZs, blockedAt, li
     const primaries = callout.suspects.filter((s) => s.role === "primary");
     if (!primaries.length) return;
     if (primaries.some((s) => !s.outcome)) return;
-    if (callout.type === "accident" && !callout.towed) return;
-    if (callout.suspects.some((s) => !s.outcome && s.role !== "victim")) return;
+    // Once the main suspects are dealt with (arrested, cited, killed, gone), the call is over: whoever else
+    // is still around (witnesses, victims, bystanders) goes home. A crash is only cleared once its wrecks are
+    // towed, unless someone died there (the coroner's case then).
+    if (callout.type === "accident" && !callout.towed && !primaries.some((s) => s.outcome === "dead")) return;
     if (primaries.every((s) => s.outcome === "escaped")) {
       endCallout(false, "escaped");
       return;
@@ -1191,7 +1187,7 @@ export function createPoliceDuty({ state, traffic, roadXs, roadZs, blockedAt, li
       // has pulled over for them): after a moment, that is a traffic stop too.
       if (presses.KeyE && duty.lights && car && state.station < 0 && !car.pulled && !car.flee) stopCar(car);
       const behindStopped =
-        duty.lights && car && !car.pulled && !car.flee && !car.mission && car.speed < 0.6 && speed < 1.5 && car.shift > 1.2 &&
+        duty.lights && car && !car.pulled && !car.flee && !car.mission && car.speed < 0.6 && speed < 1.5 && car.shift > 1 &&
         Math.hypot(car.x - state.x, car.z - state.z) < 16;
       duty.autoStop = behindStopped ? (duty.autoStop || 0) + dt : 0;
       if (duty.autoStop > 1.6) {
