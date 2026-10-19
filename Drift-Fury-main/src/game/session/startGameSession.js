@@ -10,6 +10,7 @@ import {
   MeshStandardMaterial,
   Object3D,
   OctahedronGeometry,
+  SpotLight,
   Vector3,
 } from "three";
 import { createAudio } from "../audio/createAudio.js";
@@ -282,6 +283,17 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   };
   let playerCar = buildPlayerCar(car.color, car.shape);
   scene.add(playerCar);
+  // Two dark stand-ins for the player's headlights (real spot lights) while the car is hidden (the player
+  // on foot): the scene's light count never changes, so no material has to be compiled again. (Getting out
+  // of the car took the two lights away and recompiled every shader in view at once: the game froze.)
+  const spareBeams = [0, 1].map(() => {
+    const beam = new SpotLight("#000000", 0, 1, 0.5, 0.8, 1.6);
+    beam.position.set(0, -50, 0);
+    beam.target.position.set(0, -60, 0);
+    beam.visible = false;
+    scene.add(beam, beam.target);
+    return beam;
+  });
   let playerCarSpec = game.state.playerVeh.spec;
   // Police, parked and traffic cars are instanced per look (carInstancing.js).
   // Moving things get motion vectors for the temporal antialiasing (taaPass.js).
@@ -1578,6 +1590,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         addInteractionDoor();
       }
       playerCar.visible = !state.onFoot || interaction?.direction === "exit";
+      const hiddenBeams = playerCar.visible ? 0 : (playerCar.userData.headlightBeams || []).length;
+      spareBeams.forEach((beam, index) => (beam.visible = index < hiddenBeams));
       if (!state.onFoot) {
         playerCar.position.set(state.x, (state.y || 0) + 0.12, state.z);
         sitOnGround(

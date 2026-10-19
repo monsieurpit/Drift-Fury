@@ -276,6 +276,9 @@ export function createClusteredLights({ enabled = true } = {}) {
     patch(material, { skipFlags = 0 } = {}) {
       if (!enabled || patched.has(material)) return material;
       patched.add(material);
+      // A copy of a patched material that took its patch along (the skid marks' per-trail copies): patched
+      // already (patching it again declared everything twice, and its shader failed to compile).
+      if (material.onBeforeCompile?.clustered) return material;
       const previous = material.onBeforeCompile;
       material.onBeforeCompile = (shader, renderer) => {
         previous?.call(material, shader, renderer);
@@ -285,6 +288,7 @@ export function createClusteredLights({ enabled = true } = {}) {
           .replace("#include <lights_fragment_end>", lighting(skipFlags));
         useWorldVarying(shader, "vClusterWorld");
       };
+      material.onBeforeCompile.clustered = true;
       const key = material.customProgramCacheKey?.() ?? "";
       material.customProgramCacheKey = () => key + "|cluster" + skipFlags;
       material.needsUpdate = true;
