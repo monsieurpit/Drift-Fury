@@ -31,6 +31,7 @@ import {
   storedQuality,
 } from "../render/quality.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
+import { splitTwoPass } from "../render/twoPassSides.js";
 import { createShadowCache } from "../render/shadowCache.js";
 import { createFramePacer } from "../render/framePacer.js";
 import { warmUpSession } from "../render/warmUp.js";
@@ -207,6 +208,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   }
   await stage(0.36, t("stage.geometry"));
   const staticBatch = batchStaticMeshes(scene, new Set(signals.flatMap((signal) => signal.lenses)), 96);
+  // (The world's double-sided glass drawn as back faces, then front faces, by two meshes that never change.)
+  splitTwoPass(scene);
   // Everything in the scene so far is the world, which never moves: its shadows can be cached.
   const shadowCache = createShadowCache(
     renderer,

@@ -9,6 +9,7 @@
 // templates are painted white and each car's paint colour is set per instance, so cars of every colour
 // share their shape's draw calls.
 import { Color, Frustum, InstancedMesh, Matrix4, Object3D, Sphere, Box3 } from "three";
+import { twoPassSides } from "../render/twoPassSides.js";
 
 const LIGHT_NAMES = new Set(["blue", "red"]);
 const WHITE = new Color(1, 1, 1);
@@ -54,20 +55,23 @@ export function createCarInstancer(scene, { onMesh } = {}) {
     const parts = [];
     template.traverse((object) => {
       if (!object.isMesh) return;
-      parts.push({
-        geometry: object.geometry,
-        material: object.material,
-        local: rootInverse.clone().multiply(object.matrixWorld),
-        castShadow: object.castShadow,
-        receiveShadow: object.receiveShadow,
-        renderOrder: object.renderOrder,
-        layers: object.layers.mask,
-        name: object.name,
-        light: LIGHT_NAMES.has(object.name) ? object.name : null,
-        proxy: object.name === "car-shadow-proxy",
-        paint: !!object.material?.userData?.carPaint,
-        mesh: null,
-      });
+      // (A transparent double-sided part is two parts: its back faces, then its front faces.)
+      for (const material of twoPassSides(object.material) || [object.material]) {
+        parts.push({
+          geometry: object.geometry,
+          material,
+          local: rootInverse.clone().multiply(object.matrixWorld),
+          castShadow: object.castShadow,
+          receiveShadow: object.receiveShadow,
+          renderOrder: object.renderOrder,
+          layers: object.layers.mask,
+          name: object.name,
+          light: LIGHT_NAMES.has(object.name) ? object.name : null,
+          proxy: object.name === "car-shadow-proxy",
+          paint: !!object.material?.userData?.carPaint,
+          mesh: null,
+        });
+      }
     });
     const bounds = new Box3().setFromObject(template);
     const local = bounds.applyMatrix4(rootInverse).getBoundingSphere(new Sphere());

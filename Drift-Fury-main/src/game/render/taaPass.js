@@ -399,6 +399,15 @@ export class TAAPass extends Pass {
     uniforms.prevViewProjection.value.copy(
       this.historyValid ? this.prevViewProjection : this.currViewProjection,
     );
+    // The lights are on the motion-vector layer too: a render of the scene that saw none would change its
+    // light setup, and three.js would then work out every lit material's shader again, in this pass and
+    // the next frame's colour pass. (Shadow maps are not redrawn: the colour pass has updated them.)
+    if (!this.lights || ++this.lightsAge > 60) {
+      this.lights = [];
+      this.lightsAge = 0;
+      scene.traverse((object) => object.isLight && this.lights.push(object));
+    }
+    for (const light of this.lights) light.layers.enable(VELOCITY_LAYER);
     const override = scene.overrideMaterial;
     const layers = camera.layers.mask;
     renderer.getClearColor(this.savedClearColor);
