@@ -24,6 +24,7 @@ uniform vec3 uHorizon;
 uniform vec3 uZenith;
 uniform vec3 uCityGlow;
 uniform float uDay;
+uniform float uFlash;
 uniform vec3 uDayHorizon;
 varying vec3 vDirection;
 
@@ -173,6 +174,8 @@ void main() {
     daySky = mix(daySky, vec3(1.0, 0.98, 0.9) * 6.0, sunDisk * step(0.0, h));
     sky = mix(sky, daySky, uDay);
   }
+  // Lightning: the whole sky lit for an instant, brightest low over the horizon behind the clouds.
+  sky += vec3(0.32, 0.35, 0.42) * uFlash * aboveHorizon * (0.6 + 0.4 * exp(-up * 3.0));
   // Dither against banding in the very dark gradient.
   sky += (hash12(gl_FragCoord.xy) - 0.5) * 0.0012;
   gl_FragColor = vec4(max(sky, 0.0), 1.0);
@@ -193,6 +196,7 @@ export function buildSky(world) {
       uZenith: { value: new Color("#050a18") },
       uCityGlow: { value: new Color(0.05, 0.03, 0.016) },
       uDay: { value: 0 },
+      uFlash: { value: 0 },
       uDayHorizon: { value: new Color("#a9bdcd") },
     },
     vertexShader: VERTEX,
@@ -210,6 +214,10 @@ export function buildSky(world) {
   scene.background = null;
   const update = (time) => {
     material.uniforms.uTime.value = time;
+  };
+  /** Lightning, 0 (none) to 1. */
+  update.setFlash = (level) => {
+    material.uniforms.uFlash.value = level;
   };
   /** Day (true) or night. */
   update.setDay = (day) => {

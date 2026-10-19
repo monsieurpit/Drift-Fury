@@ -240,6 +240,7 @@ export function GamePage() {
               onResume={() => setPaused(false)}
               onQuality={(value) => controls.current.setQuality?.(value)}
               onTimeOfDay={(day) => controls.current.setTimeOfDay?.(day)}
+              onRain={(on) => controls.current.setRain?.(on)}
               onEnd={() =>
                 finishSession({
                   ...hud,

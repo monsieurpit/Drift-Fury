@@ -272,7 +272,14 @@ export function Hud({ hud, engine, muted, onMute, onPause, onStation, onRepair }
         {hud.onFoot && hud.weapon && (
           <div className="mt-2 flex items-center justify-between text-[9px] uppercase tracking-widest text-[#a5b6ac]">
             <span>{t("hud.weapons")}</span>
-            <span className="font-bold text-[#e8eddf]">{t(`weapon.${hud.weapon}`)}</span>
+            <span className="font-bold text-[#e8eddf]">
+              {t(`weapon.${hud.weapon}`)}
+              {hud.ammo && (
+                <span className={hud.ammo.reloading ? "ml-2 text-[#ffd23a]" : "ml-2 text-[#a5b6ac]"}>
+                  {hud.ammo.reloading ? "···" : `${hud.ammo.rounds}/${hud.ammo.magazine}`}
+                </span>
+              )}
+            </span>
           </div>
         )}
         <div className="mt-3 flex items-center gap-2">

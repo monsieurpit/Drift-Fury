@@ -11,7 +11,7 @@
 import { Color, Frustum, InstancedMesh, Matrix4, Object3D, Sphere, Box3 } from "three";
 import { twoPassSides } from "../render/twoPassSides.js";
 
-const LIGHT_NAMES = new Set(["blue", "red"]);
+const LIGHT_NAMES = new Set(["blue", "red", "brake", "blinkL", "blinkR"]); // (parts shown only while the car's handle says so)
 const WHITE = new Color(1, 1, 1);
 const MAX_DISTANCE = 200; // metres
 
@@ -139,7 +139,7 @@ export function createCarInstancer(scene, { onMesh } = {}) {
             !camera ||
             (frustum.intersectsSphere(sphere) &&
               sphere.center.distanceToSquared(camera.position) < MAX_DISTANCE * MAX_DISTANCE);
-          const code = (inView ? 1 : 0) | (handle.userData.blue ? 2 : 0) | (handle.userData.red ? 4 : 0);
+          const code = (inView ? 1 : 0) | (handle.userData.blue ? 2 : 0) | (handle.userData.red ? 4 : 0) | (handle.userData.brake ? 8 : 0) | (handle.userData.blinkL ? 16 : 0) | (handle.userData.blinkR ? 32 : 0);
           if (seen[entries] !== handle || seen[entries + 1] !== code) {
             seen[entries] = handle;
             seen[entries + 1] = code;

@@ -30,6 +30,11 @@ export function createAudio(engine) {
       airhorn() {},
       radioBeep() {},
       taser() {},
+      footstep() {},
+      rain() {},
+      reload() {},
+      thunder() {},
+      whoosh() {},
       radioNext() {
         return null;
       },
@@ -81,6 +86,7 @@ export function createAudio(engine) {
   let closed = false;
   let lastShiftSerial = 0;
   let muted = true;
+  let rainSound = null;
   return {
     ready: createWorkletEngine(context, master, engine.id)
       .then((voice) => {
@@ -244,6 +250,159 @@ export function createAudio(engine) {
       const last = burst("lowpass", 900, 0.12 * Math.sqrt(near), 0.16 + Math.random() * 0.08, 0.45);
       last.onended = () => {
         for (const node of nodes) node?.disconnect();
+      };
+    },
+    /**
+     * The player's footstep: a soft heel thud and the scuff of the sole (`strength` 1 walking, ~1.6
+     * running, 2.5 landing a jump); `wet`: on the rain-wet city streets, a little splash.
+     */
+    footstep(strength = 1, wet = false) {
+      if (closed || muted) return;
+      const now = context.currentTime;
+      const nodes = [];
+      const burst = (buffer, type, frequency, level, length, q = 0.8) => {
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        source.playbackRate.value = 0.9 + Math.random() * 0.2;
+        const filter = context.createBiquadFilter();
+        filter.type = type;
+        filter.frequency.value = frequency * (0.9 + Math.random() * 0.2);
+        filter.Q.value = q;
+        const gain = context.createGain();
+        gain.gain.setValueAtTime(level, now);
+        gain.gain.exponentialRampToValueAtTime(0.0003, now + length);
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(master);
+        source.start(now, Math.random() * 0.3);
+        source.stop(now + length + 0.02);
+        nodes.push(source, filter, gain);
+        return source;
+      };
+      burst(voiceNoise, "lowpass", 320, 0.09 * strength, 0.07);
+      const last = burst(whiteNoise, "bandpass", 2600, 0.018 * strength, wet ? 0.11 : 0.05, 1.2);
+      if (wet) burst(whiteNoise, "highpass", 4200, 0.012 * strength, 0.14);
+      last.onended = () => {
+        for (const node of nodes) node.disconnect();
+      };
+    },
+    /**
+     * Rain falling all around (`on`), its hiss muffled inside a car (`inCar`). A looping noise, faded in
+     * and out.
+     */
+    rain(on, inCar = false) {
+      if (closed) return;
+      const now = context.currentTime;
+      if (!rainSound) {
+        if (!on) return;
+        const source = context.createBufferSource();
+        source.buffer = whiteNoise;
+        source.loop = true;
+        const band = context.createBiquadFilter();
+        band.type = "lowpass";
+        band.frequency.value = 5000;
+        const body = context.createBiquadFilter();
+        body.type = "highpass";
+        body.frequency.value = 400;
+        const gain = context.createGain();
+        gain.gain.value = 0;
+        source.connect(body);
+        body.connect(band);
+        band.connect(gain);
+        gain.connect(master);
+        source.start();
+        rainSound = { source, band, gain, on: null, inCar: null };
+      }
+      if (rainSound.on === on && rainSound.inCar === inCar) return;
+      rainSound.on = on;
+      rainSound.inCar = inCar;
+      rainSound.gain.gain.setTargetAtTime(on ? (inCar ? 0.05 : 0.07) : 0, now, 0.6); // (muting is the master's)
+      rainSound.band.frequency.setTargetAtTime(inCar ? 1300 : 5000, now, 0.2);
+    },
+    /** A reload taking `length` seconds: the magazine out (a click), the new one in and the slide (two). */
+    reload(length = 1.4) {
+      if (closed || muted) return;
+      const now = context.currentTime;
+      const click = (at, frequency, level) => {
+        const source = context.createBufferSource();
+        source.buffer = whiteNoise;
+        const filter = context.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.value = frequency;
+        filter.Q.value = 3;
+        const gain = context.createGain();
+        gain.gain.setValueAtTime(level, now + at);
+        gain.gain.exponentialRampToValueAtTime(0.0003, now + at + 0.04);
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(master);
+        source.start(now + at, Math.random() * 0.5);
+        source.stop(now + at + 0.06);
+        source.onended = () => {
+          source.disconnect();
+          filter.disconnect();
+          gain.disconnect();
+        };
+      };
+      click(0.1, 2200, 0.08);
+      click(length * 0.6, 1800, 0.1);
+      click(length * 0.85, 3200, 0.09);
+    },
+    /** Thunder `distance` km away: a crack (near) and a long low rumble that rolls and fades. */
+    thunder(distance = 2) {
+      if (closed || muted) return;
+      const now = context.currentTime;
+      const length = 3 + distance * 1.2;
+      const level = 0.5 / (0.6 + distance * 0.5);
+      const source = context.createBufferSource();
+      source.buffer = voiceNoise;
+      source.loop = true;
+      source.playbackRate.value = 0.5;
+      const low = context.createBiquadFilter();
+      low.type = "lowpass";
+      low.frequency.setValueAtTime(distance < 1.5 ? 900 : 300, now);
+      low.frequency.exponentialRampToValueAtTime(110, now + length);
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(level, now + (distance < 1.5 ? 0.05 : 0.4));
+      // (Rolling: a few swells as the sound comes back from far parts of the bolt.)
+      for (let k = 1; k <= 3; k++) gain.gain.setTargetAtTime(level * (0.9 - k * 0.2), now + (length * k) / 5, 0.3);
+      gain.gain.setTargetAtTime(0.0001, now + length * 0.75, length * 0.15);
+      source.connect(low);
+      low.connect(gain);
+      gain.connect(master);
+      source.start(now);
+      source.stop(now + length + 0.5);
+      source.onended = () => {
+        source.disconnect();
+        low.disconnect();
+        gain.disconnect();
+      };
+    },
+    /** A punch thrown: the swish of the arm through the air. */
+    whoosh() {
+      if (closed || muted) return;
+      const now = context.currentTime;
+      const source = context.createBufferSource();
+      source.buffer = whiteNoise;
+      const filter = context.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.Q.value = 1.4;
+      filter.frequency.setValueAtTime(500, now);
+      filter.frequency.exponentialRampToValueAtTime(1900, now + 0.12);
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(0.0003, now);
+      gain.gain.exponentialRampToValueAtTime(0.06, now + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0003, now + 0.16);
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(master);
+      source.start(now, Math.random() * 0.5);
+      source.stop(now + 0.18);
+      source.onended = () => {
+        source.disconnect();
+        filter.disconnect();
+        gain.disconnect();
       };
     },
     /** A bullet hitting a car: a short metallic ping. */

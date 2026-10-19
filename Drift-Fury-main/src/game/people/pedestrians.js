@@ -69,6 +69,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
   }
 
   const people = [];
+  let raining = false; // (people hurry along, heads down)
   let fightTimer = 45 + random() * 60; // seconds to the next street fight
   let lastNear = null; // where the camera was last step (for putting people back out of its sight)
 
@@ -345,7 +346,8 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
      * z, onFoot } (whom someone in a fist fight goes for).
      * Returns this step's events: { type: "killed" | "runOver" | "scream" | "punchPlayer", ped, x, z, ... }.
      */
-    update(dt, { cars, camera, phase, player = null }) {
+    update(dt, { cars, camera, phase, player = null, rain = false }) {
+      raining = rain;
       const events = [];
       camera.getWorldDirection(cameraForward);
       const near = { x: camera.position.x, z: camera.position.z, viewX: cameraForward.x, viewZ: cameraForward.z };
@@ -680,7 +682,8 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           ped.lat += Math.max(-1.1 * dt, Math.min(1.1 * dt, targetLat - ped.lat));
           ped.lat = Math.max(LAT_MIN, Math.min(LAT_MAX, ped.lat));
           // Slow down behind someone slower, rather than walking through them.
-          let pace = ped.speed;
+          // (In the rain, everyone hurries.)
+          let pace = ped.speed * (raining ? 1.3 : 1);
           const blockedAhead = blocked(
             ped.ax + ped.ux * (ped.s + 0.45) + ped.nx * ped.lat,
             ped.az + ped.uz * (ped.s + 0.45) + ped.nz * ped.lat,
@@ -790,6 +793,8 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           }
         } else if (ped.mode === "wait") rig.userData.L.head.rotation.y = Math.sin(ped.lookTimer * 2) * 0.5;
         else rig.userData.L.head.rotation.y = 0;
+        // In the rain, heads down against it.
+        if (raining && (ped.mode === "walk" || ped.mode === "cross" || ped.mode === "wait")) rig.userData.L.head.rotation.x = 0.28;
         // Someone walking right past the player on foot glances at them.
         if (player && player.onFoot && !player.dead && (ped.mode === "walk" || ped.mode === "wait" || ped.mode === "cross")) {
           const away = Math.hypot(player.x - ped.x, player.z - ped.z);

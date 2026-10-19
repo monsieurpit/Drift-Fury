@@ -1,4 +1,4 @@
-import { Box3, BoxGeometry, CylinderGeometry, Mesh, MeshBasicMaterial, Vector3 } from "three";
+import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, CylinderGeometry, Mesh, MeshBasicMaterial, Vector3 } from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
 import { SHADOW_ONLY_LAYER } from "../render/shadowCache.js";
@@ -6,6 +6,44 @@ import { buildCar } from "./carModel.js";
 import { buildModelCar, carModelKey } from "./carModels.js";
 /* traffic and police cars never animate their parts, so each look is built and batched once, then cloned */
 export const trafficTemplates = new Map();
+
+// A braking car's brake lights: bright red over the lamp's own glass (drawn just in front of it).
+const brakeGlowMaterial = new MeshBasicMaterial({ color: "#ff1a10", polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
+brakeGlowMaterial.color.multiplyScalar(3.2); // (bright enough to bloom a little)
+
+const blinkerGlowMaterial = new MeshBasicMaterial({ color: "#ff9a1c", polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 });
+blinkerGlowMaterial.color.multiplyScalar(3.4);
+
+/**
+ * `mesh`'s triangles on the car's left (x < 0: the car faces -Z) and right, as two geometries in the mesh's
+ * own space: [["blinkL", geometry], ["blinkR", geometry]] (a side with none left out).
+ */
+function splitBySide(mesh) {
+  const source = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+  const position = source.attributes.position;
+  const sides = { blinkL: [], blinkR: [] };
+  const point = new Vector3();
+  for (let i = 0; i + 2 < position.count; i += 3) {
+    let x = 0;
+    for (let k = 0; k < 3; k++) x += point.fromBufferAttribute(position, i + k).applyMatrix4(mesh.matrixWorld).x;
+    sides[x < 0 ? "blinkL" : "blinkR"].push(i);
+  }
+  const result = [];
+  for (const [name, starts] of Object.entries(sides)) {
+    if (!starts.length) continue;
+    const geometry = new BufferGeometry();
+    for (const [attributeName, attribute] of Object.entries(source.attributes)) {
+      const size = attribute.itemSize;
+      const array = new Float32Array(starts.length * 3 * size);
+      starts.forEach((start, t) => {
+        for (let k = 0; k < 3; k++) for (let c = 0; c < size; c++) array[(t * 3 + k) * size + c] = attribute.getComponent(start + k, c);
+      });
+      geometry.setAttribute(attributeName, new BufferAttribute(array, size));
+    }
+    result.push([name, geometry]);
+  }
+  return result;
+}
 
 // Drawn only into the shadow map: no colour, no depth in the main pass.
 const shadowOnlyMaterial = new MeshBasicMaterial({ colorWrite: false, depthWrite: false });
@@ -83,6 +121,15 @@ function shadowProxy(template) {
  * each car's colour is applied per instance (carInstancing.js), so every colour of a body shape is drawn
  * together. (`color` is kept for the callers' sake; the template does not depend on it.)
  */
+// The glowing lamps of the cars in traffic (dimmer by day: setTrafficLamps).
+const lampMaterials = new Set();
+let lampLevel = 1;
+/** The traffic's lamps: 1 at night, less by day. */
+export function setTrafficLamps(level) {
+  lampLevel = level;
+  for (const material of lampMaterials) material.emissiveIntensity = 0.45 * level;
+}
+
 export function trafficTemplate(color, shape, police = false, moving = false) {
   const key = (police ? "police" : moving ? "moving" : "traffic") + "|" + shape;
   let template = trafficTemplates.get(key);
@@ -101,11 +148,36 @@ export function trafficTemplate(color, shape, police = false, moving = false) {
           const glowing = material.clone();
           glowing.emissive?.set("#ffffff");
           glowing.emissiveMap = glowing.map;
-          glowing.emissiveIntensity = 0.45;
+          glowing.emissiveIntensity = 0.45 * lampLevel;
+          lampMaterials.add(glowing);
           lit.set(material, glowing);
         }
         object.material = lit.get(material);
       });
+      // The brake lights' glow, a part shown only while the car brakes (carInstancing.js: "brake").
+      const brakeLights = [];
+      template.traverse((object) => {
+        if (object.isMesh && /Brakelights_UCB/i.test(object.name)) brakeLights.push(object);
+      });
+      for (const lamp of brakeLights) {
+        const glow = new Mesh(lamp.geometry, brakeGlowMaterial);
+        glow.name = "brake";
+        lamp.add(glow);
+      }
+      // The turn signals: the model's blinkers (all four corners in one mesh) split into the left and the
+      // right side's, each a part shown while that signal is lit ("blinkL", "blinkR").
+      template.updateMatrixWorld(true);
+      const blinkers = [];
+      template.traverse((object) => {
+        if (object.isMesh && /blinkers_UCB/i.test(object.name)) blinkers.push(object);
+      });
+      for (const lamp of blinkers) {
+        for (const [name, geometry] of splitBySide(lamp)) {
+          const glow = new Mesh(geometry, blinkerGlowMaterial);
+          glow.name = name;
+          lamp.add(glow);
+        }
+      }
     }
     template.userData = { police, moving };
     batchStaticMeshes(template, new Set(), Infinity);

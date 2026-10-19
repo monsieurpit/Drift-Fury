@@ -1,5 +1,5 @@
 import React from "react";
-import { PlayIcon, LogOutIcon, SunIcon, MoonIcon } from "lucide-react";
+import { PlayIcon, LogOutIcon, SunIcon, MoonIcon, CloudRainIcon, CloudSunIcon } from "lucide-react";
 import { FEATURE_LABELS, QUALITY_LABELS, brokenFeatures, storedQuality } from "../render/quality.js";
 import { t } from "../../i18n.js";
 /** The time of day chosen (remembered between sessions): "day" or "night". */
@@ -10,7 +10,16 @@ function storedTime() {
     return "night";
   }
 }
-export function PauseMenu({ onResume, onEnd, onQuality, onTimeOfDay, hud }) {
+/** The weather chosen (remembered): "rain" or "clear". */
+function storedWeather() {
+  try {
+    return localStorage.getItem("drift-fury-weather") === "rain" ? "rain" : "clear";
+  } catch {
+    return "clear";
+  }
+}
+export function PauseMenu({ onResume, onEnd, onQuality, onTimeOfDay, onRain, hud }) {
+  const [weather, setWeather] = React.useState(storedWeather);
   const [quality, setQuality] = React.useState(storedQuality);
   const [time, setTime] = React.useState(storedTime);
   const broken = [...brokenFeatures()];
@@ -70,6 +79,28 @@ export function PauseMenu({ onResume, onEnd, onQuality, onTimeOfDay, hud }) {
               className={
                 "flex items-center justify-center gap-2 rounded-md border p-2 text-[9px] tracking-wider " +
                 (time === value ? "border-[#c6dc77] bg-[#c6dc77] text-[#0c1215]" : "border-white/15 text-[#c6cdce]")
+              }
+            >
+              <Icon size={12} />
+              {t(`pause.${value}`)}
+            </button>
+          ))}
+        </div>
+        <p className="eyebrow mt-6 !text-[#849395]">{t("pause.weather")}</p>
+        <div className="mt-2 grid grid-cols-2 gap-1">
+          {[
+            ["clear", CloudSunIcon],
+            ["rain", CloudRainIcon],
+          ].map(([value, Icon]) => (
+            <button
+              key={value}
+              onClick={() => {
+                setWeather(value);
+                onRain?.(value === "rain");
+              }}
+              className={
+                "flex items-center justify-center gap-2 rounded-md border p-2 text-[9px] tracking-wider " +
+                (weather === value ? "border-[#c6dc77] bg-[#c6dc77] text-[#0c1215]" : "border-white/15 text-[#c6cdce]")
               }
             >
               <Icon size={12} />

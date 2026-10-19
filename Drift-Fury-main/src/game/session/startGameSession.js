@@ -45,7 +45,7 @@ import {
 import { CIVILIAN_SHAPES, createGame } from "../simulation/game.js";
 import { batchPlayerCar } from "../vehicles/batchPlayerCar.js";
 import { buildCar } from "../vehicles/carModel.js";
-import { trafficTemplate, trafficTemplates } from "../vehicles/trafficCars.js";
+import { setTrafficLamps, trafficTemplate, trafficTemplates } from "../vehicles/trafficCars.js";
 import { createCarInstancer } from "../vehicles/carInstancing.js";
 import { buildModelCar, carModelKey, loadCarModels } from "../vehicles/carModels.js";
 import { createHelicopter } from "../vehicles/helicopter.js";
@@ -56,6 +56,7 @@ import { createFire } from "../effects/fire.js";
 import { createEmergencyServices } from "./emergencyServices.js";
 import { createPoliceJob } from "./policeJob.js";
 import { WEAPONS } from "../simulation/policeDuty.js";
+import { createRain } from "../effects/rain.js";
 import { fightPose } from "../people/pedestrians.js";
 import { buildWorldInSteps } from "../world/buildWorld.js";
 import { terrainHeight } from "../world/terrain.js";
@@ -174,6 +175,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     lightByLamps,
     clusteredLights,
     setDay: setWorldDay,
+    setLightning,
   } = worldStep.value;
   /*
    * Day or night (the pause menu; remembered). By day: the sun, a blue sky, the lamps and the city's lit
@@ -195,8 +197,20 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   } catch {
     // (night)
   }
+  // Rain (the pause menu; remembered): streaks falling around the camera, and its hiss.
+  const rain = createRain(composer, camera);
+  const WEATHER_KEY = "drift-fury-weather";
+  let raining = false;
+  try {
+    raining = localStorage.getItem(WEATHER_KEY) === "rain";
+  } catch {
+    // (clear)
+  }
+  rain.set(raining, daytime);
   function lookOfDay(day) {
     daytime = day;
+    rain.set(raining, day);
+    setTrafficLamps(day ? 0.25 : 1);
     view.setDay(day);
     setWorldDay(day);
     for (const mesh of nightGlows) mesh.visible = !day;
@@ -480,6 +494,18 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       const phase = Math.sin(performance.now() * 0.02 + car.id) > 0;
       handle.userData.blue = flashing && phase;
       handle.userData.red = flashing && !phase;
+      // Brake lights: on while the car slows down, and held while it waits (lights, traffic, pulled over).
+      const slowing = car.speed < (handle.userData.lastSpeed ?? car.speed) - 0.02;
+      handle.userData.brakeHold = slowing ? 0.35 : Math.max(0, (handle.userData.brakeHold || 0) - 1 / 60);
+      handle.userData.brake = handle.userData.brakeHold > 0 || car.speed < 0.3;
+      handle.userData.lastSpeed = car.speed;
+      // Turn signals: for the turn ahead (from 35 m before it) and through it; right when pulling over.
+      const piece = car.piece;
+      let turn = piece?.kind === "turn" ? piece.turn : piece?.kind === "edge" && piece.length - car.s < 35 ? car.turnAhead?.turn : null;
+      if (car.pulled) turn = "right";
+      const blink = Math.sin(performance.now() * 0.0105 + car.id * 1.7) > 0; // (about 1.7 flashes a second)
+      handle.userData.blinkL = turn === "left" && blink;
+      handle.userData.blinkR = turn === "right" && blink;
     }
   }
   function syncTrafficCars() {
@@ -945,6 +971,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   }
   /** A punch: whoever is right in front of the player takes it (turned to face them). */
   function throwPunch(state) {
+    audio.whoosh?.();
     punchTime = PUNCH_TIME;
     punchRight = !punchRight;
     guardUntil = state.elapsed + 2.5;
@@ -997,6 +1024,19 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     }
     processPedEvents(shotEvents, state);
   }
+  // Rounds in a magazine, and the time a reload takes.
+  const MAGAZINES = { pistol: 12, taser: 1, shotgun: 6, rifle: 30 };
+  const RELOAD_TIME = { pistol: 1.4, taser: 1.3, shotgun: 2.4, rifle: 2.0 };
+  const ammo = {}; // weapon -> rounds left in its magazine
+  let reloading = 0; // seconds left of the reload under way
+  let reloadingWeapon = null;
+  let reloadKeyHeld = false;
+  function startReload() {
+    if (reloading > 0) return;
+    reloadingWeapon = playerWeapon;
+    reloading = RELOAD_TIME[playerWeapon] || 1.5;
+    audio.reload?.(reloading);
+  }
   /** The player's gun: aims at whoever is in front (people, officers), fires, and what it does. */
   function updatePlayerGun(state, dt, pressed) {
     playerGunCooldown -= dt;
@@ -1010,7 +1050,27 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     const onDuty = game.duty.duty.on;
     if (equipped !== "fists") playerWeapon = equipped;
     const stats = WEAPON_STATS[playerWeapon] || WEAPON_STATS.pistol;
-    if (!pressed || playerGunCooldown > 0) return;
+    // The magazine: reloaded when empty, or with R (the reload takes a moment, nothing fires meanwhile).
+    if (equipped !== "fists") {
+      ammo[playerWeapon] ??= MAGAZINES[playerWeapon] || 12;
+      if (reloading > 0) {
+        reloading -= dt;
+        if (reloading <= 0) ammo[reloadingWeapon] = MAGAZINES[reloadingWeapon] || 12;
+        if (reloadingWeapon === playerWeapon) return;
+        reloading = 0; // (another gun was picked: that reload is off)
+      }
+      const reloadKey = !!(keys.KeyR || controls.current.keys.KeyR);
+      if (reloadKey && !reloadKeyHeld && ammo[playerWeapon] < (MAGAZINES[playerWeapon] || 12)) startReload();
+      reloadKeyHeld = reloadKey;
+    }
+    if (!pressed || playerGunCooldown > 0 || reloading > 0) return;
+    if (equipped !== "fists" && !(state.store >= 0 && !onDuty)) {
+      if (ammo[playerWeapon] <= 0) {
+        startReload();
+        return;
+      }
+      ammo[playerWeapon]--;
+    }
     playerGunCooldown = stats.cooldown;
     gunDrawn = 3;
     // In a store, the gun is pointed at the clerk: a hold-up (game.js), no shot.
@@ -1173,10 +1233,21 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       if (playerWeapon === "pistol") gunfire.holdPistol(handPoint, playerAim);
       else gunfire.holdWeapon(playerWeapon, handPoint, playerAim);
     } else if (equipped !== "fists") {
-      // The gun picked from the menu, in hand, pointed at the ground ahead until used.
+      // The gun picked from the menu, in hand, pointed at the ground ahead until used; while reloading,
+      // brought up in front and tilted, the other hand changing the magazine.
+      const reloadNow = reloading > 0 && reloadingWeapon === equipped;
+      if (reloadNow && limbs) {
+        const t = 1 - reloading / (RELOAD_TIME[equipped] || 1.5);
+        limbs.ra.rotation.set(0.9, 0, -0.35);
+        limbs.re.rotation.set(1.1, 0, 0);
+        limbs.la.rotation.set(0.8 + Math.sin(t * Math.PI) * 0.5, 0, 0.45);
+        limbs.le.rotation.set(1.4, 0, 0);
+        limbs.head.rotation.x = 0.35;
+      }
       handPosition(playerPerson, handPoint);
       const yaw = state.footYaw || 0;
-      aimPoint.set(handPoint.x - Math.sin(yaw) * 0.55, handPoint.y - 1.3, handPoint.z - Math.cos(yaw) * 0.55);
+      if (reloadNow) aimPoint.set(handPoint.x - Math.sin(yaw + 0.9) * 0.6, handPoint.y + 0.25, handPoint.z - Math.cos(yaw + 0.9) * 0.6);
+      else aimPoint.set(handPoint.x - Math.sin(yaw) * 0.55, handPoint.y - 1.3, handPoint.z - Math.cos(yaw) * 0.55);
       if (equipped === "pistol") gunfire.holdPistol(handPoint, aimPoint);
       else gunfire.holdWeapon(equipped, handPoint, aimPoint);
     } else if (limbs && (punchTime > 0 || state.elapsed < guardUntil)) {
@@ -1245,6 +1316,10 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   }
   const pedestrianPlayer = { x: 0, z: 0, onFoot: false, dead: false };
   let playerFlinch = 0; // seconds left of the player's flinch from a punch
+  let footStride = 0; // metres walked since the last footstep
+  let footLastX = 0;
+  let footLastZ = 0;
+  let footLanded = false;
   function updatePedestrians(state, dt) {
     pedestrianCars.length = 0;
     if (!state.onFoot) {
@@ -1270,7 +1345,7 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
     pedestrianPlayer.z = state.z;
     pedestrianPlayer.onFoot = state.onFoot;
     pedestrianPlayer.dead = state.wasted > 0 || state.busted > 0;
-    const events = pedestrians.update(dt, { cars: pedestrianCars, camera, phase: signalClock, player: pedestrianPlayer });
+    const events = pedestrians.update(dt, { cars: pedestrianCars, camera, phase: signalClock, player: pedestrianPlayer, rain: raining });
     processPedEvents(events, state);
     // The police job's suspects: their bodies placed and posed (before the crowd's bones are set).
     safely("suspects", () => policeJob.updateBodies(dt, state, performance.now()));
@@ -1596,6 +1671,10 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   let shadowsDue = true;
   let inCityEnvironment = () => {};
   let setTimeOfDay = () => {};
+  let stormTimer = 15; // seconds to the next lightning (raining at night)
+  let flashTime = -1; // seconds into the flash under way (-1: none)
+  let thunderAt = 0;
+  let thunderDistance = 1;
   let disposed = false;
   const reportedErrors = new Set();
   function reportFrameError(part, error) {
@@ -1814,10 +1893,20 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       playerPerson.visible = !!state.onFoot;
       playerPerson.rotation.x = 0;
       if (state.wasted > 0) {
-        // Shot down: lying face down where they fell.
+        // Shot down: the knees give, the body falls forward (pivoting at the feet), then lies face down.
         playerPerson.visible = true;
-        playerPerson.position.set(state.wastedX, (state.y || 0) + 0.13, state.wastedZ);
-        playerPerson.rotation.set(-Math.PI / 2, state.footYaw || 0, 0);
+        const fall = Math.min(1, state.wasted / 0.75);
+        const eased = fall * fall;
+        playerPerson.position.set(state.wastedX, (state.y || 0) + 0.13 * eased, state.wastedZ);
+        playerPerson.rotation.set((-Math.PI / 2) * eased, state.footYaw || 0, 0);
+        const limbs = playerPerson.userData.L;
+        if (limbs && fall < 1) {
+          limbs.lk.rotation.x = -0.9 * Math.sin(fall * Math.PI);
+          limbs.rk.rotation.x = -0.6 * Math.sin(fall * Math.PI);
+          limbs.la.rotation.set(1.2 * fall, 0, -0.4);
+          limbs.ra.rotation.set(1.2 * fall, 0, 0.4);
+          limbs.head.rotation.x = 0.4 * fall;
+        }
       } else if (state.onFoot) {
         playerPerson.position.set(state.x, (state.y || 0) + (state.jumpY || 0), state.z);
         playerPerson.rotation.y = state.footYaw || 0;
@@ -1855,6 +1944,20 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           limbs.body.rotation.x += 0.25 * k;
         }
         playerFlinch = Math.max(0, playerFlinch - dt);
+        // Footsteps: one every stride on the ground (longer strides running), and the landing of a jump.
+        const inCity = state.z > -112 && state.x > -165 && state.x < 160;
+        if (!(state.jumpY > 0)) {
+          footStride += Math.hypot(state.x - footLastX, state.z - footLastZ);
+          const stride = state.footRunning ? 1.05 : 0.72;
+          if (footStride > stride && footStride < 5) {
+            footStride = 0;
+            audio.footstep?.(state.footRunning ? 1.6 : 1, inCity);
+          } else if (footStride >= 5) footStride = 0; // (teleported)
+        }
+        if (state.landing > 0 && !footLanded) audio.footstep?.(2.5, inCity);
+        footLanded = state.landing > 0;
+        footLastX = state.x;
+        footLastZ = state.z;
       }
       if (state.respawned) {
         // Back at the hospital or the police station: the camera starts behind the player there.
@@ -2054,14 +2157,20 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         }
         const sideX = interaction.carX - Math.cos(interaction.heading) * 1.45;
         const sideZ = interaction.carZ + Math.sin(interaction.heading) * 1.45;
+        // The driver's seat (inside the body, where the car hides the person).
+        const seatX = interaction.carX - Math.cos(interaction.heading) * 0.45;
+        const seatZ = interaction.carZ + Math.sin(interaction.heading) * 0.45;
         if (interaction.direction === "exit") {
-          const step = ease(Math.max(0, Math.min((time - 0.16) / 0.56, 1)));
-          playerPerson.visible = true;
-          const walkX = sideX + (interaction.endX - sideX) * step;
-          const walkZ = sideZ + (interaction.endZ - sideZ) * step;
+          // Out of the seat through the open door (ducking under the roof), then a step away.
+          const out = ease(Math.max(0, Math.min((time - 0.12) / 0.36, 1)));
+          const step = ease(Math.max(0, Math.min((time - 0.45) / 0.4, 1)));
+          playerPerson.visible = time > 0.12;
+          const walkX = seatX + (sideX - seatX) * out + (interaction.endX - sideX) * step;
+          const walkZ = seatZ + (sideZ - seatZ) * out + (interaction.endZ - sideZ) * step;
           playerPerson.position.set(walkX, terrainHeight(walkX, walkZ), walkZ);
-          playerPerson.rotation.y = interaction.heading;
-          playerPerson.scale.setScalar(0.78 + 0.22 * ease(Math.min(time / 0.42, 1)));
+          // (Facing out of the door while climbing out, then turning to walk.)
+          playerPerson.rotation.y = interaction.heading + (Math.PI / 2) * (1 - step);
+          playerPerson.scale.setScalar(1);
           playerCar.position.set(
             interaction.carX,
             terrainHeight(interaction.carX, interaction.carZ) + 0.1,
@@ -2069,26 +2178,24 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           );
           sitOnGround(playerCar, interaction.carX, interaction.carZ, interaction.heading);
         } else {
+          // To the door, turn around and sit down into the seat (ducking under the roof).
           const approach = ease(Math.min(time / 0.48, 1));
           const enter = ease(Math.max(0, Math.min((time - 0.42) / 0.34, 1)));
-          playerPerson.visible = time < 0.84;
-          const walkX =
-            interaction.startX + (sideX - interaction.startX) * approach + (interaction.carX - sideX) * enter;
-          const walkZ =
-            interaction.startZ + (sideZ - interaction.startZ) * approach + (interaction.carZ - sideZ) * enter;
-          playerPerson.position.set(
-            walkX,
-            terrainHeight(walkX, walkZ) + 0.12 * Math.sin(Math.PI * enter),
-            walkZ,
-          );
-          playerPerson.rotation.y = interaction.heading;
-          playerPerson.scale.setScalar(1 - 0.72 * enter);
+          playerPerson.visible = time < 0.8;
+          const walkX = interaction.startX + (sideX - interaction.startX) * approach + (seatX - sideX) * enter;
+          const walkZ = interaction.startZ + (sideZ - interaction.startZ) * approach + (seatZ - sideZ) * enter;
+          playerPerson.position.set(walkX, terrainHeight(walkX, walkZ) - 0.25 * enter, walkZ);
+          playerPerson.rotation.y = interaction.heading + (Math.PI / 2) * ease(Math.min(time / 0.45, 1));
+          playerPerson.scale.setScalar(1);
         }
         const limbs = playerPerson.userData.L;
         if (limbs && time < 0.84) {
           const crouch = Math.sin(Math.PI * Math.min(time / 0.84, 1));
           limbs.body.position.y = 0.08 * crouch;
-          limbs.body.rotation.x = -0.18 * crouch;
+          limbs.body.rotation.x = -0.45 * crouch; // (ducking under the roof)
+          limbs.head.rotation.x = 0.3 * crouch;
+          limbs.lk.rotation.x = -0.7 * crouch;
+          limbs.rk.rotation.x = -0.7 * crouch;
           limbs.la.rotation.x = -0.8 * crouch;
           limbs.ra.rotation.x = -0.8 * crouch;
           limbs.lh.rotation.x = 0.18 * crouch;
@@ -2103,6 +2210,30 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       const speedFactor = Math.min(state.speed / 200, 1);
       updateTrafficLights(dt);
       updateWorld(state.elapsed);
+      rain.update(state.elapsed, camera);
+      audio.rain?.(raining, !state.onFoot);
+      // A storm at night: lightning now and then (a double flash), the thunder seconds later.
+      if (raining && !daytime) {
+        stormTimer -= dt;
+        if (stormTimer <= 0) {
+          stormTimer = 20 + Math.random() * 40;
+          flashTime = 0;
+          const distance = 0.5 + Math.random() * 3;
+          thunderAt = state.elapsed + distance * 2.9; // (sound: about 3 s per kilometre)
+          thunderDistance = distance;
+        }
+      }
+      if (flashTime >= 0) {
+        flashTime += dt;
+        const flash = flashTime < 0.08 ? 1 : flashTime < 0.16 ? 0.15 : flashTime < 0.24 ? 0.7 : Math.max(0, 0.7 - (flashTime - 0.24) * 3);
+        view.setFlash(flash);
+        setLightning(flash);
+        if (flash <= 0) flashTime = -1;
+      }
+      if (thunderAt > 0 && state.elapsed >= thunderAt) {
+        thunderAt = 0;
+        audio.thunder?.(thunderDistance);
+      }
       inCityEnvironment(state.x, state.z);
       composer.grading?.update(state.elapsed);
       // WASTED: the colour drains out of the picture.
@@ -2216,6 +2347,10 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           ...policeJob.hud(state, state.onFoot ? footCameraYaw : state.heading + cameraYaw),
           respawnMessage: state.elapsed < respawnMessageUntil ? respawnMessageKind : null,
           weapon: state.onFoot ? equipped : null,
+          ammo:
+            state.onFoot && equipped !== "fists"
+              ? { rounds: ammo[equipped] ?? MAGAZINES[equipped] ?? 0, magazine: MAGAZINES[equipped] ?? 0, reloading: reloading > 0 }
+              : null,
           weaponMenu: weaponMenuOpen ? weaponOptions() : null,
           heliActive: !!state.heli && !state.heli.leaving,
           roadblockActive: !!state.roadblock,
@@ -2431,6 +2566,8 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   if (debugSession) {
     debugSession.fx = effects;
     debugSession.setTimeOfDay = (day) => setTimeOfDay(day);
+    debugSession.setRain = (on) => controls.current.setRain(on);
+    debugSession.lightning = () => (stormTimer = 0);
     debugSession.ready = true;
   }
   const session = {
@@ -2510,5 +2647,14 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   // The pause menu reaches the live session through the shared controls ref.
   controls.current.setQuality = (choice) => session.setQuality(choice);
   controls.current.setTimeOfDay = (day) => setTimeOfDay(day);
+  controls.current.setRain = (on) => {
+    raining = !!on;
+    rain.set(raining, daytime);
+    try {
+      localStorage.setItem(WEATHER_KEY, raining ? "rain" : "clear");
+    } catch {
+      // (not remembered)
+    }
+  };
   return session;
 }

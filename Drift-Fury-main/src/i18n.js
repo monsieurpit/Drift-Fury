@@ -7,6 +7,9 @@ import { POLICE_TEXT } from "./i18nPolice.js";
 // falls back to English. LOCALE formats numbers the local way.
 
 const en = {
+  "pause.weather": "Weather",
+  "pause.clear": "Clear",
+  "pause.rain": "Rain",
   "pause.time": "Time of day",
   "pause.day": "Day",
   "pause.night": "Night",
@@ -138,7 +141,7 @@ const en = {
   "hud.jump": "Jump",
   "hud.weapons": "Weapons",
   "weaponMenu.title": "Weapons",
-  "weaponMenu.hint": "Press a number or click to take it in hand. Left click or C: attack. G: close.",
+  "weaponMenu.hint": "Press a number or click to take it in hand. Left click or C: attack. R: reload. G: close.",
   "touch.weapons": "ARMS",
   "touch.attack": "HIT",
   "hud.handsUp": "Hands where I can see them!",
@@ -259,6 +262,9 @@ const en = {
 };
 
 const fr = {
+  "pause.weather": "Météo",
+  "pause.clear": "Dégagé",
+  "pause.rain": "Pluie",
   "pause.time": "Moment de la journée",
   "pause.day": "Jour",
   "pause.night": "Nuit",
@@ -384,7 +390,7 @@ const fr = {
   "hud.jump": "Sauter",
   "hud.weapons": "Armes",
   "weaponMenu.title": "Armes",
-  "weaponMenu.hint": "Appuyez sur un chiffre ou cliquez pour la prendre en main. Clic gauche ou C : attaquer. G : fermer.",
+  "weaponMenu.hint": "Appuyez sur un chiffre ou cliquez pour la prendre en main. Clic gauche ou C : attaquer. R : recharger. G : fermer.",
   "touch.weapons": "ARMES",
   "touch.attack": "COUP",
   "hud.handsUp": "Les mains en l'air !",
@@ -499,6 +505,9 @@ const fr = {
 };
 
 const es = {
+  "pause.weather": "Tiempo",
+  "pause.clear": "Despejado",
+  "pause.rain": "Lluvia",
   "pause.time": "Hora del día",
   "pause.day": "Día",
   "pause.night": "Noche",
@@ -623,7 +632,7 @@ const es = {
   "hud.jump": "Saltar",
   "hud.weapons": "Armas",
   "weaponMenu.title": "Armas",
-  "weaponMenu.hint": "Pulsa un número o haz clic para tomarla. Clic izquierdo o C: atacar. G: cerrar.",
+  "weaponMenu.hint": "Pulsa un número o haz clic para tomarla. Clic izquierdo o C: atacar. R: recargar. G: cerrar.",
   "touch.weapons": "ARMAS",
   "touch.attack": "GOLPE",
   "hud.handsUp": "¡Manos donde pueda verlas!",
@@ -734,6 +743,9 @@ const es = {
 };
 
 const de = {
+  "pause.weather": "Wetter",
+  "pause.clear": "Klar",
+  "pause.rain": "Regen",
   "pause.time": "Tageszeit",
   "pause.day": "Tag",
   "pause.night": "Nacht",
@@ -858,7 +870,7 @@ const de = {
   "hud.jump": "Springen",
   "hud.weapons": "Waffen",
   "weaponMenu.title": "Waffen",
-  "weaponMenu.hint": "Zahl drücken oder klicken, um sie in die Hand zu nehmen. Linksklick oder C: angreifen. G: schließen.",
+  "weaponMenu.hint": "Zahl drücken oder klicken, um sie in die Hand zu nehmen. Linksklick oder C: angreifen. R: nachladen. G: schließen.",
   "touch.weapons": "WAFFEN",
   "touch.attack": "SCHLAG",
   "hud.handsUp": "Hände hoch!",
@@ -969,6 +981,9 @@ const de = {
 };
 
 const pt = {
+  "pause.weather": "Tempo",
+  "pause.clear": "Limpo",
+  "pause.rain": "Chuva",
   "pause.time": "Hora do dia",
   "pause.day": "Dia",
   "pause.night": "Noite",
@@ -1093,7 +1108,7 @@ const pt = {
   "hud.jump": "Saltar",
   "hud.weapons": "Armas",
   "weaponMenu.title": "Armas",
-  "weaponMenu.hint": "Prima um número ou clique para a pegar. Clique esquerdo ou C: atacar. G: fechar.",
+  "weaponMenu.hint": "Prima um número ou clique para a pegar. Clique esquerdo ou C: atacar. R: recarregar. G: fechar.",
   "touch.weapons": "ARMAS",
   "touch.attack": "SOCO",
   "hud.handsUp": "Mãos onde eu possa ver!",
@@ -1204,6 +1219,9 @@ const pt = {
 };
 
 const it = {
+  "pause.weather": "Meteo",
+  "pause.clear": "Sereno",
+  "pause.rain": "Pioggia",
   "pause.time": "Momento della giornata",
   "pause.day": "Giorno",
   "pause.night": "Notte",
@@ -1328,7 +1346,7 @@ const it = {
   "hud.jump": "Salta",
   "hud.weapons": "Armi",
   "weaponMenu.title": "Armi",
-  "weaponMenu.hint": "Premi un numero o fai clic per impugnarla. Clic sinistro o C: attacca. G: chiudi.",
+  "weaponMenu.hint": "Premi un numero o fai clic per impugnarla. Clic sinistro o C: attacca. R: ricarica. G: chiudi.",
   "touch.weapons": "ARMI",
   "touch.attack": "PUGNO",
   "hud.handsUp": "Mani in vista!",

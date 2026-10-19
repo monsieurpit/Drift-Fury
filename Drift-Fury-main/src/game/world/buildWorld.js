@@ -104,6 +104,8 @@ export function* buildWorldInSteps(scene) {
       lampLighting.setLevel(day ? 0 : 1);
       clusteredLights.setStaticLevel(day ? 0 : 1);
     },
+    /** A lightning flash in the sky (0 to 1). */
+    setLightning: (level) => updateSky.setFlash(level),
     /** Per-frame animation of world details (summit beacon, sky); `time` in seconds. */
     update: (time) => {
       updateMountain(world, time);

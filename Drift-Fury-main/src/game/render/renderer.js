@@ -542,6 +542,12 @@ export function createRenderer(container, inGame = false) {
     texture.dispose();
     return environment;
   }
+  /** Lightning (0 to 1): the sky's light over everything for an instant, on top of the time of day's. */
+  function setFlash(level) {
+    const look = day ? DAY : NIGHT;
+    hemisphere.intensity = look.hemisphere[2] + level * 5;
+    ambient.intensity = look.ambient[1] + level * 1.5;
+  }
   function setDay(value) {
     day = !!value;
     if (day && !DAY.environment) DAY.environment = dayEnvironment();
@@ -576,6 +582,7 @@ export function createRenderer(container, inGame = false) {
     composer,
     applyQuality,
     setDay,
+    setFlash,
     /** The sky's reflections for the time of day (the scene's environment outside the city). */
     get skyEnvironment() {
       return day ? DAY.environment : NIGHT.environment;
