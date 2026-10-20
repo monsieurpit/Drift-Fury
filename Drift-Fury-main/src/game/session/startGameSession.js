@@ -1,5 +1,6 @@
 import {
   AdditiveBlending,
+  Box3,
   BoxGeometry,
   Color,
   CylinderGeometry,
@@ -47,7 +48,7 @@ import { batchPlayerCar } from "../vehicles/batchPlayerCar.js";
 import { buildCar } from "../vehicles/carModel.js";
 import { setTrafficLamps, trafficTemplate, trafficTemplates } from "../vehicles/trafficCars.js";
 import { createCarInstancer } from "../vehicles/carInstancing.js";
-import { buildModelCar, carModelKey, loadCarModels } from "../vehicles/carModels.js";
+import { buildModelCar, carModelKey, driverSeat, loadCarModels } from "../vehicles/carModels.js";
 import { createHelicopter } from "../vehicles/helicopter.js";
 import { crackPrewarm, createCarDamage } from "../vehicles/carDamage.js";
 import { createSparks } from "../effects/sparks.js";
@@ -1290,15 +1291,29 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
             if (!gun) state.shake = Math.min((state.shake || 0) + 0.25, 1.2);
           }
         }
+      } else if (event.type === "thrown") {
+        // Pulled out of a car and thrown down (they get up again): motion vectors while in the air.
+        if (!movingBodies.has(event.ped)) {
+          composer.taa?.track(event.ped.rig);
+          movingBodies.add(event.ped);
+        }
+        audio.hurt?.(female, distance, pan);
       } else if (event.type === "land") {
-        impactPoint.set(event.x, groundAt(event.x, event.z) + 0.2, event.z);
-        impactVelocity.set(0, 0.5, 0);
-        blood.spray(impactPoint, impactVelocity, Math.round(6 + event.strength * 3));
+        if (!event.ped.dead?.noBlood) {
+          impactPoint.set(event.x, groundAt(event.x, event.z) + 0.2, event.z);
+          impactVelocity.set(0, 0.5, 0);
+          blood.spray(impactPoint, impactVelocity, Math.round(6 + event.strength * 3));
+        }
         audio.bodyHit?.(event.strength * 2, distance, pan);
       } else if (event.type === "scream") {
         audio.scream?.(female, distance, pan);
       } else if (event.type === "hurt") {
         audio.hurt?.(female, distance, pan);
+      } else if (event.type === "bangCar") {
+        // Fists on the car the player took: a thud on the bodywork, a shout.
+        audio.bodyHit?.(4, distance, pan);
+        if (Math.random() < 0.4) audio.hurt?.(female, distance, pan);
+        state.shake = Math.min((state.shake || 0) + 0.05, 1);
       } else if (event.type === "punchPlayer") {
         // Someone in a fist fight lands one (in mid-jump, it misses).
         if (state.onFoot && state.wasted <= 0 && state.busted <= 0 && !(state.jumpY > 0.25)) {
@@ -1568,6 +1583,45 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
   function zoomCamera(e) {
     e.preventDefault();
     cameraZoom = Math.max(0.45, Math.min(2.8, cameraZoom * Math.exp(e.deltaY * 0.001)));
+  }
+  // The driver's seat: where the player sits (the car's userData.seat: the hips, in the car's space).
+  const HIP_HEIGHT = 0.92;
+  const seatAnchor = { x: 0, z: 0 }; // (a fixed point for the seated person's idle animation)
+  const seatPoint = new Vector3();
+  const carUp = new Vector3();
+  const doorPoint = new Vector3();
+  function seatOf(car) {
+    if (!car.userData.seat) car.userData.seat = driverSeat(car, car);
+    return car.userData.seat;
+  }
+  /** Sitting: thighs forward, knees bent, back against the seat, hands up to the wheel (`k` 0 to 1). */
+  function poseSeated(limbs, k) {
+    limbs.lh.rotation.x = 1.45 * k;
+    limbs.rh.rotation.x = 1.45 * k;
+    limbs.lk.rotation.x = -1.5 * k;
+    limbs.rk.rotation.x = -1.5 * k;
+    limbs.body.rotation.x = 0.1 * k;
+    limbs.la.rotation.x = 1.0 * k;
+    limbs.ra.rotation.x = 1.0 * k;
+    limbs.le.rotation.x = 0.7 * k;
+    limbs.re.rotation.x = 0.7 * k;
+  }
+  /** Where the player stands to sit in (`out`, in the world): outside the open driver's door. */
+  function doorPointOf(car, out) {
+    const seat = seatOf(car);
+    car.updateMatrixWorld();
+    const box = car.userData.width ?? (car.userData.width = new Box3().setFromObject(car).getSize(new Vector3()).x);
+    return out.set(-box / 2 - 0.45, 0, seat.z).applyMatrix4(car.matrixWorld);
+  }
+  /** The player in the driver's seat of the car, following its every movement (seated pose `k`). */
+  function placeInSeat(k) {
+    playerCar.updateMatrixWorld();
+    seatPoint.copy(seatOf(playerCar)).applyMatrix4(playerCar.matrixWorld);
+    carUp.set(0, 1, 0).applyQuaternion(playerCar.quaternion);
+    playerPerson.position.copy(seatPoint).addScaledVector(carUp, -HIP_HEIGHT);
+    playerPerson.quaternion.copy(playerCar.quaternion);
+    const limbs = playerPerson.userData.L;
+    if (limbs) poseSeated(limbs, k);
   }
   function addInteractionDoor() {
     interaction.door = playerCar.userData.accessDoor;
@@ -1892,6 +1946,19 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
       });
       playerPerson.visible = !!state.onFoot;
       playerPerson.rotation.x = 0;
+      // Driving: the player sits at the wheel, seen through the windows, hands on the wheel.
+      if (!state.onFoot && state.busted <= 0 && state.wasted <= 0 && playerCar.visible && !interaction) {
+        playerPerson.visible = true;
+        animatePerson(playerPerson, dt, seatAnchor.x, seatAnchor.z); // (standing still: the idle, under the pose)
+        placeInSeat(1);
+        const limbs = playerPerson.userData.L;
+        if (limbs) {
+          const steer = state.steer || 0;
+          limbs.la.rotation.y = -steer * 0.35;
+          limbs.ra.rotation.y = -steer * 0.35;
+          limbs.head.rotation.y = -steer * 0.25;
+        }
+      }
       if (state.wasted > 0) {
         // Shot down: the knees give, the body falls forward (pivoting at the feet), then lies face down.
         playerPerson.visible = true;
@@ -2133,16 +2200,23 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
           }
         }
       });
+      if (state._driverOut) {
+        // A driver climbing out of a car the player crashed into (dazed, or angry).
+        const out = state._driverOut;
+        state._driverOut = null;
+        safely("crash driver", () => {
+          const events = [];
+          pedestrians.climbOut(out.x, out.z, out.carX, out.carZ, trafficWorld.camera.dirX, trafficWorld.camera.dirZ, out.dazed, events);
+          processPedEvents(events, state);
+        });
+      }
       if (state._carjack) {
         const jack = state._carjack;
         state._carjack = null;
         safely("carjack", () => {
           const events = [];
-          pedestrians.ejectDriver(jack.x, jack.z, jack.fromX, jack.fromZ, trafficWorld.camera.dirX, trafficWorld.camera.dirZ, events);
-          for (const event of events) {
-            const [distance, pan] = heard(event.x, event.z);
-            audio.scream?.(event.ped.female, distance, pan);
-          }
+          pedestrians.ejectDriver(jack.x, jack.z, jack.fromX, jack.fromZ, trafficWorld.camera.dirX, trafficWorld.camera.dirZ, events, jack.carX, jack.carZ);
+          processPedEvents(events, state);
         });
       }
       if (interaction) {
@@ -2155,51 +2229,80 @@ async function bootGameSession(container, car, engine, controls, callbacks, noPo
         if (interaction.door) {
           interaction.door.rotation.y = -open * 1.12;
         }
-        const sideX = interaction.carX - Math.cos(interaction.heading) * 1.45;
-        const sideZ = interaction.carZ + Math.sin(interaction.heading) * 1.45;
-        // The driver's seat (inside the body, where the car hides the person).
-        const seatX = interaction.carX - Math.cos(interaction.heading) * 0.45;
-        const seatZ = interaction.carZ + Math.sin(interaction.heading) * 0.45;
+        // Door sounds: the latch as it opens, the slam as it shuts.
+        if (!interaction.opened && time > 0.02) {
+          interaction.opened = true;
+          audio.door?.(true);
+        }
+        if (!interaction.closed && time > 0.9) {
+          interaction.closed = true;
+          audio.door?.(false);
+        }
+        const limbs = playerPerson.userData.L;
         if (interaction.direction === "exit") {
-          // Out of the seat through the open door (ducking under the roof), then a step away.
-          const out = ease(Math.max(0, Math.min((time - 0.12) / 0.36, 1)));
-          const step = ease(Math.max(0, Math.min((time - 0.45) / 0.4, 1)));
-          playerPerson.visible = time > 0.12;
-          const walkX = seatX + (sideX - seatX) * out + (interaction.endX - sideX) * step;
-          const walkZ = seatZ + (sideZ - seatZ) * out + (interaction.endZ - sideZ) * step;
-          playerPerson.position.set(walkX, terrainHeight(walkX, walkZ), walkZ);
-          // (Facing out of the door while climbing out, then turning to walk.)
-          playerPerson.rotation.y = interaction.heading + (Math.PI / 2) * (1 - step);
-          playerPerson.scale.setScalar(1);
           playerCar.position.set(
             interaction.carX,
             terrainHeight(interaction.carX, interaction.carZ) + 0.1,
             interaction.carZ,
           );
           sitOnGround(playerCar, interaction.carX, interaction.carZ, interaction.heading);
-        } else {
-          // To the door, turn around and sit down into the seat (ducking under the roof).
-          const approach = ease(Math.min(time / 0.48, 1));
-          const enter = ease(Math.max(0, Math.min((time - 0.42) / 0.34, 1)));
-          playerPerson.visible = time < 0.8;
-          const walkX = interaction.startX + (sideX - interaction.startX) * approach + (seatX - sideX) * enter;
-          const walkZ = interaction.startZ + (sideZ - interaction.startZ) * approach + (seatZ - sideZ) * enter;
-          playerPerson.position.set(walkX, terrainHeight(walkX, walkZ) - 0.25 * enter, walkZ);
-          playerPerson.rotation.y = interaction.heading + (Math.PI / 2) * ease(Math.min(time / 0.45, 1));
+          playerCar.updateMatrixWorld();
+          // Out of the seat through the open door (turning to it, standing up, ducking under the roof), then
+          // a step away.
+          const out = ease(Math.max(0, Math.min((time - 0.1) / 0.38, 1)));
+          const step = ease(Math.max(0, Math.min((time - 0.48) / 0.37, 1)));
+          playerPerson.visible = true;
           playerPerson.scale.setScalar(1);
-        }
-        const limbs = playerPerson.userData.L;
-        if (limbs && time < 0.84) {
-          const crouch = Math.sin(Math.PI * Math.min(time / 0.84, 1));
-          limbs.body.position.y = 0.08 * crouch;
-          limbs.body.rotation.x = -0.45 * crouch; // (ducking under the roof)
-          limbs.head.rotation.x = 0.3 * crouch;
-          limbs.lk.rotation.x = -0.7 * crouch;
-          limbs.rk.rotation.x = -0.7 * crouch;
-          limbs.la.rotation.x = -0.8 * crouch;
-          limbs.ra.rotation.x = -0.8 * crouch;
-          limbs.lh.rotation.x = 0.18 * crouch;
-          limbs.rh.rotation.x = -0.18 * crouch;
+          placeInSeat(1 - out);
+          doorPointOf(playerCar, doorPoint);
+          const fromX = playerPerson.position.x;
+          const fromZ = playerPerson.position.z;
+          const x = fromX + (doorPoint.x - fromX) * out + (interaction.endX - doorPoint.x) * step;
+          const z = fromZ + (doorPoint.z - fromZ) * out + (interaction.endZ - doorPoint.z) * step;
+          const seatedY = playerPerson.position.y;
+          playerPerson.position.set(x, seatedY + (terrainHeight(x, z) - seatedY) * out, z);
+          playerPerson.rotation.set(0, interaction.heading + (Math.PI / 2) * Math.min(out * 2, 1) * (1 - step), 0);
+          if (limbs) {
+            const duck = Math.sin(Math.PI * out);
+            limbs.body.rotation.x = -0.45 * duck;
+            limbs.head.rotation.x = 0.3 * duck;
+          }
+        } else {
+          // To the open door, turn around, sit down into the seat (ducking under the roof) and swing the legs
+          // in: the player then stays at the wheel.
+          const approach = ease(Math.min(time / 0.45, 1));
+          const sit = ease(Math.max(0, Math.min((time - 0.45) / 0.35, 1)));
+          playerPerson.visible = true;
+          playerPerson.scale.setScalar(1);
+          doorPointOf(playerCar, doorPoint);
+          if (sit <= 0) {
+            const x = interaction.startX + (doorPoint.x - interaction.startX) * approach;
+            const z = interaction.startZ + (doorPoint.z - interaction.startZ) * approach;
+            playerPerson.position.set(x, terrainHeight(x, z), z);
+            const walkYaw = Math.atan2(-(doorPoint.x - interaction.startX), -(doorPoint.z - interaction.startZ));
+            const turn = ease(Math.max(0, (approach - 0.75) / 0.25));
+            playerPerson.rotation.set(0, walkYaw + (interaction.heading + Math.PI / 2 - walkYaw) * turn, 0);
+            animatePerson(playerPerson, dt, x, z);
+            seatAnchor.x = x; // (seated, the idle carries on from here: no burst of walking)
+            seatAnchor.z = z;
+          } else {
+            placeInSeat(sit);
+            const seatX = playerPerson.position.x;
+            const seatY = playerPerson.position.y;
+            const seatZ = playerPerson.position.z;
+            const ground = terrainHeight(doorPoint.x, doorPoint.z);
+            playerPerson.position.set(
+              doorPoint.x + (seatX - doorPoint.x) * sit,
+              ground + (seatY - ground) * sit,
+              doorPoint.z + (seatZ - doorPoint.z) * sit,
+            );
+            playerPerson.rotation.set(0, interaction.heading + (Math.PI / 2) * (1 - sit), 0);
+            if (limbs) {
+              const duck = Math.sin(Math.PI * sit);
+              limbs.body.rotation.x = 0.1 * sit - 0.45 * duck;
+              limbs.head.rotation.x = 0.3 * duck;
+            }
+          }
         }
         if (time >= 1) {
           removeInteractionDoor();

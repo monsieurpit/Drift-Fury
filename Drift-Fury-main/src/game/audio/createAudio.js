@@ -34,6 +34,7 @@ export function createAudio(engine) {
       rain() {},
       reload() {},
       thunder() {},
+      door() {},
       whoosh() {},
       radioNext() {
         return null;
@@ -377,6 +378,47 @@ export function createAudio(engine) {
         source.disconnect();
         low.disconnect();
         gain.disconnect();
+      };
+    },
+    /**
+     * A car door: opening (`open`), the latch letting go with a click and the hinge's short creak; shutting,
+     * a deep thump of the panel and the latch catching.
+     */
+    door(open) {
+      if (closed || muted) return;
+      const now = context.currentTime;
+      const nodes = [];
+      const burst = (buffer, type, frequency, level, at, length, q = 1) => {
+        const source = context.createBufferSource();
+        source.buffer = buffer;
+        const filter = context.createBiquadFilter();
+        filter.type = type;
+        filter.frequency.value = frequency;
+        filter.Q.value = q;
+        const gain = context.createGain();
+        gain.gain.setValueAtTime(0.0001, now + at);
+        gain.gain.exponentialRampToValueAtTime(level, now + at + 0.004);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + at + length);
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(master);
+        source.start(now + at, Math.random() * 0.3);
+        source.stop(now + at + length + 0.03);
+        nodes.push(source, filter, gain);
+        return source;
+      };
+      let last;
+      if (open) {
+        burst(whiteNoise, "bandpass", 2600, 0.12, 0, 0.03, 4); // the handle
+        burst(whiteNoise, "bandpass", 1500, 0.1, 0.05, 0.05, 3); // the latch
+        last = burst(voiceNoise, "lowpass", 420, 0.08, 0.06, 0.18); // the door swinging free
+      } else {
+        burst(voiceNoise, "lowpass", 160, 0.45, 0, 0.32, 0.7); // the panel's thump
+        burst(voiceNoise, "lowpass", 600, 0.18, 0, 0.12); // its body
+        last = burst(whiteNoise, "bandpass", 2000, 0.12, 0.012, 0.05, 3); // the latch catching
+      }
+      last.onended = () => {
+        for (const node of nodes) node.disconnect();
       };
     },
     /** A punch thrown: the swish of the arm through the air. */

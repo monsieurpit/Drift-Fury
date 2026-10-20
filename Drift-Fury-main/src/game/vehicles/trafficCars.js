@@ -1,9 +1,20 @@
-import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, CylinderGeometry, Mesh, MeshBasicMaterial, Vector3 } from "three";
+import {
+  Box3,
+  BoxGeometry,
+  BufferAttribute,
+  BufferGeometry,
+  CylinderGeometry,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  SphereGeometry,
+  Vector3,
+} from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { batchStaticMeshes } from "../render/staticBatching.js";
 import { SHADOW_ONLY_LAYER } from "../render/shadowCache.js";
 import { buildCar } from "./carModel.js";
-import { buildModelCar, carModelKey } from "./carModels.js";
+import { buildModelCar, carModelKey, driverSeat } from "./carModels.js";
 /* traffic and police cars never animate their parts, so each look is built and batched once, then cloned */
 export const trafficTemplates = new Map();
 
@@ -43,6 +54,30 @@ function splitBySide(mesh) {
     result.push([name, geometry]);
   }
   return result;
+}
+
+// The drivers of the traffic: clothes and skin.
+const driverClothes = new MeshStandardMaterial({ color: "#2b313b", roughness: 0.9 });
+const driverSkin = new MeshStandardMaterial({ color: "#b98a6a", roughness: 0.7 });
+let driverGeometries = null;
+/** A seated driver whose hips are at `seat` (in the car's space, the car facing -Z): two named meshes. */
+function driverFigure(seat) {
+  if (!driverGeometries) {
+    const torso = new BoxGeometry(0.4, 0.52, 0.24).translate(0, 0.3, 0.06);
+    const shoulders = new BoxGeometry(0.44, 0.1, 0.22).translate(0, 0.53, 0.05);
+    const arms = [-1, 1].map((side) => new BoxGeometry(0.085, 0.085, 0.44).rotateX(0.35).translate(side * 0.19, 0.4, -0.17));
+    const thighs = [-1, 1].map((side) => new BoxGeometry(0.15, 0.13, 0.45).translate(side * 0.1, 0.02, -0.2));
+    driverGeometries = {
+      body: mergeGeometries([torso, shoulders, ...arms, ...thighs].map((geometry) => geometry.toNonIndexed())),
+      head: new SphereGeometry(0.105, 12, 9).scale(1, 1.15, 1.05).translate(0, 0.72, 0.03),
+    };
+  }
+  const body = new Mesh(driverGeometries.body, driverClothes);
+  body.name = "driver-body";
+  const head = new Mesh(driverGeometries.head, driverSkin);
+  head.name = "driver-head";
+  for (const part of [body, head]) part.position.copy(seat);
+  return [body, head];
 }
 
 // Drawn only into the shadow map: no colour, no depth in the main pass.
@@ -154,6 +189,10 @@ export function trafficTemplate(color, shape, police = false, moving = false) {
         }
         object.material = lit.get(material);
       });
+      // Someone at the wheel: a seated figure (body and arms reaching for the wheel, a head) in the driver's
+      // seat, drawn with the car.
+      const seat = template.userData.seat || driverSeat(template, template);
+      for (const part of driverFigure(seat)) template.add(part);
       // The brake lights' glow, a part shown only while the car brakes (carInstancing.js: "brake").
       const brakeLights = [];
       template.traverse((object) => {

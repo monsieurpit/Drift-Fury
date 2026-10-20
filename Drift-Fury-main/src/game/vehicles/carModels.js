@@ -9,6 +9,9 @@
 import {
   Box3,
   BoxGeometry,
+  BufferAttribute,
+  BufferGeometry,
+  DoubleSide,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -171,7 +174,147 @@ export function buildModelCar(key, { player = false, color = "#ffffff" } = {}) {
   const lightBar = spec.lightBar ? addLightBar(car, model, spec.lightBar, (spec.barAt || 0) * length) : [];
   // (A police car the player drives: its light bar halves flash when the player turns the lights on.)
   car.userData = player ? { ...playerParts(car, model, length), lightBar } : {};
+  if (player) {
+    // The driver's door, cut out of the body and hinged at its front edge (the models' doors are part of
+    // the body), and where the driver sits.
+    const wheels = car.userData.wheels;
+    car.userData.accessDoor = cutDriverDoor(car, model, wheels, !TWO_DOORS.has(key), key);
+  }
+  car.userData.seat = driverSeat(car, model);
   return car;
+}
+
+// Models with only two doors (a longer door, reaching nearer the rear wheel).
+const TWO_DOORS = new Set(["porsche", "muscle", "super", "hyper", "coupe", "police_muscle", "police_super"]);
+
+/**
+ * Where the driver's hips are, in the car's space (it faces -Z, its left is -x): behind and below the
+ * steering wheel, or (no wheel found) by the car's size.
+ */
+export function driverSeat(car, model) {
+  car.updateMatrixWorld(true);
+  let wheel = null;
+  model.traverse((object) => {
+    if (!wheel && object.isMesh && /steering/i.test(object.name || "")) wheel = object;
+  });
+  const box = new Box3().setFromObject(model);
+  if (wheel) {
+    const centre = new Box3().setFromObject(wheel).getCenter(new Vector3());
+    return new Vector3(centre.x, centre.y - 0.42, centre.z + 0.5);
+  }
+  const size = box.getSize(new Vector3());
+  return new Vector3(box.min.x + size.x * 0.3, box.min.y + 0.48, box.getCenter(new Vector3()).z + size.z * 0.06);
+}
+
+/**
+ * Cuts the driver's door (on the left) out of the model: the triangles of the body, glass, trim and door
+ * card between the front wheel arch and the door's back edge, under the roof line, on the outer part of the
+ * left side, are moved into a door hinged at its front edge. Returns the hinge (a Group: turning it about y
+ * opens the door), or null when there is nothing to cut. The model's shared geometries are left untouched.
+ */
+const doubleSided = new Map(); // a body material -> its double-sided copy for doors
+const doorCuts = new Map(); // model key -> { hinge position, per mesh (in traversal order): [rest, door] }
+function cutDriverDoor(car, model, wheels, fourDoors, key) {
+  car.updateMatrixWorld(true);
+  const meshes = [];
+  model.traverse((object) => {
+    if (object.isMesh && !Array.isArray(object.material) && !/light|steering/i.test(object.name || "")) meshes.push(object);
+  });
+  // (Worked out once per model: the next car of the same model takes the same pieces.)
+  let cut = doorCuts.get(key);
+  if (!cut) {
+    cut = computeDoorCut(car, model, wheels, fourDoors, meshes);
+    doorCuts.set(key, cut);
+  }
+  if (!cut) return null;
+  const hinge = new Group();
+  hinge.position.copy(cut.hinge);
+  car.add(hinge);
+  meshes.forEach((mesh, index) => {
+    const pieces = cut.pieces[index];
+    if (!pieces) return;
+    // (Double-sided: open, its inner side is seen, which the body's panels never show.)
+    let material = doubleSided.get(mesh.material);
+    if (!material) {
+      material = mesh.material.side === DoubleSide ? mesh.material : mesh.material.clone();
+      material.side = DoubleSide;
+      doubleSided.set(mesh.material, material);
+    }
+    const door = new Mesh(pieces.door, material);
+    door.position.copy(hinge.position).negate();
+    door.receiveShadow = true;
+    door.name = "driver-door";
+    hinge.add(door);
+    mesh.geometry = pieces.rest;
+  });
+  return hinge;
+}
+
+function computeDoorCut(car, model, wheels, fourDoors, meshes) {
+  const box = new Box3().setFromObject(model);
+  const front = wheels[0];
+  const rear = wheels[2];
+  if (!front || !rear) return null;
+  const wheelBox = new Box3().setFromObject(front);
+  const radius = Math.max(0.25, (wheelBox.max.y - wheelBox.min.y) / 2);
+  const zFront = front.position.z;
+  const zRear = rear.position.z;
+  const start = zFront + radius + 0.1;
+  const end = fourDoors ? (zFront + zRear) / 2 + 0.12 : zRear - radius - 0.45;
+  if (end - start < 0.6) return null;
+  const yMin = front.position.y - radius * 0.45;
+  const yMax = box.max.y - 0.1;
+  const xMax = box.min.x + 0.4;
+  const hinge = new Vector3(box.min.x + 0.15, 0, start);
+  const pieces = [];
+  const a = new Vector3();
+  const b = new Vector3();
+  const c = new Vector3();
+  let moved = 0;
+  const meshBox = new Box3();
+  for (const [index, mesh] of meshes.entries()) {
+    // (Nowhere near the door: left as it is.)
+    meshBox.setFromObject(mesh);
+    if (meshBox.min.x > xMax || meshBox.max.z < start || meshBox.min.z > end || meshBox.max.y < yMin || meshBox.min.y > yMax) continue;
+    // The mesh's triangles as plain floats (the models' are quantized), then in the car's space.
+    const flat = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry;
+    const all = [];
+    for (let i = 0; i + 2 < flat.attributes.position.count; i += 3) all.push(i);
+    const base = pick(flat, all);
+    const world = base.clone().applyMatrix4(mesh.matrixWorld);
+    const position = world.attributes.position;
+    const inside = [];
+    const outside = [];
+    for (let i = 0; i + 2 < position.count; i += 3) {
+      a.fromBufferAttribute(position, i);
+      b.fromBufferAttribute(position, i + 1);
+      c.fromBufferAttribute(position, i + 2);
+      const x = (a.x + b.x + c.x) / 3;
+      const y = (a.y + b.y + c.y) / 3;
+      const z = (a.z + b.z + c.z) / 3;
+      (x < xMax && y > yMin && y < yMax && z > start && z < end ? inside : outside).push(i);
+    }
+    if (!inside.length) continue;
+    moved += inside.length;
+    // The door's piece in the car's space; what stays, in the mesh's own space.
+    pieces[index] = { door: pick(world, inside), rest: pick(base, outside) };
+  }
+  return moved ? { hinge, pieces } : null;
+}
+
+/** A geometry made of the triangles of `geometry` (non-indexed) starting at the vertex indices `starts`. */
+function pick(geometry, starts) {
+  const result = new BufferGeometry();
+  for (const [name, attribute] of Object.entries(geometry.attributes)) {
+    const size = attribute.itemSize;
+    const array = new Float32Array(starts.length * 3 * size);
+    starts.forEach((start, t) => {
+      for (let k = 0; k < 3; k++) for (let n = 0; n < size; n++) array[(t * 3 + k) * size + n] = attribute.getComponent(start + k, n);
+    });
+    result.setAttribute(name, new BufferAttribute(array, size));
+  }
+  result.computeBoundingSphere();
+  return result;
 }
 
 /**

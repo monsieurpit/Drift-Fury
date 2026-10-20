@@ -69,6 +69,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
   }
 
   const people = [];
+  let lastPlayer = null; // (where the player was last step)
   let raining = false; // (people hurry along, heads down)
   let fightTimer = 45 + random() * 60; // seconds to the next street fight
   let lastNear = null; // where the camera was last step (for putting people back out of its sight)
@@ -264,7 +265,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
   const lyingAxis = new Vector3();
   const tmpQuaternion = new Quaternion();
 
-  function kill(ped, car, speed, events) {
+  function kill(ped, car, speed, events, type = "killed") {
     const rig = ped.rig;
     const hip = 0.95 * rig.scale.y;
     ped.dead = {
@@ -285,7 +286,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
     };
     endTalk(ped);
     ped.mode = "dead";
-    events.push({ type: "killed", ped, x: ped.x, z: ped.z, speed, car });
+    events.push({ type, ped, x: ped.x, z: ped.z, speed, car });
   }
 
   /** Two people walking near (but not too near) the camera start fighting each other; people close by back off. */
@@ -329,6 +330,12 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
   function pushBody(ped, car, speed, events) {
     const dead = ped.dead;
     if (dead.time - dead.lastHit < 0.5) return;
+    if (dead.reviveAt != null) {
+      // (Someone only knocked down, run over: now it is a death.)
+      dead.reviveAt = null;
+      dead.noBlood = false;
+      events.push({ type: "killed", ped, x: ped.x, z: ped.z, speed, car });
+    }
     dead.lastHit = dead.time;
     dead.velocity.set(car.vx * 0.55, 1 + speed * 0.06, car.vz * 0.55);
     dead.spin.set((random() - 0.5) * 6, (random() - 0.5) * 3, (random() - 0.5) * 6);
@@ -348,6 +355,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
      */
     update(dt, { cars, camera, phase, player = null, rain = false }) {
       raining = rain;
+      lastPlayer = player;
       const events = [];
       camera.getWorldDirection(cameraForward);
       const near = { x: camera.position.x, z: camera.position.z, viewX: cameraForward.x, viewZ: cameraForward.z };
@@ -462,12 +470,74 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           L.body.rotation.set(0, 0, 0);
           L.body.position.y = 0;
           L.head.rotation.set(0.3, 0.6, 0);
+          // Knocked down (thrown out of their car): back on their feet after a moment.
+          if (dead.reviveAt != null && dead.settled && dead.time > dead.reviveAt) {
+            const thrower = ped.thrower || { x: ped.x, z: ped.z - 1 };
+            const yaw = Math.atan2(-(thrower.x - ped.x), -(thrower.z - ped.z));
+            ped.getup = {
+              t: 0,
+              fromQuaternion: rig.quaternion.clone(),
+              toQuaternion: new Quaternion().setFromAxisAngle(AXIS_Y, yaw),
+              fromPosition: rig.position.clone(),
+              toPosition: new Vector3(ped.x, groundAt(ped.x, ped.z), ped.z),
+            };
+            ped.heading = yaw;
+            ped.dead = null;
+            ped.mode = "getup";
+            continue;
+          }
           // Bodies are cleared away once out of sight for a while.
           const away = Math.hypot(ped.x - near.x, ped.z - near.z);
           if (dead.time > 90 && away > 45) spawn(ped, near);
           continue;
         }
 
+        // Getting up off the ground: pushing up on the arms, a knee under them, then standing. Then they fight
+        // the one who threw them down (about half), or run.
+        if (ped.mode === "getup") {
+          const g = ped.getup;
+          g.t += dt;
+          const k = Math.min(1, g.t / 1.1);
+          const e = k * k * (3 - 2 * k);
+          rig.quaternion.slerpQuaternions(g.fromQuaternion, g.toQuaternion, e);
+          rig.position.lerpVectors(g.fromPosition, g.toPosition, e);
+          const L = rig.userData.L;
+          const push = Math.sin(Math.PI * Math.min(1, k * 1.4));
+          L.la.rotation.set(-0.4 - push * 0.6, 0, -0.3);
+          L.ra.rotation.set(-0.4 - push * 0.6, 0, 0.3);
+          L.lh.rotation.set(1.2 * (1 - e), 0, 0);
+          L.lk.rotation.set(-1.6 * (1 - e), 0, 0);
+          L.rk.rotation.set(-0.8 * (1 - e), 0, 0);
+          L.body.rotation.set(-0.4 * (1 - e), 0, 0);
+          if (k >= 1) {
+            ped.getup = null;
+            ped.visualX = ped.x;
+            ped.visualZ = ped.z;
+            rig.rotation.set(0, ped.heading, 0);
+            ped.tough ??= random();
+            const playerNear = player && Math.hypot(player.x - ped.x, player.z - ped.z) < 8;
+            if (ped.tough < 0.55 && player && !player.dead && (player.onFoot || playerNear)) {
+              ped.mode = "brawl";
+              ped.opponent = null;
+              ped.brawlTime = 0;
+              ped.punchTimer = 0.3;
+              events.push({ type: "scream", ped, x: ped.x, z: ped.z });
+            } else {
+              const thrower = ped.thrower || player || { x: ped.x, z: ped.z - 1 };
+              const dx = ped.x - thrower.x;
+              const dz = ped.z - thrower.z;
+              const d = Math.hypot(dx, dz) || 1;
+              ped.mode = "flee";
+              ped.dodging = false;
+              ped.fleeSpeed = 2.5;
+              ped.fleeX = dx / d;
+              ped.fleeZ = dz / d;
+              ped.panic = 4 + random() * 2;
+              ped.scared = 8;
+            }
+          }
+          continue;
+        }
         // Taken over by the police job (a suspect, posed by the session): only cars still hit them.
         if (ped.controlled) {
           for (const car of cars) {
@@ -569,7 +639,8 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
           const dx = target ? target.x - ped.x : 0;
           const dz = target ? target.z - ped.z : 0;
           const d = Math.hypot(dx, dz) || 1;
-          const foeDone = foe ? foe.mode === "dead" || foe.mode !== "brawl" || foe.controlled : !player || !player.onFoot || player.dead;
+          // (The player in a car: they pound on it while it is right there; once it pulls away, they give up.)
+          const foeDone = foe ? foe.mode === "dead" || foe.mode !== "brawl" || foe.controlled : !player || player.dead || (!player.onFoot && d > 9);
           if (foeDone || d > 25 || ped.brawlTime > (foe ? 25 : 45) || ped.hp < 25) {
             ped.opponent = null;
             ped.mode = "flee";
@@ -580,7 +651,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
             ped.panic = 3 + random() * 2;
           } else if (ped.stagger > 0) {
             // (Reeling from a punch.)
-          } else if (d > 0.95) {
+          } else if (d > (!foe && player && !player.onFoot ? 1.9 : 0.95)) {
             speed = d > 3 ? 3.6 : 1.8;
             moveX = dx / d;
             moveZ = dz / d;
@@ -595,7 +666,7 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
               ped.swing = 0.28;
               ped.punchHand = !ped.punchHand;
               const damage = 5 + random() * 5;
-              if (!foe) events.push({ type: "punchPlayer", ped, x: ped.x, z: ped.z, damage });
+              if (!foe) events.push({ type: player.onFoot ? "punchPlayer" : "bangCar", ped, x: ped.x, z: ped.z, damage });
               else if (random() < 0.7) {
                 // (Some punches miss: a duck, a step back.)
                 foe.hp -= damage * 1.6;
@@ -830,11 +901,11 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
      * A driver pulled out of their car at (x, z) runs off away from (fromX, fromZ), screaming: one of the
      * people out of the player's sight is moved there.
      */
-    ejectDriver(x, z, fromX, fromZ, viewX, viewZ, events) {
+    ejectDriver(x, z, fromX, fromZ, viewX, viewZ, events, carX = null, carZ = null) {
       let pick = null;
       let pickScore = -Infinity;
       for (const ped of people) {
-        if (ped.mode === "dead" || ped.controlled) continue;
+        if (ped.mode === "dead" || ped.controlled || ped.mode === "getup") continue;
         const dx = ped.x - fromX;
         const dz = ped.z - fromZ;
         const distance = Math.hypot(dx, dz);
@@ -850,20 +921,69 @@ export function createPedestrians({ roadXs, roadZs, solids, crowd, blood, voices
       spawn(pick, null);
       pick.x = pick.visualX = x;
       pick.z = pick.visualZ = z;
-      const awayX = x - fromX;
-      const awayZ = z - fromZ;
+      pick.thrower = { x: fromX, z: fromZ };
+      // Pulled out of the seat and thrown down on the road, away from the car.
+      let awayX = carX != null ? x - carX : x - fromX;
+      let awayZ = carZ != null ? z - carZ : z - fromZ;
       const away = Math.hypot(awayX, awayZ) || 1;
-      pick.mode = "flee";
-      pick.dodging = false;
-      pick.fleeSpeed = 2.5;
-      pick.fleeX = awayX / away;
-      pick.fleeZ = awayZ / away;
-      pick.panic = 4 + random() * 2;
-      pick.scared = 8;
-      pick.heading = Math.atan2(-pick.fleeX, -pick.fleeZ);
+      awayX /= away;
+      awayZ /= away;
+      pick.heading = Math.atan2(awayX, awayZ); // (facing the car as they come out)
       pick.rig.position.set(x, groundAt(x, z), z);
       pick.rig.rotation.set(0, pick.heading, 0);
+      kill(pick, { x: x - awayX, z: z - awayZ, vx: awayX * 3.2, vz: awayZ * 3.2, heading: Math.atan2(awayX, awayZ), player: true, fist: true }, 1.2, events, "thrown");
+      pick.dead.velocity.y = 1.6;
+      pick.dead.reviveAt = 1.6 + random() * 1.4;
+      pick.scared = 8;
       events.push({ type: "scream", ped: pick, x, z });
+    },
+    /**
+     * The driver of a car the player crashed into climbs out at (x, z) (its door; the car at carX, carZ):
+     * `dazed` (a wreck), staggering out and going down for a moment before getting up (then fighting the
+     * player, about half of them, or leaving); otherwise angry, straight into a fight with the player.
+     */
+    climbOut(x, z, carX, carZ, viewX, viewZ, dazed, events) {
+      let pick = null;
+      let pickScore = -Infinity;
+      for (const ped of people) {
+        if (ped.mode === "dead" || ped.controlled || ped.mode === "getup" || ped.mode === "brawl") continue;
+        const dx = ped.x - x;
+        const dz = ped.z - z;
+        const distance = Math.hypot(dx, dz);
+        const inView = (dx * viewX + dz * viewZ) / (distance || 1) > 0.3 && distance < 80;
+        const score = distance + (inView ? -1000 : 0);
+        if (score > pickScore) {
+          pickScore = score;
+          pick = ped;
+        }
+      }
+      if (!pick) return null;
+      endTalk(pick);
+      spawn(pick, null);
+      pick.x = pick.visualX = x;
+      pick.z = pick.visualZ = z;
+      const length = Math.hypot(x - carX, z - carZ) || 1;
+      const awayX = (x - carX) / length;
+      const awayZ = (z - carZ) / length;
+      pick.heading = Math.atan2(-awayX, -awayZ);
+      pick.rig.position.set(x, groundAt(x, z), z);
+      pick.rig.rotation.set(0, pick.heading, 0);
+      pick.thrower = lastPlayer ? { x: lastPlayer.x, z: lastPlayer.z } : null;
+      if (dazed) {
+        // Out of the wreck and down on the road (no blood: hurt, not killed).
+        kill(pick, { x: x - awayX, z: z - awayZ, vx: awayX * 1.2, vz: awayZ * 1.2, heading: pick.heading, player: true, fist: true }, 0.6, events, "thrown");
+        pick.dead.velocity.y = 0.4;
+        pick.dead.reviveAt = 2.5 + random() * 2.5;
+        pick.tough = random() * 1.1; // (a little less keen on a fight after that)
+      } else {
+        pick.mode = "brawl";
+        pick.opponent = null;
+        pick.brawlTime = 0;
+        pick.punchTimer = 0.6;
+        pick.tough = 0;
+        events.push({ type: "scream", ped: pick, x, z });
+      }
+      return pick;
     },
     /** `ped` shot from (fromX, fromZ): collapses where they stand (the "killed" event, its car marked gun). */
     shoot(ped, fromX, fromZ, events) {

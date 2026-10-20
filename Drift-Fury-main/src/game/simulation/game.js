@@ -287,7 +287,7 @@ export function createGame(car, engine, solids, noPolice = false) {
         };
         state.vehicles.push(nearest);
         // The driver runs off; stealing a car in front of the police is a crime.
-        state._carjack = { x: traffic_car.x - Math.cos(traffic_car.heading) * 1.6, z: traffic_car.z + Math.sin(traffic_car.heading) * 1.6, fromX: state.x, fromZ: state.z };
+        state._carjack = { x: traffic_car.x - Math.cos(traffic_car.heading) * 1.6, z: traffic_car.z + Math.sin(traffic_car.heading) * 1.6, fromX: state.x, fromZ: state.z, carX: traffic_car.x, carZ: traffic_car.z };
         if (!duty.duty.on && state.police.some((officer) => distance2D(officer, state) < 60)) state.wanted = clamp(state.wanted + 1, 0, 5);
       }
       if (!nearest) {
@@ -1128,7 +1128,17 @@ export function createGame(car, engine, solids, noPolice = false) {
                 intensity: Math.min(impactSpeed * 0.08, 1.5),
               };
             }
-            if (impactSpeed > 9 && !car.keep && !car.pulled) {
+            // A big crash wrecks the car (its driver climbs out dazed); a smaller one now and then makes the
+            // driver get out, angry, and come for the player (the car left where it stopped).
+            const angry = impactSpeed > 4 && impactSpeed <= 9 && Math.random() < 0.3;
+            if ((impactSpeed > 9 || angry) && !car.keep && !car.pulled && !car.flee && !car.mission) {
+              state._driverOut = {
+                x: car.x - Math.cos(car.heading) * 1.6,
+                z: car.z + Math.sin(car.heading) * 1.6,
+                carX: car.x,
+                carZ: car.z,
+                dazed: !angry,
+              };
               traffic.remove(car);
               state.vehicles.push({
                 id: state.nextVid++,
