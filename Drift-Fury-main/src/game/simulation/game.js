@@ -1392,6 +1392,18 @@ export function createGame(car, engine, solids, noPolice = false) {
             officer.speed *= 0.7;
           }
         }
+        // Not through a parked car (the duty car, a wreck, a car left at the curb): slide out of it.
+        for (const vehicle of state.vehicles) {
+          if (Math.abs(vehicle.x - officer.x) > 6 || Math.abs(vehicle.z - officer.z) > 6) continue;
+          const contact = collideOrientedBoxes(
+            orientedBox(officer.x, officer.z, officer.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH),
+            orientedBox(vehicle.x, vehicle.z, vehicle.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH),
+          );
+          if (!contact.overlap) continue;
+          officer.x -= contact.nx * (contact.depth + 0.02);
+          officer.z -= contact.nz * (contact.depth + 0.02);
+          officer.speed *= 0.7;
+        }
         officer.x = clamp(officer.x, -200, 250);
         officer.z = clamp(officer.z, -700, 150);
         const sees = hasLineOfSight(officer);
@@ -1464,35 +1476,70 @@ export function createGame(car, engine, solids, noPolice = false) {
           state.vz -= contact.nz * push;
         }
       });
-      for (let first = 0; first < state.police.length; first++) {
-        for (let second = first + 1; second < state.police.length; second++) {
-          const carA = state.police[first];
-          const carB = state.police[second];
-          if (carA.onFoot || carB.onFoot) {
-            continue;
-          }
-          const contact = collideOrientedBoxes(
-            orientedBox(carA.x, carA.z, carA.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH),
-            orientedBox(carB.x, carB.z, carB.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH),
-          );
-          if (contact.overlap) {
+      // Cruisers never sit inside each other: pairs in contact are pushed apart (a few passes, so a knot of
+      // three or four comes apart too). (The contact normal points from the first box toward the second:
+      // the first moves back along it, the second forward.)
+      for (let pass = 0; pass < 3; pass++) {
+        let touching = false;
+        for (let first = 0; first < state.police.length; first++) {
+          for (let second = first + 1; second < state.police.length; second++) {
+            const carA = state.police[first];
+            const carB = state.police[second];
+            if (carA.onFoot || carB.onFoot || carA.dead || carB.dead) {
+              continue;
+            }
+            const contact = collideOrientedBoxes(
+              orientedBox(carA.x, carA.z, carA.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH),
+              orientedBox(carB.x, carB.z, carB.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH),
+            );
+            if (!contact.overlap) continue;
+            touching = true;
             const push = (contact.depth + 0.02) / 2;
-            carA.x += contact.nx * push;
-            carA.z += contact.nz * push;
-            carB.x -= contact.nx * push;
-            carB.z -= contact.nz * push;
-            // Only lose speed when driving into each other (not every frame they touch, which froze them).
+            carA.x -= contact.nx * push;
+            carA.z -= contact.nz * push;
+            carB.x += contact.nx * push;
+            carB.z += contact.nz * push;
+            // Only on the first pass, and only when driving into each other (not every frame they touch,
+            // which froze them): both lose speed, as in a real knock.
+            if (pass > 0) continue;
             const [ax, az] = [-Math.sin(carA.heading), -Math.cos(carA.heading)];
             const [bx, bz] = [-Math.sin(carB.heading), -Math.cos(carB.heading)];
             const closing =
-              -(ax * carA.speed - bx * carB.speed) * contact.nx -
-              (az * carA.speed - bz * carB.speed) * contact.nz;
+              (ax * carA.speed - bx * carB.speed) * contact.nx + (az * carA.speed - bz * carB.speed) * contact.nz;
             if (closing > 0.5) {
-              carA.speed *= 0.85;
-              carB.speed *= 0.85;
+              carA.speed *= 0.6;
+              carB.speed *= 0.6;
             }
           }
         }
+        if (!touching) break;
+      }
+      // (Pushed apart into a parked car or a car in traffic: out of it again. Squeezed between several, a few
+      // passes settle it. Traffic keeps to its lane: the cruiser and parked cars are the ones that move.)
+      for (let pass = 0; pass < 4; pass++) {
+        let touching = false;
+        for (const officer of state.police) {
+          if (officer.onFoot || officer.dead) continue;
+          for (const other of traffic ? [...state.vehicles, ...traffic.cars] : state.vehicles) {
+            if (Math.abs(other.x - officer.x) > 6 || Math.abs(other.z - officer.z) > 6) continue;
+            const contact = collideOrientedBoxes(
+              orientedBox(officer.x, officer.z, officer.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH),
+              orientedBox(other.x, other.z, other.heading, NPC_HALF_WIDTH, NPC_HALF_LENGTH),
+            );
+            if (!contact.overlap) continue;
+            touching = true;
+            // (A parked car is shoved half the way: wedged against traffic, the cruiser has nowhere else to go.)
+            const parked = !other.piece;
+            const push = (contact.depth + 0.02) * (parked ? 0.5 : 1);
+            officer.x -= contact.nx * push;
+            officer.z -= contact.nz * push;
+            if (parked) {
+              other.x += contact.nx * push;
+              other.z += contact.nz * push;
+            }
+          }
+        }
+        if (!touching) break;
       }
       // A long chase in sight of the police slowly gets worse (about a star every minute and a half).
       if (state.wanted >= 1 && seen) state.wanted = clamp(state.wanted + dt * 0.012, 0, 5);
